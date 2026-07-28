@@ -43,6 +43,19 @@ This produces a `dist/` folder. Push this project to a GitHub repo and connect i
 - **Onboarding score history**: insert-only. Nobody, including admins, can edit or delete a past entry through the app — this is a real audit trail, not a note anyone can overwrite.
 - **Real-time sync**: if two admins have the app open at once, changes appear for both without a manual refresh.
 
+## Automated backups
+
+A GitHub Action (`.github/workflows/backup.yml`) runs daily at 03:00 UTC, pulls every table from Supabase, and commits the result into the `backups/YYYY-MM-DD/` folder in this repo. This is independent of Supabase itself — if Supabase's own data were ever lost, these backups live in GitHub instead.
+
+**One-time setup required:**
+
+1. In Supabase: **Project Settings → API Keys**, copy the `service_role` (or `secret`) key. Treat this like a database root password — it bypasses every access rule in the app.
+2. In GitHub: this repo's **Settings → Secrets and variables → Actions → New repository secret**.
+3. Name: `SUPABASE_SERVICE_ROLE_KEY`. Value: the key from step 1. Save.
+4. That's it — the workflow will run automatically from the next scheduled time onward. To test it immediately instead of waiting: go to the **Actions** tab in this repo, select "Daily Supabase Backup," click **Run workflow**.
+
+**To restore from a backup**: each JSON file under `backups/<date>/` is a full dump of one table, in the same shape Supabase returns it. Restoring means re-inserting that data into a fresh or recovered Supabase project — this isn't a one-click restore, it's raw material for a manual recovery. If you're ever in that situation, come back to this conversation (or a new one) and ask for help walking through it rather than guessing.
+
 ## Known limitations
 
 - Email confirmation is on by default in Supabase — new members need to click the confirmation link before their account works. You can turn this off in Supabase under Authentication → Providers → Email if it's more friction than you want for a small team.

@@ -1,0 +1,42 @@
+name: Daily Supabase Backup
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch data from Supabase
+        env:
+          SUPABASE_URL: https://jsxatpqdolmgcoyibbam.supabase.co
+          SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "$SERVICE_ROLE_KEY" ]; then
+            echo "SUPABASE_SERVICE_ROLE_KEY secret is not set. Add it under repo Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          DATE=$(date +%Y-%m-%d)
+          mkdir -p "backups/$DATE"
+          for TABLE in members onboarding onboarding_history tickets feedback profiles; do
+            curl -sf "$SUPABASE_URL/rest/v1/$TABLE?select=*" \
+              -H "apikey: $SERVICE_ROLE_KEY" \
+              -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+              -o "backups/$DATE/$TABLE.json" \
+              || echo "Warning: failed to fetch $TABLE"
+          done
+
+      - name: Commit backup if anything changed
+        run: |
+          git config user.name "backup-bot"
+          git config user.email "actions@github.com"
+          git add backups/
+          git diff --staged --quiet || git commit -m "Automated backup $(date +%Y-%m-%d)"
+          git push

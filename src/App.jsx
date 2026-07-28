@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   LayoutDashboard, Users, GraduationCap, Wrench, CalendarDays,
   Wallet, MessageSquare, Plus, X, ChevronRight, Shield, User,
-  CheckCircle2, Clock, Trash2, Save, LogOut, RefreshCw
+  CheckCircle2, Clock, Trash2, Save, LogOut, RefreshCw, Download
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
@@ -397,6 +397,27 @@ function Dashboard_Shell({ session, profile, setProfile }) {
   const myMember = data.members.find((m) => m.profileId === session.user.id) || null;
   const myOnboarding = myMember ? data.onboarding.find((o) => o.memberId === myMember.id) || null : null;
 
+  async function exportAllData() {
+    const [m, o, h, t, f] = await Promise.all([
+      supabase.from("members").select("*"),
+      supabase.from("onboarding").select("*"),
+      supabase.from("onboarding_history").select("*"),
+      supabase.from("tickets").select("*"),
+      supabase.from("feedback").select("*"),
+    ]);
+    const payload = {
+      exported_at: new Date().toISOString(),
+      members: m.data, onboarding: o.data, onboarding_history: h.data, tickets: t.data, feedback: f.data,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `display-team-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   const nav = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "members", label: "Members", icon: Users },
@@ -436,7 +457,8 @@ function Dashboard_Shell({ session, profile, setProfile }) {
             </div>
           </div>
           <Badge tone={isAdmin ? "amber" : "gray"}>{profile.role}</Badge>
-          <div style={{ marginTop: 10 }}>
+          <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+            {isAdmin && <Btn small tone="ghost" onClick={exportAllData}><Download size={12} /> Export data</Btn>}
             <Btn small tone="ghost" onClick={() => supabase.auth.signOut()}><LogOut size={12} /> Sign out</Btn>
           </div>
         </div>

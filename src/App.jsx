@@ -2091,31 +2091,26 @@ function RosterTab({ data, isAdmin, reload }) {
   const teamA = data.members.filter((m) => m.team === "A");
   const teamB = data.members.filter((m) => m.team === "B");
 
-  async function moveTeam(m) {
-    if (!isAdmin) return;
-    await supabase.from("members").update({ team: m.team === "A" ? "B" : "A" }).eq("id", m.id);
-    reload();
-  }
-
   const services = ["Sunday services (x4)", "Wednesday midweek", "Saturday training", "Tuesday 8PM meeting (mandatory)"];
 
   return (
     <div>
       <SectionHeader title="Roster" subtitle="Team A / Team B rotation. Reporting time: 1 hour before service." />
+      <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 12 }}>
+        To move someone between teams, edit their record from the Members tab — this view is read-only.
+      </div>
       <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
         <Panel title="Team A" style={{ flex: 1 }}>
           {teamA.length === 0 ? <EmptyRow text="No members assigned." /> : teamA.map((m) => (
-            <RowLine key={m.id} onClick={isAdmin ? () => moveTeam(m) : undefined}>
+            <RowLine key={m.id}>
               <span style={{ flex: 1 }}>{m.name}</span><span style={{ fontSize: 11, color: COLORS.textMuted }}>{m.unit}</span>
-              {isAdmin && <ChevronRight size={13} style={{ color: COLORS.textMuted }} />}
             </RowLine>
           ))}
         </Panel>
         <Panel title="Team B" style={{ flex: 1 }}>
           {teamB.length === 0 ? <EmptyRow text="No members assigned." /> : teamB.map((m) => (
-            <RowLine key={m.id} onClick={isAdmin ? () => moveTeam(m) : undefined}>
+            <RowLine key={m.id}>
               <span style={{ flex: 1 }}>{m.name}</span><span style={{ fontSize: 11, color: COLORS.textMuted }}>{m.unit}</span>
-              {isAdmin && <ChevronRight size={13} style={{ color: COLORS.textMuted }} />}
             </RowLine>
           ))}
         </Panel>

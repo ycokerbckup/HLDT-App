@@ -1747,7 +1747,7 @@ function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify })
   const [showForm, setShowForm] = useState(false);
   const [showRoles, setShowRoles] = useState(false);
   const [profiles, setProfiles] = useState([]);
-  const blank = () => ({ id: null, name: "", email: "", phone: "", unit: "Technical", tier: "Member", team: "A", joinDate: new Date().toISOString().slice(0, 10), skills: { proPresenter: 3, vmix: 3, resolume: 3, technical: 3 }, dues: {} });
+  const blank = () => ({ id: null, name: "", email: "", phone: "", unit: "", tier: "", team: "", joinDate: new Date().toISOString().slice(0, 10), skills: { proPresenter: 3, vmix: 3, resolume: 3, technical: 3 }, dues: {} });
   const [form, setForm] = useState(blank());
 
   async function loadProfiles() {
@@ -1757,7 +1757,7 @@ function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify })
 
   async function saveMember() {
     if (!form.name.trim()) return;
-    const payload = { name: form.name, email: form.email, phone: form.phone, unit: form.unit, tier: form.tier, team: form.team, join_date: form.joinDate, skills: form.skills, dues: form.dues };
+    const payload = { name: form.name, email: form.email, phone: form.phone, unit: form.unit || null, tier: form.tier || null, team: form.team || null, join_date: form.joinDate, skills: form.skills, dues: form.dues };
     const isNew = !form.id;
     const { error } = form.id
       ? await supabase.from("members").update(payload).eq("id", form.id)
@@ -1820,9 +1820,30 @@ function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify })
             <Field label="Phone"><input style={inputStyle} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
             <Field label="Email"><input style={inputStyle} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
             <Field label="Join date"><input type="date" style={inputStyle} value={form.joinDate || ""} onChange={(e) => setForm({ ...form, joinDate: e.target.value })} /></Field>
-            <Field label="Functional unit"><select style={inputStyle} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })}>{UNITS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
-            <Field label="Tier"><select style={inputStyle} value={form.tier} onChange={(e) => setForm({ ...form, tier: e.target.value })}>{TIERS.map((t) => <option key={t} value={t}>{t}</option>)}</select></Field>
-            <Field label="Rotation team"><select style={inputStyle} value={form.team} onChange={(e) => setForm({ ...form, team: e.target.value })}><option value="A">Team A</option><option value="B">Team B</option></select></Field>
+            <Field label="Functional unit">
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {UNITS.map((u) => (
+                  <Btn key={u} small tone={form.unit === u ? "amber" : "ghost"} onClick={() => setForm({ ...form, unit: form.unit === u ? "" : u })}>{u}</Btn>
+                ))}
+              </div>
+              {!form.unit && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>Unassigned</div>}
+            </Field>
+            <Field label="Tier">
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {TIERS.map((t) => (
+                  <Btn key={t} small tone={form.tier === t ? "amber" : "ghost"} onClick={() => setForm({ ...form, tier: form.tier === t ? "" : t })}>{t}</Btn>
+                ))}
+              </div>
+              {!form.tier && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>Unassigned</div>}
+            </Field>
+            <Field label="Rotation team">
+              <div style={{ display: "flex", gap: 6 }}>
+                {["A", "B"].map((t) => (
+                  <Btn key={t} small tone={form.team === t ? "amber" : "ghost"} onClick={() => setForm({ ...form, team: form.team === t ? "" : t })}>Team {t}</Btn>
+                ))}
+              </div>
+              {!form.team && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>Unassigned</div>}
+            </Field>
           </div>
           <div style={{ fontSize: 12, color: COLORS.textSecondary, margin: "10px 0 6px" }}>Self-reported proficiency (1-5)</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>

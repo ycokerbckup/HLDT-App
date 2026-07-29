@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, GraduationCap, Wrench, CalendarDays,
   Wallet, MessageSquare, Plus, X, ChevronRight, Shield, User,
   CheckCircle2, Clock, Trash2, Save, LogOut, RefreshCw, Download,
-  Sun, Moon, Bell, Megaphone, MessageCircle
+  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "./supabaseClient";
@@ -659,6 +659,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
   const nav = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "announcements", label: "Announcements", icon: Megaphone },
+    { id: "feed", label: "Feed", icon: Rss },
     { id: "chat", label: "Chat", icon: MessageCircle },
     { id: "members", label: "Members", icon: Users },
     { id: "onboarding", label: "Onboarding", icon: GraduationCap },
@@ -723,6 +724,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
             {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} reload={load} />}
             {tab === "dues" && <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} />}
             {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
+            {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} notify={notify} />}
             {tab === "chat" && <ChatTab session={session} profile={profile} members={data.members} notify={notify} />}
             {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} reload={load} notify={notify} />}
           </div>
@@ -1122,6 +1124,182 @@ function ChatTab({ session, profile, members, notify }) {
           )}
         </Modal>
       )}
+    </div>
+  );
+}
+
+/* ---------------- feed ---------------- */
+
+function extractYoutubeThumb(url) {
+  const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{6,})/);
+  return m ? `https://i.ytimg.com/vi/${m[1]}/hqdefault.jpg` : null;
+}
+
+function ManageSourcesModal({ sources, onClose, reload, notify }) {
+  const [channelId, setChannelId] = useState("");
+  const [channelName, setChannelName] = useState("");
+
+  async function addSource() {
+    if (!channelId.trim()) return;
+    const { error } = await supabase.from("feed_sources").insert({ channel_id: channelId.trim(), channel_name: channelName.trim() || null });
+    if (error) { notify?.(error.message, "error"); return; }
+    notify?.("Source added — new videos appear on the next sync");
+    setChannelId("");
+    setChannelName("");
+    reload();
+  }
+
+  async function removeSource(id) {
+    await supabase.from("feed_sources").delete().eq("id", id);
+    reload();
+  }
+
+  return (
+    <Modal title="YouTube sources" onClose={onClose} width={440}>
+      <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 14 }}>
+        New videos from these channels are pulled in automatically once a day. To find a channel ID: open the channel on YouTube, view page source (Ctrl+U), and search for <code>"channelId"</code> — or search "[channel name] channel ID finder" for a free lookup tool.
+      </div>
+      <Field label="Channel ID (starts with UC...)">
+        <input style={inputStyle} value={channelId} onChange={(e) => setChannelId(e.target.value)} placeholder="UCWQhr5G-3wwenYIB6ubdtoQ" />
+      </Field>
+      <Field label="Label (optional)">
+        <input style={inputStyle} value={channelName} onChange={(e) => setChannelName(e.target.value)} placeholder="e.g. Resolume" />
+      </Field>
+      <Btn tone="amber" onClick={addSource}><Plus size={13} /> Add source</Btn>
+      <div style={{ marginTop: 16, borderTop: `1px solid ${COLORS.border}`, paddingTop: 10 }}>
+        {sources.length === 0 ? <EmptyRow text="No sources configured." /> : sources.map((s) => (
+          <RowLine key={s.id}>
+            <span style={{ flex: 1 }}>{s.channelName || s.channelId}</span>
+            <Trash2 size={13} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => removeSource(s.id)} />
+          </RowLine>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+function FeedTab({ session, profile, isAdmin, notify }) {
+  const [posts, setPosts] = useState([]);
+  const [sources, setSources] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+  const [showAddLink, setShowAddLink] = useState(false);
+  const [showSources, setShowSources] = useState(false);
+  const blankLink = () => ({ title: "", url: "", description: "" });
+  const [linkForm, setLinkForm] = useState(blankLink());
+
+  async function loadPosts() {
+    const { data } = await supabase.from("feed_posts").select("*").order("created_at", { ascending: false });
+    setPosts((data || []).map((p) => ({
+      id: p.id, source: p.source, title: p.title, url: p.url, thumbnailUrl: p.thumbnail_url,
+      description: p.description, postedByName: p.posted_by_name, createdAt: p.created_at,
+    })));
+    setLoaded(true);
+  }
+
+  async function loadSources() {
+    const { data } = await supabase.from("feed_sources").select("*").order("channel_name");
+    setSources((data || []).map((s) => ({ id: s.id, channelId: s.channel_id, channelName: s.channel_name })));
+  }
+
+  useEffect(() => {
+    loadPosts();
+    loadSources();
+    const channel = supabase
+      .channel("feed-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "feed_posts" }, loadPosts)
+      .on("postgres_changes", { event: "*", schema: "public", table: "feed_sources" }, loadSources)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  async function submitLink() {
+    if (!linkForm.title.trim() || !linkForm.url.trim()) return;
+    const thumb = extractYoutubeThumb(linkForm.url);
+    const { error } = await supabase.from("feed_posts").insert({
+      source: "manual", title: linkForm.title, url: linkForm.url, description: linkForm.description,
+      thumbnail_url: thumb, posted_by: session.user.id, posted_by_name: profile.full_name || session.user.email,
+    });
+    if (error) { notify?.(error.message, "error"); return; }
+    notify?.("Link shared");
+    setLinkForm(blankLink());
+    setShowAddLink(false);
+    loadPosts();
+  }
+
+  async function removePost(id) {
+    const { error } = await supabase.from("feed_posts").delete().eq("id", id);
+    if (error) { notify?.(error.message, "error"); return; }
+    notify?.("Post removed");
+    loadPosts();
+  }
+
+  function timeAgo(ts) {
+    const days = Math.floor((Date.now() - new Date(ts).getTime()) / 86400000);
+    if (days < 1) return "today";
+    if (days === 1) return "yesterday";
+    return `${days}d ago`;
+  }
+
+  return (
+    <div>
+      <SectionHeader
+        title="Feed"
+        subtitle="Educational content auto-pulled from YouTube, plus curated links. Removed 30 days after posting."
+        right={isAdmin && (
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn tone="ghost" onClick={() => setShowSources(true)}><Settings size={13} /> Sources</Btn>
+            <Btn tone="amber" onClick={() => setShowAddLink(true)}><Link2 size={14} /> Share a link</Btn>
+          </div>
+        )}
+      />
+
+      {showAddLink && (
+        <Panel title="Share a link" style={{ marginBottom: 16 }} right={<X size={16} style={{ cursor: "pointer" }} onClick={() => setShowAddLink(false)} />}>
+          <Field label="Title"><input style={inputStyle} value={linkForm.title} onChange={(e) => setLinkForm({ ...linkForm, title: e.target.value })} /></Field>
+          <Field label="URL"><input style={inputStyle} value={linkForm.url} onChange={(e) => setLinkForm({ ...linkForm, url: e.target.value })} placeholder="https://..." /></Field>
+          <Field label="Note (optional)"><textarea style={{ ...inputStyle, minHeight: 50 }} value={linkForm.description} onChange={(e) => setLinkForm({ ...linkForm, description: e.target.value })} /></Field>
+          <Btn tone="amber" onClick={submitLink}><Save size={13} /> Post</Btn>
+        </Panel>
+      )}
+
+      {!loaded ? (
+        <SkeletonLoader />
+      ) : posts.length === 0 ? (
+        <Panel><EmptyRow text="Nothing in the feed yet." /></Panel>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
+          {posts.map((p) => (
+            <div key={p.id} className="hldt-panel" style={{ background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 10, overflow: "hidden" }}>
+              <a href={p.url} target="_blank" rel="noopener noreferrer">
+                {p.thumbnailUrl ? (
+                  <img src={p.thumbnailUrl} alt="" style={{ width: "100%", height: 130, objectFit: "cover", display: "block" }} />
+                ) : (
+                  <div style={{ width: "100%", height: 130, background: COLORS.surface2, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Link2 size={22} color={COLORS.textMuted} />
+                  </div>
+                )}
+              </a>
+              <div style={{ padding: 12 }}>
+                <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.textPrimary, marginBottom: 4, lineHeight: 1.3 }}>{p.title}</div>
+                </a>
+                {p.description && <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6 }}>{p.description}</div>}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <Badge tone={p.source === "youtube_auto" ? "gray" : "amber"}>{p.source === "youtube_auto" ? "Auto" : "Shared"}</Badge>
+                  <span style={{ fontSize: 10, color: COLORS.textMuted }}>{timeAgo(p.createdAt)}</span>
+                </div>
+                {isAdmin && (
+                  <div style={{ marginTop: 8, textAlign: "right" }}>
+                    <Trash2 size={13} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => removePost(p.id)} />
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showSources && <ManageSourcesModal sources={sources} onClose={() => setShowSources(false)} reload={loadSources} notify={notify} />}
     </div>
   );
 }

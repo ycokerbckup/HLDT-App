@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   LayoutDashboard, Users, GraduationCap, Wrench, CalendarDays,
   Wallet, MessageSquare, Plus, X, ChevronRight, Shield, User,
   CheckCircle2, Clock, Trash2, Save, LogOut, RefreshCw, Download,
-  Sun, Moon, Bell, Megaphone
+  Sun, Moon, Bell, Megaphone, MessageCircle
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "./supabaseClient";
@@ -92,6 +92,40 @@ function getDue(m, month) {
 
 function currency(n) {
   return `₦${Math.round(n || 0).toLocaleString()}`;
+}
+
+const AVATAR_PALETTE = ["#E8A33D", "#3DDC97", "#5B9BE0", "#D4537E", "#7F77DD", "#E24B4A", "#0F6E56", "#B87A1F"];
+
+function hashColor(id) {
+  let hash = 0;
+  const s = String(id || "");
+  for (let i = 0; i < s.length; i++) hash = s.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
+}
+
+// First-letter initials by default; if two people in the same list share a
+// first letter, both fall back to their first two letters instead.
+function computeAvatarLabels(people) {
+  const counts = {};
+  people.forEach((p) => {
+    const letter = (p.name || "?").trim()[0]?.toUpperCase() || "?";
+    counts[letter] = (counts[letter] || 0) + 1;
+  });
+  const labels = {};
+  people.forEach((p) => {
+    const name = (p.name || "?").trim();
+    const letter = name[0]?.toUpperCase() || "?";
+    labels[p.id] = counts[letter] > 1 ? name.slice(0, 2).toUpperCase() : letter;
+  });
+  return labels;
+}
+
+function Avatar({ label, color, size = 28 }) {
+  return (
+    <div style={{ width: size, height: size, borderRadius: 999, background: color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.4, fontWeight: 600, flexShrink: 0 }}>
+      {label}
+    </div>
+  );
 }
 
 const inputStyle = {
@@ -625,6 +659,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
   const nav = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "announcements", label: "Announcements", icon: Megaphone },
+    { id: "chat", label: "Chat", icon: MessageCircle },
     { id: "members", label: "Members", icon: Users },
     { id: "onboarding", label: "Onboarding", icon: GraduationCap },
     { id: "equipment", label: "Equipment", icon: Wrench },
@@ -688,6 +723,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
             {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} reload={load} />}
             {tab === "dues" && <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} />}
             {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
+            {tab === "chat" && <ChatTab session={session} profile={profile} members={data.members} notify={notify} />}
             {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} reload={load} notify={notify} />}
           </div>
         )}
@@ -890,6 +926,201 @@ function AnnouncementsTab({ data, isAdmin, reload, notify, adminId, adminName })
             </div>
           </Panel>
         ))
+      )}
+    </div>
+  );
+}
+
+/* ---------------- chat ---------------- */
+
+function ChatTab({ session, profile, members, notify }) {
+  const [conversations, setConversations] = useState([]);
+  const [thread, setThread] = useState({ type: "team" });
+  const [messages, setMessages] = useState([]);
+  const [text, setText] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState("");
+  const [showNewDm, setShowNewDm] = useState(false);
+  const bottomRef = useRef(null);
+
+  const dmCandidates = members.filter((m) => m.profileId && m.profileId !== session.user.id);
+
+  const avatarLabels = useMemo(() => {
+    const people = [{ id: session.user.id, name: "You" }, ...dmCandidates.map((m) => ({ id: m.profileId, name: m.name }))];
+    return computeAvatarLabels(people);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [members]);
+
+  async function loadConversations() {
+    const { data } = await supabase.from("conversations").select("*").or(`user_a.eq.${session.user.id},user_b.eq.${session.user.id}`);
+    setConversations(data || []);
+  }
+
+  useEffect(() => { loadConversations(); }, []);
+
+  const loadMessages = useCallback(async () => {
+    let query = supabase.from("messages").select("*").order("created_at", { ascending: true });
+    query = thread.type === "team" ? query.is("conversation_id", null) : query.eq("conversation_id", thread.conversationId);
+    const { data } = await query;
+    setMessages(data || []);
+    (data || []).filter((m) => m.sender_id !== session.user.id && !m.seen_at).forEach((m) => {
+      supabase.rpc("mark_message_seen", { msg_id: m.id });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thread.type, thread.conversationId]);
+
+  useEffect(() => {
+    loadMessages();
+    const channel = supabase
+      .channel(`chat-${thread.type}-${thread.conversationId || "team"}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, loadMessages)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [loadMessages]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  async function send() {
+    if (!text.trim()) return;
+    const payload = {
+      sender_id: session.user.id,
+      sender_name: profile.full_name || session.user.email,
+      body: text.trim(),
+      conversation_id: thread.type === "dm" ? thread.conversationId : null,
+    };
+    const { error } = await supabase.from("messages").insert(payload);
+    if (error) { notify?.(error.message, "error"); return; }
+    setText("");
+  }
+
+  function startEdit(m) {
+    setEditingId(m.id);
+    setEditText(m.body);
+  }
+
+  async function saveEdit(m) {
+    const { error } = await supabase.from("messages").update({ body: editText, edited_at: new Date().toISOString() }).eq("id", m.id);
+    if (error) { notify?.(error.message, "error"); return; }
+    setEditingId(null);
+    loadMessages();
+  }
+
+  async function startDm(member) {
+    const a = session.user.id < member.profileId ? session.user.id : member.profileId;
+    const b = session.user.id < member.profileId ? member.profileId : session.user.id;
+    let existing = null;
+    const { data: found } = await supabase.from("conversations").select("*").eq("user_a", a).eq("user_b", b).maybeSingle();
+    existing = found;
+    if (!existing) {
+      const { data: created, error } = await supabase.from("conversations").insert({ user_a: a, user_b: b }).select().single();
+      if (error) { notify?.(error.message, "error"); return; }
+      existing = created;
+      loadConversations();
+    }
+    setThread({ type: "dm", conversationId: existing.id, otherName: member.name });
+    setShowNewDm(false);
+  }
+
+  function withinEditWindow(m) {
+    return Date.now() - new Date(m.created_at).getTime() < 30 * 60 * 1000;
+  }
+
+  return (
+    <div>
+      <SectionHeader title="Chat" subtitle="Messages are removed 24 hours after being seen. Editable for 30 minutes after sending." />
+      <div style={{ display: "flex", gap: 16, height: "65vh" }}>
+        <div style={{ width: 210, flexShrink: 0, display: "flex", flexDirection: "column", gap: 4, overflowY: "auto" }}>
+          <div
+            className="hldt-row" data-clickable="true"
+            onClick={() => setThread({ type: "team" })}
+            style={{ padding: "8px 10px", borderRadius: 6, cursor: "pointer", background: thread.type === "team" ? COLORS.surface2 : "transparent", fontSize: 13 }}
+          >
+            # Team channel
+          </div>
+          <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", padding: "10px 10px 4px" }}>Direct messages</div>
+          {conversations.map((c) => {
+            const otherId = c.user_a === session.user.id ? c.user_b : c.user_a;
+            const otherMember = dmCandidates.find((m) => m.profileId === otherId);
+            return (
+              <div
+                key={c.id}
+                className="hldt-row" data-clickable="true"
+                onClick={() => setThread({ type: "dm", conversationId: c.id, otherName: otherMember?.name || "Member" })}
+                style={{ padding: "8px 10px", borderRadius: 6, cursor: "pointer", background: thread.type === "dm" && thread.conversationId === c.id ? COLORS.surface2 : "transparent", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}
+              >
+                <Avatar label={avatarLabels[otherId] || "?"} color={hashColor(otherId)} size={22} />
+                {otherMember?.name || "Member"}
+              </div>
+            );
+          })}
+          <Btn small tone="ghost" onClick={() => setShowNewDm(true)}><Plus size={12} /> New DM</Btn>
+        </div>
+
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", border: `1px solid ${COLORS.border}`, borderRadius: 8, background: COLORS.surface1, minWidth: 0 }}>
+          <div style={{ padding: "10px 16px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 13, fontWeight: 500 }}>
+            {thread.type === "team" ? "Team channel" : thread.otherName}
+          </div>
+          <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+            {messages.length === 0 ? (
+              <EmptyRow text="No messages yet." />
+            ) : (
+              messages.map((m) => {
+                const mine = m.sender_id === session.user.id;
+                return (
+                  <div key={m.id} style={{ display: "flex", gap: 8, flexDirection: mine ? "row-reverse" : "row" }}>
+                    <Avatar label={avatarLabels[m.sender_id] || m.sender_name?.[0] || "?"} color={hashColor(m.sender_id)} size={26} />
+                    <div style={{ maxWidth: "70%" }}>
+                      {!mine && <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 2 }}>{m.sender_name}</div>}
+                      {editingId === m.id ? (
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <input style={{ ...inputStyle, fontSize: 12 }} value={editText} onChange={(e) => setEditText(e.target.value)} />
+                          <Btn small tone="amber" onClick={() => saveEdit(m)}>Save</Btn>
+                          <Btn small tone="ghost" onClick={() => setEditingId(null)}>Cancel</Btn>
+                        </div>
+                      ) : (
+                        <div
+                          onClick={() => mine && withinEditWindow(m) && startEdit(m)}
+                          style={{
+                            background: mine ? COLORS.amberDim : COLORS.surface2, color: mine ? COLORS.amber : COLORS.textPrimary,
+                            padding: "8px 12px", borderRadius: 10, fontSize: 13, cursor: mine && withinEditWindow(m) ? "pointer" : "default",
+                          }}
+                        >
+                          {m.body}
+                          {m.edited_at && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 6 }}>(edited)</span>}
+                        </div>
+                      )}
+                      <div style={{ fontSize: 10, color: COLORS.textMuted, marginTop: 2 }}>
+                        {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+            <div ref={bottomRef} />
+          </div>
+          <div style={{ padding: 12, borderTop: `1px solid ${COLORS.border}`, display: "flex", gap: 8 }}>
+            <input style={{ ...inputStyle, flex: 1 }} placeholder="Type a message..." value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} />
+            <Btn tone="amber" onClick={send}>Send</Btn>
+          </div>
+        </div>
+      </div>
+
+      {showNewDm && (
+        <Modal title="Start a conversation" onClose={() => setShowNewDm(false)} width={320}>
+          {dmCandidates.length === 0 ? (
+            <EmptyRow text="No other members with accounts yet." />
+          ) : (
+            dmCandidates.map((m) => (
+              <RowLine key={m.id} onClick={() => startDm(m)}>
+                <Avatar label={avatarLabels[m.profileId] || "?"} color={hashColor(m.profileId)} size={22} />
+                <span style={{ marginLeft: 8 }}>{m.name}</span>
+              </RowLine>
+            ))
+          )}
+        </Modal>
       )}
     </div>
   );

@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, GraduationCap, Wrench, CalendarDays,
   Wallet, MessageSquare, Plus, X, ChevronRight, Shield, User,
   CheckCircle2, Clock, Trash2, Save, LogOut, RefreshCw, Download,
-  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings
+  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "./supabaseClient";
@@ -585,6 +585,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
           id: m.id, name: m.name, email: m.email, phone: m.phone, unit: m.unit, tier: m.tier,
           team: m.team, joinDate: m.join_date, skills: source.skills || {}, dues: source.dues || {},
           profileId: m.profile_id,
+          homeAddress: source.home_address, sex: source.sex, dob: source.dob, occupation: source.occupation, kymCompletedAt: source.kym_completed_at,
         };
       }),
       onboarding: (onboardingRes.data || []).map((o) => ({
@@ -629,6 +630,19 @@ function Dashboard_Shell({ session, profile, setProfile }) {
 
   const myMember = data.members.find((m) => m.profileId === session.user.id) || null;
   const myOnboarding = myMember ? data.onboarding.find((o) => o.memberId === myMember.id) || null : null;
+  const myUnit = myMember?.unit;
+  const canManageMembers = isAdmin && myUnit === "Operations";
+  const canManageFeed = isAdmin && (myUnit === "Operations" || myUnit === "Technical");
+  const canSeeDues = isAdmin || myUnit === "Welfare" || myUnit === "Operations";
+
+  const [showKym, setShowKym] = useState(false);
+  const kymPromptedRef = useRef(false);
+  useEffect(() => {
+    if (!loaded || !myMember || myMember.kymCompletedAt || kymPromptedRef.current) return;
+    kymPromptedRef.current = true;
+    const t = setTimeout(() => setShowKym(true), 3000);
+    return () => clearTimeout(t);
+  }, [loaded, myMember]);
 
   async function markNotificationRead(id) {
     if (data.readIds.includes(id)) return;
@@ -665,7 +679,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
     { id: "onboarding", label: "Onboarding", icon: GraduationCap },
     { id: "equipment", label: "Equipment", icon: Wrench },
     { id: "roster", label: "Roster", icon: CalendarDays },
-    { id: "dues", label: "Dues", icon: Wallet },
+    ...(canSeeDues ? [{ id: "dues", label: "Dues", icon: Wallet }] : []),
     { id: "feedback", label: "Feedback", icon: MessageSquare },
   ];
 
@@ -678,6 +692,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
         onRead={markNotificationRead}
         onNavigate={setTab}
       />
+      {showKym && <KYMModal onClose={() => { setShowKym(false); load(); }} notify={notify} />}
       <div style={{ width: 190, flexShrink: 0, background: COLORS.surface1, borderRight: `1px solid ${COLORS.border}`, display: "flex", flexDirection: "column" }}>
         <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${COLORS.border}` }}>
           <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 19, letterSpacing: "0.02em", lineHeight: 1.1 }}>DISPLAY TEAM</div>
@@ -717,14 +732,14 @@ function Dashboard_Shell({ session, profile, setProfile }) {
           <SkeletonLoader />
         ) : (
           <div key={tab} className="hldt-tab-content">
-            {tab === "dashboard" && <DashboardTab data={data} setTab={setTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} />}
-            {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} reload={load} currentUserId={session.user.id} notify={notify} />}
+            {tab === "dashboard" && <DashboardTab data={data} setTab={setTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} />}
+            {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} />}
             {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
             {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} reload={load} notify={notify} />}
             {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} reload={load} />}
-            {tab === "dues" && <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} />}
+            {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
             {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
-            {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} notify={notify} />}
+            {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
             {tab === "chat" && <ChatTab session={session} profile={profile} members={data.members} notify={notify} />}
             {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} reload={load} notify={notify} />}
           </div>
@@ -1082,15 +1097,25 @@ function ChatTab({ session, profile, members, notify }) {
                           <Btn small tone="ghost" onClick={() => setEditingId(null)}>Cancel</Btn>
                         </div>
                       ) : (
-                        <div
-                          onClick={() => mine && withinEditWindow(m) && startEdit(m)}
-                          style={{
-                            background: mine ? COLORS.amberDim : COLORS.surface2, color: mine ? COLORS.amber : COLORS.textPrimary,
-                            padding: "8px 12px", borderRadius: 10, fontSize: 13, cursor: mine && withinEditWindow(m) ? "pointer" : "default",
-                          }}
-                        >
-                          {m.body}
-                          {m.edited_at && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 6 }}>(edited)</span>}
+                        <div style={{ display: "flex", alignItems: "flex-end", gap: 4, flexDirection: mine ? "row-reverse" : "row" }}>
+                          <div
+                            style={{
+                              background: mine ? COLORS.amberDim : COLORS.surface2, color: mine ? COLORS.amber : COLORS.textPrimary,
+                              padding: "8px 12px", borderRadius: 10, fontSize: 13,
+                            }}
+                          >
+                            {m.body}
+                            {m.edited_at && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 6 }}>(edited)</span>}
+                          </div>
+                          {mine && withinEditWindow(m) && (
+                            <button
+                              onClick={() => startEdit(m)}
+                              aria-label="Edit message"
+                              style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex" }}
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          )}
                         </div>
                       )}
                       <div style={{ fontSize: 10, color: COLORS.textMuted, marginTop: 2 }}>
@@ -1178,7 +1203,7 @@ function ManageSourcesModal({ sources, onClose, reload, notify }) {
   );
 }
 
-function FeedTab({ session, profile, isAdmin, notify }) {
+function FeedTab({ session, profile, isAdmin, canManage, notify }) {
   const [posts, setPosts] = useState([]);
   const [sources, setSources] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -1245,7 +1270,7 @@ function FeedTab({ session, profile, isAdmin, notify }) {
       <SectionHeader
         title="Feed"
         subtitle="Educational content auto-pulled from YouTube, plus curated links. Removed 30 days after posting."
-        right={isAdmin && (
+        right={canManage && (
           <div style={{ display: "flex", gap: 8 }}>
             <Btn tone="ghost" onClick={() => setShowSources(true)}><Settings size={13} /> Sources</Btn>
             <Btn tone="amber" onClick={() => setShowAddLink(true)}><Link2 size={14} /> Share a link</Btn>
@@ -1288,7 +1313,7 @@ function FeedTab({ session, profile, isAdmin, notify }) {
                   <Badge tone={p.source === "youtube_auto" ? "gray" : "amber"}>{p.source === "youtube_auto" ? "Auto" : "Shared"}</Badge>
                   <span style={{ fontSize: 10, color: COLORS.textMuted }}>{timeAgo(p.createdAt)}</span>
                 </div>
-                {isAdmin && (
+                {canManage && (
                   <div style={{ marginTop: 8, textAlign: "right" }}>
                     <Trash2 size={13} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => removePost(p.id)} />
                   </div>
@@ -1301,6 +1326,62 @@ function FeedTab({ session, profile, isAdmin, notify }) {
 
       {showSources && <ManageSourcesModal sources={sources} onClose={() => setShowSources(false)} reload={loadSources} notify={notify} />}
     </div>
+  );
+}
+
+/* ---------------- KYM (Know Your Member) ---------------- */
+
+function KYMModal({ onClose, notify }) {
+  const [phone, setPhone] = useState("");
+  const [homeAddress, setHomeAddress] = useState("");
+  const [sex, setSex] = useState("");
+  const [dob, setDob] = useState("");
+  const [occupation, setOccupation] = useState("");
+  const [error, setError] = useState("");
+
+  async function submit() {
+    if (!phone.trim() || !sex || !dob.trim()) {
+      setError("Phone number, sex, and date of birth are required.");
+      return;
+    }
+    if (!/^\d{1,2}\/\d{1,2}$/.test(dob.trim())) {
+      setError("Date of birth should be in dd/mm format, e.g. 14/03");
+      return;
+    }
+    const { error: err } = await supabase.rpc("submit_kym", {
+      p_phone: phone, p_home_address: homeAddress, p_sex: sex, p_dob: dob.trim(), p_occupation: occupation,
+    });
+    if (err) { notify?.(err.message, "error"); return; }
+    notify?.("Thanks — your details are saved");
+    onClose();
+  }
+
+  return (
+    <Modal title="A few details about you" onClose={onClose} width={380} footer={<Btn tone="amber" onClick={submit}><Save size={13} /> Save</Btn>}>
+      <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 14 }}>
+        One-time — helps the team reach you and know who's who. You won't be asked again.
+      </div>
+      <Field label="Phone number *">
+        <input style={inputStyle} value={phone} onChange={(e) => setPhone(e.target.value)} />
+      </Field>
+      <Field label="Home address">
+        <input style={inputStyle} value={homeAddress} onChange={(e) => setHomeAddress(e.target.value)} />
+      </Field>
+      <Field label="Sex *">
+        <select style={inputStyle} value={sex} onChange={(e) => setSex(e.target.value)}>
+          <option value="">Select</option>
+          <option value="M">Male</option>
+          <option value="F">Female</option>
+        </select>
+      </Field>
+      <Field label="Date of birth (dd/mm) *">
+        <input style={inputStyle} placeholder="14/03" value={dob} onChange={(e) => setDob(e.target.value)} />
+      </Field>
+      <Field label="Occupation">
+        <input style={inputStyle} value={occupation} onChange={(e) => setOccupation(e.target.value)} />
+      </Field>
+      {error && <div style={{ fontSize: 12, color: COLORS.red }}>{error}</div>}
+    </Modal>
   );
 }
 
@@ -1336,8 +1417,32 @@ function OwingDuesModal({ data, onClose }) {
   );
 }
 
-function WalletPanel({ data }) {
+function WalletPanel({ data, isAdmin }) {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [totalBalance, setTotalBalance] = useState(0);
+  const [editingBalance, setEditingBalance] = useState(false);
+  const [balanceInput, setBalanceInput] = useState("");
+
+  async function loadBalance() {
+    const { data: row } = await supabase.from("wallet_balance").select("*").eq("id", 1).maybeSingle();
+    if (row) setTotalBalance(row.balance);
+  }
+
+  useEffect(() => {
+    loadBalance();
+    const channel = supabase
+      .channel("wallet-balance-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "wallet_balance" }, loadBalance)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  async function saveBalance() {
+    const value = Number(balanceInput);
+    if (Number.isNaN(value)) return;
+    await supabase.from("wallet_balance").update({ balance: value, updated_by: null, updated_at: new Date().toISOString() }).eq("id", 1);
+    setEditingBalance(false);
+  }
 
   function statsFor(mo) {
     let expected = 0, collected = 0;
@@ -1375,7 +1480,22 @@ function WalletPanel({ data }) {
         </select>
       }
     >
-      <div style={{ display: "flex", gap: 12, marginBottom: 18 }}>
+      <div style={{ display: "flex", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
+        <div
+          onClick={() => isAdmin && !editingBalance && (setBalanceInput(String(totalBalance)), setEditingBalance(true))}
+          style={{ background: COLORS.surface2, borderRadius: 8, padding: "14px 16px", flex: 1, minWidth: 140, cursor: isAdmin ? "pointer" : "default" }}
+        >
+          <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>Total balance {isAdmin && !editingBalance && <span style={{ opacity: 0.6 }}>· click to edit</span>}</div>
+          {editingBalance ? (
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }} onClick={(e) => e.stopPropagation()}>
+              <input type="number" autoFocus style={{ ...inputStyle, width: 110, padding: "4px 8px" }} value={balanceInput} onChange={(e) => setBalanceInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveBalance()} />
+              <Btn small tone="amber" onClick={saveBalance}>Save</Btn>
+              <Btn small tone="ghost" onClick={() => setEditingBalance(false)}>Cancel</Btn>
+            </div>
+          ) : (
+            <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 22, color: COLORS.textPrimary }}>{currency(totalBalance)}</div>
+          )}
+        </div>
         <Metric label={month === "all" ? "Expected (all time)" : "Expected balance"} value={current.expected} isCurrency tone="amber" />
         <Metric label={month === "all" ? "Collected (all time)" : "Total collected"} value={current.collected} isCurrency tone="green" />
       </div>
@@ -1400,13 +1520,28 @@ function WalletPanel({ data }) {
   );
 }
 
-function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding }) {
+function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWelfareInfo }) {
   const [showOwingModal, setShowOwingModal] = useState(false);
   const currentMonth = new Date().toISOString().slice(0, 7);
   const openTickets = data.tickets.filter((t) => t.status !== "Resolved");
   const inTraining = data.onboarding.filter((o) => o.status !== "Graduated");
   const readyToGraduate = data.onboarding.filter((o) => o.status === "Independently ready" || o.status === "Ready");
   const owingCount = data.members.filter((m) => getDue(m, currentMonth).status === "owing").length;
+
+  const todayKey = (() => {
+    const d = new Date();
+    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+  })();
+  const todaysBirthdays = data.members.filter((m) => m.dob === todayKey);
+  const upcomingBirthdays = data.members.filter((m) => {
+    if (!m.dob || m.dob === todayKey) return false;
+    const [dd, mm] = m.dob.split("/").map(Number);
+    if (!dd || !mm) return false;
+    const now = new Date();
+    const thisYear = new Date(now.getFullYear(), mm - 1, dd);
+    const diffDays = Math.ceil((thisYear - now) / 86400000);
+    return diffDays > 0 && diffDays <= 14;
+  });
 
   return (
     <div>
@@ -1468,7 +1603,28 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding }) {
         )}
       </div>
 
-      {isAdmin && <WalletPanel data={data} />}
+      {isAdmin && <WalletPanel data={data} isAdmin={isAdmin} />}
+
+      {canSeeWelfareInfo && (todaysBirthdays.length > 0 || upcomingBirthdays.length > 0) && (
+        <Panel title="Birthdays" style={{ marginTop: 16 }}>
+          {todaysBirthdays.length > 0 && (
+            <div style={{ marginBottom: upcomingBirthdays.length > 0 ? 10 : 0 }}>
+              <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", marginBottom: 4 }}>Today</div>
+              {todaysBirthdays.map((m) => (
+                <RowLine key={m.id}><span style={{ flex: 1 }}>{m.name}</span><Badge tone="green">Today</Badge></RowLine>
+              ))}
+            </div>
+          )}
+          {upcomingBirthdays.length > 0 && (
+            <div>
+              <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", marginBottom: 4 }}>Next 14 days</div>
+              {upcomingBirthdays.map((m) => (
+                <RowLine key={m.id}><span style={{ flex: 1 }}>{m.name}</span><span style={{ fontSize: 11, color: COLORS.textMuted }}>{m.dob}</span></RowLine>
+              ))}
+            </div>
+          )}
+        </Panel>
+      )}
 
       {showOwingModal && <OwingDuesModal data={data} onClose={() => setShowOwingModal(false)} />}
     </div>
@@ -1477,7 +1633,7 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding }) {
 
 /* ---------------- members ---------------- */
 
-function MembersTab({ data, isAdmin, reload, currentUserId, notify }) {
+function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify }) {
   const [showForm, setShowForm] = useState(false);
   const [showRoles, setShowRoles] = useState(false);
   const [profiles, setProfiles] = useState([]);
@@ -1522,7 +1678,7 @@ function MembersTab({ data, isAdmin, reload, currentUserId, notify }) {
       <SectionHeader
         title="Members"
         subtitle={`${data.members.length} on record`}
-        right={isAdmin && (
+        right={canManage && (
           <div style={{ display: "flex", gap: 8 }}>
             <Btn tone="ghost" onClick={() => { setShowRoles(!showRoles); if (!showRoles) loadProfiles(); }}><Shield size={14} /> Manage admins</Btn>
             <Btn tone="amber" onClick={() => { setForm(blank()); setShowForm(true); }}><Plus size={14} /> Add member</Btn>
@@ -1582,7 +1738,7 @@ function MembersTab({ data, isAdmin, reload, currentUserId, notify }) {
                 <div style={{ color: COLORS.textSecondary }}>{m.team}</div>
                 <div>{m.profileId ? <Badge tone="green">Linked</Badge> : <Badge tone="gray">No login</Badge>}</div>
                 <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                  {isAdmin && (<>
+                  {canManage && (<>
                     <ChevronRight size={14} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => { setForm(m); setShowForm(true); }} />
                     <Trash2 size={14} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => removeMember(m.id)} />
                   </>)}

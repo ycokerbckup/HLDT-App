@@ -7,7 +7,8 @@ Backed by Supabase (auth + Postgres + row-level security).
 
 1. Run `supabase_schema.sql` in your Supabase project's SQL Editor (Anthropic delivered this separately).
 2. Run `supabase_schema_addon.sql` after it — adds email tracking and in-app admin management.
-3. Install dependencies:
+3. Run the files under `supabase_migrations/` in numeric order (01 through 06) — each adds a feature phase (linking, dedupe guard, announcements/notifications, chat, feed, and the phase 4 fixes/permissions model).
+4. Install dependencies:
    ```
    npm install
    ```

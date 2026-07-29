@@ -99,6 +99,35 @@ function duesExempt(m) {
   return m.tier === "Trainee";
 }
 
+function todayDDMM() {
+  const d = new Date();
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// Returns 'birthday' | 'graduation' | 'milestone' | null for a member, today.
+function getCelebrationForMember(member, onboardingList) {
+  if (!member) return null;
+  if (member.dob === todayDDMM()) return "birthday";
+  const gradToday = (onboardingList || []).some((o) => o.memberId === member.id && o.status === "Graduated" && o.graduatedAt && new Date(o.graduatedAt).toDateString() === new Date().toDateString());
+  if (gradToday) return "graduation";
+  if (member.joinDate) {
+    const today = new Date();
+    if (today.getDate() === 1) {
+      const jd = new Date(member.joinDate);
+      const monthsSince = (today.getFullYear() - jd.getFullYear()) * 12 + (today.getMonth() - jd.getMonth());
+      if (monthsSince > 0 && monthsSince % 6 === 0) return "milestone";
+    }
+  }
+  return null;
+}
+
+function celebrationEmoji(type) {
+  if (type === "birthday") return "🎂";
+  if (type === "graduation") return "🎓";
+  if (type === "milestone") return "🎉";
+  return null;
+}
+
 const AVATAR_PALETTE = ["#E8A33D", "#3DDC97", "#5B9BE0", "#D4537E", "#7F77DD", "#E24B4A", "#0F6E56", "#B87A1F"];
 
 const TUESDAY_TEMPLATE = [
@@ -136,10 +165,11 @@ function computeAvatarLabels(people) {
   return labels;
 }
 
-function Avatar({ label, color, size = 28 }) {
+function Avatar({ label, color, size = 28, celebration }) {
+  const emoji = celebrationEmoji(celebration);
   return (
-    <div style={{ width: size, height: size, borderRadius: 999, background: color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.4, fontWeight: 600, flexShrink: 0 }}>
-      {label}
+    <div title={celebration ? (celebration === "birthday" ? "Birthday today!" : celebration === "graduation" ? "Graduated today!" : "Service milestone today!") : undefined} style={{ width: size, height: size, borderRadius: 999, background: emoji ? COLORS.amberDim : color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: emoji ? size * 0.55 : size * 0.4, fontWeight: 600, flexShrink: 0 }}>
+      {emoji || label}
     </div>
   );
 }
@@ -631,7 +661,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
       onboarding: (onboardingRes.data || []).map((o) => ({
         id: o.id, memberId: o.member_id, name: o.name, startDate: o.start_date,
         weeks: o.weeks || [false, false, false, false], scores: o.scores || {},
-        status: o.status, history: historyByOnboarding[o.id] || [],
+        status: o.status, history: historyByOnboarding[o.id] || [], graduatedAt: o.graduated_at,
       })),
       tickets: (ticketsRes.data || []).map((t) => ({
         id: t.id, reporter: t.reporter, reporterId: t.reporter_id, date: t.ticket_date, systems: t.systems || {},
@@ -647,6 +677,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
       })),
       notifications: (notificationsRes.data || []).map((n) => ({
         id: n.id, type: n.type, title: n.title, body: n.body, linkTab: n.link_tab, targetRole: n.target_role, createdAt: n.created_at,
+        dmWithProfileId: n.dm_with_profile_id, relatedOnboardingId: n.related_onboarding_id,
       })),
       readIds: (readsRes.data || []).map((r) => r.notification_id),
     });
@@ -684,6 +715,8 @@ function Dashboard_Shell({ session, profile, setProfile }) {
   });
 
   const [showKym, setShowKym] = useState(false);
+  const [pendingDm, setPendingDm] = useState(null);
+  const [celebrantType, setCelebrantType] = useState(null);
   const kymPromptedRef = useRef(false);
   useEffect(() => {
     if (!loaded || !myMember || myMember.kymCompletedAt || kymPromptedRef.current) return;
@@ -691,6 +724,18 @@ function Dashboard_Shell({ session, profile, setProfile }) {
     const t = setTimeout(() => setShowKym(true), 3000);
     return () => clearTimeout(t);
   }, [loaded, myMember]);
+
+  const celebrantPromptedRef = useRef(false);
+  useEffect(() => {
+    if (!loaded || !myMember || celebrantPromptedRef.current) return;
+    const type = getCelebrationForMember(myMember, data.onboarding);
+    if (!type) return;
+    const key = `hldt-celebrated-${session.user.id}-${new Date().toDateString()}-${type}`;
+    if (localStorage.getItem(key)) return;
+    celebrantPromptedRef.current = true;
+    localStorage.setItem(key, "1");
+    setCelebrantType(type);
+  }, [loaded, myMember, data.onboarding, session.user.id]);
 
   async function markNotificationRead(id) {
     if (data.readIds.includes(id)) return;
@@ -741,9 +786,10 @@ function Dashboard_Shell({ session, profile, setProfile }) {
         notifications={data.notifications}
         readIds={data.readIds}
         onRead={markNotificationRead}
-        onNavigate={setTab}
+        onNavigate={(tabId, dmProfileId) => { setTab(tabId); if (dmProfileId) setPendingDm(dmProfileId); }}
       />
       {showKym && <KYMModal onClose={() => { setShowKym(false); load(); }} notify={notify} />}
+      {celebrantType && <CelebrantPopup type={celebrantType} name={profile.full_name?.split(" ")[0] || "there"} onClose={() => setCelebrantType(null)} />}
 
       {isMobile ? (
         <>
@@ -781,7 +827,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
                 {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
-                {tab === "chat" && <ChatTab session={session} profile={profile} members={data.members} notify={notify} />}
+                {tab === "chat" && <ChatTab session={session} profile={profile} members={data.members} onboarding={data.onboarding} notify={notify} pendingDmProfileId={pendingDm} onPendingDmConsumed={() => setPendingDm(null)} />}
                 {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} canReadFeedback={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} />}
               </div>
             )}
@@ -867,7 +913,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
                 {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
-                {tab === "chat" && <ChatTab session={session} profile={profile} members={data.members} notify={notify} />}
+                {tab === "chat" && <ChatTab session={session} profile={profile} members={data.members} onboarding={data.onboarding} notify={notify} pendingDmProfileId={pendingDm} onPendingDmConsumed={() => setPendingDm(null)} />}
                 {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} canReadFeedback={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} />}
               </div>
             )}
@@ -916,7 +962,7 @@ function NotificationBell({ notifications, readIds, onRead, onNavigate }) {
 
   function handleClick(n) {
     onRead(n.id);
-    if (n.linkTab) onNavigate(n.linkTab);
+    if (n.linkTab) onNavigate(n.linkTab, n.dmWithProfileId || null);
     setOpen(false);
   }
 
@@ -1080,7 +1126,7 @@ function AnnouncementsTab({ data, isAdmin, canPost, reload, notify, adminId, adm
 
 /* ---------------- chat ---------------- */
 
-function ChatTab({ session, profile, members, notify }) {
+function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfileId, onPendingDmConsumed }) {
   const isMobile = useIsMobile();
   const [mobileShowThread, setMobileShowThread] = useState(false);
   const [conversations, setConversations] = useState([]);
@@ -1099,6 +1145,11 @@ function ChatTab({ session, profile, members, notify }) {
     return computeAvatarLabels(people);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [members]);
+
+  function celebrationForProfile(profileId) {
+    const m = members.find((mem) => mem.profileId === profileId);
+    return getCelebrationForMember(m, onboarding);
+  }
 
   async function loadConversations() {
     const { data } = await supabase.from("conversations").select("*").or(`user_a.eq.${session.user.id},user_b.eq.${session.user.id}`);
@@ -1172,6 +1223,17 @@ function ChatTab({ session, profile, members, notify }) {
     setShowNewDm(false);
   }
 
+  useEffect(() => {
+    if (!pendingDmProfileId) return;
+    const target = dmCandidates.find((m) => m.profileId === pendingDmProfileId);
+    if (target) {
+      startDm(target);
+      if (isMobile) setMobileShowThread(true);
+    }
+    onPendingDmConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingDmProfileId, dmCandidates.length]);
+
   function withinEditWindow(m) {
     return Date.now() - new Date(m.created_at).getTime() < 30 * 60 * 1000;
   }
@@ -1200,7 +1262,7 @@ function ChatTab({ session, profile, members, notify }) {
                   onClick={() => { setThread({ type: "dm", conversationId: c.id, otherName: otherMember?.name || "Member" }); setMobileShowThread(true); }}
                   style={{ padding: "8px 10px", borderRadius: 6, cursor: "pointer", background: thread.type === "dm" && thread.conversationId === c.id ? COLORS.surface2 : "transparent", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}
                 >
-                  <Avatar label={avatarLabels[otherId] || "?"} color={hashColor(otherId)} size={22} />
+                  <Avatar label={avatarLabels[otherId] || "?"} color={hashColor(otherId)} size={22} celebration={celebrationForProfile(otherId)} />
                   {otherMember?.name || "Member"}
                 </div>
               );
@@ -1227,7 +1289,7 @@ function ChatTab({ session, profile, members, notify }) {
                 const mine = m.sender_id === session.user.id;
                 return (
                   <div key={m.id} style={{ display: "flex", gap: 8, flexDirection: mine ? "row-reverse" : "row" }}>
-                    <Avatar label={avatarLabels[m.sender_id] || m.sender_name?.[0] || "?"} color={hashColor(m.sender_id)} size={26} />
+                    <Avatar label={avatarLabels[m.sender_id] || m.sender_name?.[0] || "?"} color={hashColor(m.sender_id)} size={26} celebration={celebrationForProfile(m.sender_id)} />
                     <div style={{ maxWidth: "70%" }}>
                       {!mine && <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 2 }}>{m.sender_name}</div>}
                       {editingId === m.id ? (
@@ -1283,7 +1345,7 @@ function ChatTab({ session, profile, members, notify }) {
           ) : (
             dmCandidates.map((m) => (
               <RowLine key={m.id} onClick={() => startDm(m)}>
-                <Avatar label={avatarLabels[m.profileId] || "?"} color={hashColor(m.profileId)} size={22} />
+                <Avatar label={avatarLabels[m.profileId] || "?"} color={hashColor(m.profileId)} size={22} celebration={celebrationForProfile(m.profileId)} />
                 <span style={{ marginLeft: 8 }}>{m.name}</span>
               </RowLine>
             ))
@@ -1526,6 +1588,21 @@ function KYMModal({ onClose, notify }) {
   );
 }
 
+function CelebrantPopup({ type, name, onClose }) {
+  const content = {
+    birthday: { emoji: "🎂", title: "Happy Birthday!", body: `Wishing you an amazing day, ${name}. Thanks for everything you bring to the team.` },
+    graduation: { emoji: "🎓", title: "Congratulations!", body: `You've graduated from onboarding, ${name} — welcome fully to the team!` },
+    milestone: { emoji: "🎉", title: "Milestone reached!", body: `Cheers to your journey on the team so far, ${name}. Here's to more.` },
+  }[type];
+  if (!content) return null;
+  return (
+    <Modal title={content.title} onClose={onClose} width={340} footer={<Btn tone="amber" onClick={onClose}>Thanks!</Btn>}>
+      <div style={{ textAlign: "center", fontSize: 48, marginBottom: 12 }}>{content.emoji}</div>
+      <div style={{ textAlign: "center", fontSize: 13, color: COLORS.textSecondary }}>{content.body}</div>
+    </Modal>
+  );
+}
+
 /* ---------------- dashboard ---------------- */
 
 function OwingDuesModal({ data, onClose }) {
@@ -1746,23 +1823,47 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWel
 
       {isAdmin && <WalletPanel data={data} isAdmin={isAdmin} />}
 
-      {canSeeWelfareInfo && (todaysBirthdays.length > 0 || upcomingBirthdays.length > 0) && (
-        <Panel title="Birthdays" style={{ marginTop: 16 }}>
-          {todaysBirthdays.length > 0 && (
-            <div style={{ marginBottom: upcomingBirthdays.length > 0 ? 10 : 0 }}>
-              <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", marginBottom: 4 }}>Today</div>
-              {todaysBirthdays.map((m) => (
-                <RowLine key={m.id}><span style={{ flex: 1 }}>{m.name}</span><Badge tone="green">Today</Badge></RowLine>
-              ))}
-            </div>
-          )}
-          {upcomingBirthdays.length > 0 && (
-            <div>
-              <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", marginBottom: 4 }}>Next 14 days</div>
-              {upcomingBirthdays.map((m) => (
-                <RowLine key={m.id}><span style={{ flex: 1 }}>{m.name}</span><span style={{ fontSize: 11, color: COLORS.textMuted }}>{m.dob}</span></RowLine>
-              ))}
-            </div>
+      {canSeeWelfareInfo && (
+        <Panel
+          title="Birthdays"
+          style={{ marginTop: 16 }}
+          right={
+            <Btn small tone="ghost" onClick={() => {
+              const rows = data.members.filter((m) => m.dob).sort((a, b) => a.dob.localeCompare(b.dob));
+              const csv = ["Name,Date of Birth (dd/mm),Unit", ...rows.map((m) => `"${m.name}","${m.dob}","${m.unit || ""}"`)].join("\n");
+              const blob = new Blob([csv], { type: "text/csv" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `birthdays-${new Date().toISOString().slice(0, 10)}.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}>
+              <Download size={12} /> Export
+            </Btn>
+          }
+        >
+          {todaysBirthdays.length === 0 && upcomingBirthdays.length === 0 ? (
+            <EmptyRow text="No birthdays today or in the next 14 days." />
+          ) : (
+            <>
+              {todaysBirthdays.length > 0 && (
+                <div style={{ marginBottom: upcomingBirthdays.length > 0 ? 10 : 0 }}>
+                  <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", marginBottom: 4 }}>Today</div>
+                  {todaysBirthdays.map((m) => (
+                    <RowLine key={m.id}><span style={{ flex: 1 }}>{m.name}</span><Badge tone="green">Today</Badge></RowLine>
+                  ))}
+                </div>
+              )}
+              {upcomingBirthdays.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", marginBottom: 4 }}>Next 14 days</div>
+                  {upcomingBirthdays.map((m) => (
+                    <RowLine key={m.id}><span style={{ flex: 1 }}>{m.name}</span><span style={{ fontSize: 11, color: COLORS.textMuted }}>{m.dob}</span></RowLine>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </Panel>
       )}

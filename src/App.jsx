@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, GraduationCap, Wrench, CalendarDays,
   Wallet, MessageSquare, Plus, X, ChevronRight, Shield, User,
   CheckCircle2, Clock, Trash2, Save, LogOut, RefreshCw, Download,
-  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil, GripVertical, Eye, EyeOff
+  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil, GripVertical, Eye, EyeOff, Camera
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "./supabaseClient";
@@ -634,8 +634,9 @@ function Dashboard_Shell({ session, profile, setProfile }) {
         status: o.status, history: historyByOnboarding[o.id] || [],
       })),
       tickets: (ticketsRes.data || []).map((t) => ({
-        id: t.id, reporter: t.reporter, date: t.ticket_date, systems: t.systems || {},
-        description: t.description, status: t.status, assignedTo: t.assigned_to, createdAt: t.created_at,
+        id: t.id, reporter: t.reporter, reporterId: t.reporter_id, date: t.ticket_date, systems: t.systems || {},
+        description: t.description, status: t.status, assignedTo: t.assigned_to, assignedToId: t.assigned_to_id,
+        photoUrl: t.photo_url, createdAt: t.created_at,
       })),
       feedback: (feedbackRes.data || []).map((f) => ({
         id: f.id, name: f.name, engagement: f.engagement, impact: f.impact, atmosphere: f.atmosphere,
@@ -775,7 +776,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "dashboard" && <DashboardTab data={data} setTab={setTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} />}
                 {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
-                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} reload={load} notify={notify} />}
+                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} reload={load} notify={notify} />}
                 {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} reload={load} notify={notify} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
@@ -861,7 +862,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "dashboard" && <DashboardTab data={data} setTab={setTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} />}
                 {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
-                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} reload={load} notify={notify} />}
+                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} reload={load} notify={notify} />}
                 {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} reload={load} notify={notify} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
@@ -1929,8 +1930,9 @@ function OnboardingTab({ data, isAdmin, canManage, reload, adminName, notify }) 
   const [form, setForm] = useState(blank());
 
   async function addTrainee() {
-    if (!form.name.trim()) return;
-    const { error } = await supabase.from("onboarding").insert({ member_id: form.memberId || null, name: form.name, start_date: form.startDate, weeks: form.weeks, scores: form.scores, status: form.status });
+    if (!form.memberId) { notify?.("Pick an existing member to start tracking", "error"); return; }
+    const member = data.members.find((m) => m.id === form.memberId);
+    const { error } = await supabase.from("onboarding").insert({ member_id: form.memberId, name: member.name, start_date: form.startDate, weeks: form.weeks, scores: form.scores, status: form.status });
     if (error) { notify?.(error.message, "error"); return; }
     notify?.("Trainee added");
     setForm(blank());
@@ -1972,14 +1974,8 @@ function OnboardingTab({ data, isAdmin, canManage, reload, adminName, notify }) 
       {showForm && (
         <Panel title="New trainee" style={{ marginBottom: 16 }} right={<X size={16} style={{ cursor: "pointer" }} onClick={() => setShowForm(false)} />}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <Field label="Full name"><input style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+            <Field label="Member"><select style={inputStyle} value={form.memberId} onChange={(e) => setForm({ ...form, memberId: e.target.value })}><option value="">Select a member</option>{data.members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>
             <Field label="Start date"><input type="date" style={inputStyle} value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} /></Field>
-            <Field label="Link to existing member (optional)">
-              <select style={inputStyle} value={form.memberId} onChange={(e) => setForm({ ...form, memberId: e.target.value })}>
-                <option value="">None</option>
-                {data.members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
-            </Field>
           </div>
           <Btn tone="amber" onClick={addTrainee}><Save size={13} /> Start tracking</Btn>
         </Panel>
@@ -2034,18 +2030,43 @@ function OnboardingTab({ data, isAdmin, canManage, reload, adminName, notify }) 
 
 /* ---------------- equipment ---------------- */
 
-function EquipmentTab({ data, isAdmin, reload, notify }) {
+function EquipmentTab({ data, isAdmin, myMember, reload, notify }) {
   const [showForm, setShowForm] = useState(false);
-  const blank = () => ({ reporter: "", date: new Date().toISOString().slice(0, 10), systems: Object.fromEntries(SYSTEMS.map((s) => [s, "OK"])), description: "" });
+  const blank = () => ({ date: new Date().toISOString().slice(0, 10), systems: Object.fromEntries(SYSTEMS.map((s) => [s, "OK"])), description: "" });
   const [form, setForm] = useState(blank());
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [uploading, setUploading] = useState(false);
+
+  function onPhotoSelected(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  }
 
   async function submit() {
-    if (!form.reporter.trim()) return;
+    if (!myMember) { notify?.("No member record linked to your account — ask an admin", "error"); return; }
+    setUploading(true);
+    let photoUrl = null;
+    if (photoFile) {
+      const path = `${myMember.id}/${Date.now()}-${photoFile.name}`;
+      const { error: upErr } = await supabase.storage.from("ticket-photos").upload(path, photoFile);
+      if (upErr) { notify?.(upErr.message, "error"); setUploading(false); return; }
+      const { data: pub } = supabase.storage.from("ticket-photos").getPublicUrl(path);
+      photoUrl = pub.publicUrl;
+    }
     const hasIssue = Object.values(form.systems).includes("Issue");
-    const { error } = await supabase.from("tickets").insert({ reporter: form.reporter, ticket_date: form.date, systems: form.systems, description: form.description, status: hasIssue ? "Open" : "Resolved" });
+    const { error } = await supabase.from("tickets").insert({
+      reporter: myMember.name, reporter_id: myMember.id, ticket_date: form.date, systems: form.systems,
+      description: form.description, status: hasIssue ? "Open" : "Resolved", photo_url: photoUrl,
+    });
+    setUploading(false);
     if (error) { notify?.(error.message, "error"); return; }
     notify?.(hasIssue ? "Check submitted — issue logged" : "Check submitted — all clear");
     setForm(blank());
+    setPhotoFile(null);
+    setPhotoPreview(null);
     setShowForm(false);
     reload();
   }
@@ -2056,8 +2077,9 @@ function EquipmentTab({ data, isAdmin, reload, notify }) {
     reload();
   }
 
-  async function assign(t, name) {
-    await supabase.from("tickets").update({ assigned_to: name }).eq("id", t.id);
+  async function assign(t, memberId) {
+    const member = data.members.find((m) => m.id === memberId);
+    await supabase.from("tickets").update({ assigned_to_id: memberId || null, assigned_to: member?.name || null }).eq("id", t.id);
     reload();
   }
 
@@ -2068,7 +2090,11 @@ function EquipmentTab({ data, isAdmin, reload, notify }) {
       {showForm && (
         <Panel title="System check" style={{ marginBottom: 16 }} right={<X size={16} style={{ cursor: "pointer" }} onClick={() => setShowForm(false)} />}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <Field label="Your name"><input style={inputStyle} value={form.reporter} onChange={(e) => setForm({ ...form, reporter: e.target.value })} /></Field>
+            <Field label="Reporting as">
+              <div style={{ ...inputStyle, display: "flex", alignItems: "center", color: myMember ? COLORS.textPrimary : COLORS.red }}>
+                {myMember ? myMember.name : "No member record linked"}
+              </div>
+            </Field>
             <Field label="Date"><input type="date" style={inputStyle} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, margin: "6px 0" }}>
@@ -2081,7 +2107,18 @@ function EquipmentTab({ data, isAdmin, reload, notify }) {
             ))}
           </div>
           <Field label="Describe issue(s)"><textarea style={{ ...inputStyle, minHeight: 60 }} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
-          <Btn tone="amber" onClick={submit}><Save size={13} /> Submit</Btn>
+          <Field label="Photo (optional)">
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <label style={{ display: "inline-flex" }}>
+                <input type="file" accept="image/*" capture="environment" onChange={onPhotoSelected} style={{ display: "none" }} />
+                <span style={{ ...inputStyle, display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", width: "auto", padding: "8px 12px" }}>
+                  <Camera size={14} /> {photoFile ? "Change photo" : "Add photo"}
+                </span>
+              </label>
+              {photoPreview && <img src={photoPreview} alt="" style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 6 }} />}
+            </div>
+          </Field>
+          <Btn tone="amber" onClick={submit} disabled={uploading}>{uploading ? "Uploading..." : (<><Save size={13} /> Submit</>)}</Btn>
         </Panel>
       )}
 
@@ -2089,18 +2126,22 @@ function EquipmentTab({ data, isAdmin, reload, notify }) {
         const issues = SYSTEMS.filter((s) => t.systems[s] === "Issue");
         return (
           <Panel key={t.id} style={{ marginBottom: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-              <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8, gap: 10 }}>
+              <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 500 }}>{t.reporter} <span style={{ color: COLORS.textMuted, fontWeight: 400 }}>· {t.date}</span></div>
                 {issues.length > 0 ? <div style={{ fontSize: 12, color: COLORS.red, marginTop: 2 }}>Issues: {issues.join(", ")}</div> : <div style={{ fontSize: 12, color: COLORS.green, marginTop: 2 }}>All systems OK</div>}
               </div>
               <Badge tone={t.status === "Resolved" ? "green" : t.status === "Open" ? "red" : "amber"}>{t.status}</Badge>
             </div>
+            {t.photoUrl && <img src={t.photoUrl} alt="" style={{ maxWidth: 200, maxHeight: 150, borderRadius: 8, marginBottom: 8, display: "block", cursor: "pointer" }} onClick={() => window.open(t.photoUrl, "_blank")} />}
             {t.description && <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 8 }}>{t.description}</div>}
             {isAdmin && issues.length > 0 && (
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 {TICKET_STATUSES.map((s) => <Btn key={s} small tone={t.status === s ? "amber" : "ghost"} onClick={() => updateStatus(t, s)}>{s}</Btn>)}
-                <input placeholder="Assign to..." defaultValue={t.assignedTo || ""} onBlur={(e) => assign(t, e.target.value)} style={{ ...inputStyle, width: 140, fontSize: 12, padding: "5px 8px" }} />
+                <select value={t.assignedToId || ""} onChange={(e) => assign(t, e.target.value)} style={{ ...inputStyle, width: 150, fontSize: 12, padding: "5px 8px" }}>
+                  <option value="">Assign to...</option>
+                  {data.members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
               </div>
             )}
           </Panel>

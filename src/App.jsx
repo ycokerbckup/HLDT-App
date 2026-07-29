@@ -677,6 +677,11 @@ function Dashboard_Shell({ session, profile, setProfile }) {
   const canManageRosters = isAdmin && (myUnit === "Operations" || myUnit === "Admin");
   const canSeeDues = myUnit === "Welfare" || myUnit === "Operations";
 
+  const unreadByTab = {};
+  data.notifications.forEach((n) => {
+    if (n.linkTab && !data.readIds.includes(n.id)) unreadByTab[n.linkTab] = (unreadByTab[n.linkTab] || 0) + 1;
+  });
+
   const [showKym, setShowKym] = useState(false);
   const kymPromptedRef = useRef(false);
   useEffect(() => {
@@ -776,7 +781,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
                 {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
                 {tab === "chat" && <ChatTab session={session} profile={profile} members={data.members} notify={notify} />}
-                {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} reload={load} notify={notify} />}
+                {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} canReadFeedback={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} />}
               </div>
             )}
           </div>
@@ -786,6 +791,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
             {nav.map((n) => {
               const Icon = n.icon;
               const active = tab === n.id;
+              const hasUnread = unreadByTab[n.id] > 0;
               return (
                 <div
                   key={n.id}
@@ -797,7 +803,10 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                     borderTop: active ? `2px solid ${COLORS.amber}` : "2px solid transparent",
                   }}
                 >
-                  <Icon size={17} strokeWidth={1.8} />
+                  <div style={{ position: "relative" }}>
+                    <Icon size={17} strokeWidth={1.8} />
+                    {hasUnread && <span style={{ position: "absolute", top: -2, right: -3, width: 7, height: 7, borderRadius: 999, background: COLORS.red, border: `1.5px solid ${COLORS.surface1}` }} />}
+                  </div>
                   <span style={{ fontSize: 9, textAlign: "center", lineHeight: 1.1 }}>{n.label}</span>
                 </div>
               );
@@ -816,9 +825,13 @@ function Dashboard_Shell({ session, profile, setProfile }) {
               {nav.map((n) => {
                 const Icon = n.icon;
                 const active = tab === n.id;
+                const hasUnread = unreadByTab[n.id] > 0;
                 return (
                   <div key={n.id} className="hldt-nav-item" onClick={() => setTab(n.id)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", marginBottom: 2, borderRadius: 6, cursor: "pointer", fontSize: 13, color: active ? COLORS.textPrimary : COLORS.textSecondary, background: active ? COLORS.surface2 : "transparent", borderLeft: active ? `2px solid ${COLORS.amber}` : "2px solid transparent" }}>
-                    <Icon size={15} strokeWidth={1.8} />
+                    <div style={{ position: "relative", display: "flex" }}>
+                      <Icon size={15} strokeWidth={1.8} />
+                      {hasUnread && <span style={{ position: "absolute", top: -2, right: -3, width: 6, height: 6, borderRadius: 999, background: COLORS.red, border: `1.5px solid ${COLORS.surface1}` }} />}
+                    </div>
                     {n.label}
                   </div>
                 );
@@ -854,7 +867,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
                 {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
                 {tab === "chat" && <ChatTab session={session} profile={profile} members={data.members} notify={notify} />}
-                {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} reload={load} notify={notify} />}
+                {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} canReadFeedback={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} />}
               </div>
             )}
           </div>
@@ -2501,7 +2514,7 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify }) {
 
 /* ---------------- feedback ---------------- */
 
-function FeedbackTab({ data, isAdmin, reload, notify }) {
+function FeedbackTab({ data, isAdmin, canReadFeedback, reload, notify }) {
   const [showForm, setShowForm] = useState(false);
   const blank = () => ({ name: "", engagement: 3, impact: 3, atmosphere: 3, suggestions: "", complaints: "", requests: "" });
   const [form, setForm] = useState(blank());
@@ -2534,7 +2547,7 @@ function FeedbackTab({ data, isAdmin, reload, notify }) {
         </Panel>
       )}
 
-      {!isAdmin ? <Panel><EmptyRow text="Feedback is only visible to admins and the Welfare unit." /></Panel> : data.feedback.length === 0 ? <Panel><EmptyRow text="No feedback submitted yet." /></Panel> : data.feedback.map((f) => (
+      {!canReadFeedback ? <Panel><EmptyRow text="Feedback is only visible to Operations and Welfare." /></Panel> : data.feedback.length === 0 ? <Panel><EmptyRow text="No feedback submitted yet." /></Panel> : data.feedback.map((f) => (
         <Panel key={f.id} style={{ marginBottom: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
             <span style={{ fontSize: 13, fontWeight: 500 }}>{f.name || "Anonymous"}</span>

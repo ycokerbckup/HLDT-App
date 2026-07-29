@@ -738,6 +738,16 @@ function WalletPanel({ data }) {
 
   function statsFor(mo) {
     let expected = 0, collected = 0;
+    if (mo === "all") {
+      data.members.forEach((m) => {
+        Object.keys(m.dues || {}).forEach((recordedMonth) => {
+          const due = getDue(m, recordedMonth);
+          if (due.status !== "free") expected += rate(m);
+          collected += due.amount || 0;
+        });
+      });
+      return { expected, collected };
+    }
     data.members.forEach((m) => {
       const due = getDue(m, mo);
       if (due.status !== "free") expected += rate(m);
@@ -757,13 +767,14 @@ function WalletPanel({ data }) {
       title="Wallet"
       right={
         <select style={{ ...inputStyle, width: 130, padding: "5px 8px", fontSize: 12 }} value={month} onChange={(e) => setMonth(e.target.value)}>
+          <option value="all">All time</option>
           {monthsRange(12).map((mo) => <option key={mo} value={mo}>{mo}</option>)}
         </select>
       }
     >
       <div style={{ display: "flex", gap: 12, marginBottom: 18 }}>
-        <Metric label="Expected balance" value={current.expected} isCurrency tone="amber" />
-        <Metric label="Total collected" value={current.collected} isCurrency tone="green" />
+        <Metric label={month === "all" ? "Expected (all time)" : "Expected balance"} value={current.expected} isCurrency tone="amber" />
+        <Metric label={month === "all" ? "Collected (all time)" : "Total collected"} value={current.collected} isCurrency tone="green" />
       </div>
       <div style={{ height: 200 }}>
         <ResponsiveContainer width="100%" height="100%">
@@ -781,6 +792,7 @@ function WalletPanel({ data }) {
           </BarChart>
         </ResponsiveContainer>
       </div>
+      {month !== "all" && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 8 }}>Chart always shows the last 6 months, regardless of the filter above.</div>}
     </Panel>
   );
 }

@@ -196,7 +196,7 @@ function Btn({ children, onClick, tone = "default", small, type = "button", disa
 
 function SectionHeader({ title, subtitle, right }) {
   return (
-    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 18 }}>
+    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
       <div>
         <h2 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 26, letterSpacing: "0.01em" }}>{title}</h2>
         {subtitle && <div style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 2 }}>{subtitle}</div>}
@@ -251,6 +251,16 @@ function RowLine({ children, onClick }) {
   );
 }
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth <= 768);
+  useEffect(() => {
+    function handler() { setIsMobile(window.innerWidth <= 768); }
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return isMobile;
+}
+
 function useCountUp(target) {
   const [display, setDisplay] = useState(0);
   useEffect(() => {
@@ -291,11 +301,11 @@ function Metric({ label, value, tone, isCurrency, onClick }) {
   );
 }
 
-function Modal({ title, onClose, children, width = 480, footer }) {
+function Modal({ title, onClose, children, width = 480, footer, dismissable = true }) {
   return (
     <div
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, padding: 20 }}
-      onClick={onClose}
+      onClick={dismissable ? onClose : undefined}
     >
       <div
         className="hldt-modal"
@@ -304,7 +314,7 @@ function Modal({ title, onClose, children, width = 480, footer }) {
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 17, color: COLORS.textPrimary }}>{title}</h3>
-          <X size={18} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={onClose} />
+          {dismissable && <X size={18} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={onClose} />}
         </div>
         {children}
         {footer && <div style={{ marginTop: 16, display: "flex", gap: 8, justifyContent: "flex-end" }}>{footer}</div>}
@@ -314,18 +324,19 @@ function Modal({ title, onClose, children, width = 480, footer }) {
 }
 
 function ThemeToggle({ mode, onToggle }) {
+  const isMobile = useIsMobile();
   return (
     <button
       onClick={onToggle}
       aria-label="Toggle light/dark mode"
       style={{
-        position: "fixed", top: 16, right: 16, zIndex: 1500,
-        width: 36, height: 36, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center",
+        position: "fixed", top: isMobile ? 8 : 16, right: isMobile ? 8 : 16, zIndex: 1500,
+        width: isMobile ? 32 : 36, height: isMobile ? 32 : 36, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center",
         background: COLORS.surface2, border: `1px solid ${COLORS.border}`, color: COLORS.textPrimary, cursor: "pointer",
         transition: "transform 150ms ease, background-color 150ms ease",
       }}
     >
-      {mode === "light" ? <Moon size={15} /> : <Sun size={15} />}
+      {mode === "light" ? <Moon size={14} /> : <Sun size={14} />}
     </button>
   );
 }
@@ -368,8 +379,8 @@ function AuthScreen() {
   }
 
   return (
-    <div className="hldt-app" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.bg }}>
-      <div className="hldt-auth-card" style={{ width: 340, background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 24 }}>
+    <div className="hldt-app" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.bg, padding: 16 }}>
+      <div className="hldt-auth-card" style={{ width: 340, maxWidth: "100%", background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 24 }}>
         <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 20, color: COLORS.textPrimary, marginBottom: 2 }}>DISPLAY TEAM</div>
         <div style={{ fontSize: 11, color: COLORS.textMuted, fontFamily: "'JetBrains Mono', monospace", marginBottom: 20 }}>OPS CONSOLE</div>
 
@@ -440,8 +451,8 @@ function ResetPasswordScreen() {
   }
 
   return (
-    <div className="hldt-app" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.bg }}>
-      <div className="hldt-auth-card" style={{ width: 340, background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 24 }}>
+    <div className="hldt-app" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.bg, padding: 16 }}>
+      <div className="hldt-auth-card" style={{ width: 340, maxWidth: "100%", background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 24 }}>
         <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 20, color: COLORS.textPrimary, marginBottom: 20 }}>Set a new password</div>
         {done ? (
           <>
@@ -683,8 +694,11 @@ function Dashboard_Shell({ session, profile, setProfile }) {
     { id: "feedback", label: "Feedback", icon: MessageSquare },
   ];
 
+  const isMobile = useIsMobile();
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
+
   return (
-    <div className="hldt-app" style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.textPrimary, fontFamily: "'Inter', sans-serif", display: "flex" }}>
+    <div className="hldt-app" style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.textPrimary, fontFamily: "'Inter', sans-serif", display: "flex", flexDirection: isMobile ? "column" : "row" }}>
       <ToastStack toasts={toasts} />
       <NotificationBell
         notifications={data.notifications}
@@ -693,58 +707,128 @@ function Dashboard_Shell({ session, profile, setProfile }) {
         onNavigate={setTab}
       />
       {showKym && <KYMModal onClose={() => { setShowKym(false); load(); }} notify={notify} />}
-      <div style={{ width: 190, flexShrink: 0, background: COLORS.surface1, borderRight: `1px solid ${COLORS.border}`, display: "flex", flexDirection: "column" }}>
-        <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${COLORS.border}` }}>
-          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 19, letterSpacing: "0.02em", lineHeight: 1.1 }}>DISPLAY TEAM</div>
-          <div style={{ fontSize: 11, color: COLORS.textMuted, fontFamily: "'JetBrains Mono', monospace", marginTop: 4 }}>OPS CONSOLE</div>
-        </div>
 
-        <div style={{ flex: 1, padding: "10px 8px" }}>
-          {nav.map((n) => {
-            const Icon = n.icon;
-            const active = tab === n.id;
-            return (
-              <div key={n.id} className="hldt-nav-item" onClick={() => setTab(n.id)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", marginBottom: 2, borderRadius: 6, cursor: "pointer", fontSize: 13, color: active ? COLORS.textPrimary : COLORS.textSecondary, background: active ? COLORS.surface2 : "transparent", borderLeft: active ? `2px solid ${COLORS.amber}` : "2px solid transparent" }}>
-                <Icon size={15} strokeWidth={1.8} />
-                {n.label}
+      {isMobile ? (
+        <>
+          {/* Compact top bar: hamburger opens account menu */}
+          <div style={{ position: "fixed", top: 8, left: 8, zIndex: 1500 }}>
+            <button
+              onClick={() => setShowAccountMenu(!showAccountMenu)}
+              aria-label="Account menu"
+              style={{ width: 32, height: 32, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.surface2, border: `1px solid ${COLORS.border}`, color: COLORS.textPrimary, cursor: "pointer" }}
+            >
+              {isAdmin ? <Shield size={14} color={COLORS.amber} /> : <User size={14} />}
+            </button>
+            {showAccountMenu && (
+              <div className="hldt-modal" style={{ position: "absolute", top: 38, left: 0, width: 220, background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 12 }}>
+                <div style={{ fontSize: 12, color: COLORS.textPrimary, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profile.full_name || session.user.email}</div>
+                <Badge tone={isAdmin ? "amber" : "gray"}>{profile.role}</Badge>
+                <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                  {isAdmin && <Btn small tone="ghost" onClick={() => { exportAllData(); notify("Backup downloaded"); setShowAccountMenu(false); }}><Download size={12} /> Export data</Btn>}
+                  <Btn small tone="ghost" onClick={() => supabase.auth.signOut()}><LogOut size={12} /> Sign out</Btn>
+                </div>
               </div>
-            );
-          })}
-        </div>
+            )}
+          </div>
 
-        <div style={{ padding: 12, borderTop: `1px solid ${COLORS.border}` }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-            {isAdmin ? <Shield size={13} color={COLORS.amber} /> : <User size={13} color={COLORS.textMuted} />}
-            <div style={{ fontSize: 12, color: COLORS.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {profile.full_name || session.user.email}
+          <div style={{ padding: "56px 14px 70px", minWidth: 0, flex: 1, overflowY: "auto" }}>
+            {!loaded ? (
+              <SkeletonLoader />
+            ) : (
+              <div key={tab} className="hldt-tab-content">
+                {tab === "dashboard" && <DashboardTab data={data} setTab={setTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} />}
+                {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} />}
+                {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
+                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} reload={load} notify={notify} />}
+                {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} reload={load} />}
+                {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
+                {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
+                {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
+                {tab === "chat" && <ChatTab session={session} profile={profile} members={data.members} notify={notify} />}
+                {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} reload={load} notify={notify} />}
+              </div>
+            )}
+          </div>
+
+          {/* Bottom tab bar */}
+          <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, display: "flex", overflowX: "auto", background: COLORS.surface1, borderTop: `1px solid ${COLORS.border}`, zIndex: 1400 }}>
+            {nav.map((n) => {
+              const Icon = n.icon;
+              const active = tab === n.id;
+              return (
+                <div
+                  key={n.id}
+                  onClick={() => setTab(n.id)}
+                  style={{
+                    flex: "0 0 auto", minWidth: 62, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                    gap: 3, padding: "8px 6px", cursor: "pointer",
+                    color: active ? COLORS.amber : COLORS.textMuted,
+                    borderTop: active ? `2px solid ${COLORS.amber}` : "2px solid transparent",
+                  }}
+                >
+                  <Icon size={17} strokeWidth={1.8} />
+                  <span style={{ fontSize: 9, textAlign: "center", lineHeight: 1.1 }}>{n.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={{ width: 190, flexShrink: 0, background: COLORS.surface1, borderRight: `1px solid ${COLORS.border}`, display: "flex", flexDirection: "column" }}>
+            <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${COLORS.border}` }}>
+              <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 19, letterSpacing: "0.02em", lineHeight: 1.1 }}>DISPLAY TEAM</div>
+              <div style={{ fontSize: 11, color: COLORS.textMuted, fontFamily: "'JetBrains Mono', monospace", marginTop: 4 }}>OPS CONSOLE</div>
+            </div>
+
+            <div style={{ flex: 1, padding: "10px 8px" }}>
+              {nav.map((n) => {
+                const Icon = n.icon;
+                const active = tab === n.id;
+                return (
+                  <div key={n.id} className="hldt-nav-item" onClick={() => setTab(n.id)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", marginBottom: 2, borderRadius: 6, cursor: "pointer", fontSize: 13, color: active ? COLORS.textPrimary : COLORS.textSecondary, background: active ? COLORS.surface2 : "transparent", borderLeft: active ? `2px solid ${COLORS.amber}` : "2px solid transparent" }}>
+                    <Icon size={15} strokeWidth={1.8} />
+                    {n.label}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ padding: 12, borderTop: `1px solid ${COLORS.border}` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                {isAdmin ? <Shield size={13} color={COLORS.amber} /> : <User size={13} color={COLORS.textMuted} />}
+                <div style={{ fontSize: 12, color: COLORS.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {profile.full_name || session.user.email}
+                </div>
+              </div>
+              <Badge tone={isAdmin ? "amber" : "gray"}>{profile.role}</Badge>
+              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                {isAdmin && <Btn small tone="ghost" onClick={() => { exportAllData(); notify("Backup downloaded"); }}><Download size={12} /> Export data</Btn>}
+                <Btn small tone="ghost" onClick={() => supabase.auth.signOut()}><LogOut size={12} /> Sign out</Btn>
+              </div>
             </div>
           </div>
-          <Badge tone={isAdmin ? "amber" : "gray"}>{profile.role}</Badge>
-          <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-            {isAdmin && <Btn small tone="ghost" onClick={() => { exportAllData(); notify("Backup downloaded"); }}><Download size={12} /> Export data</Btn>}
-            <Btn small tone="ghost" onClick={() => supabase.auth.signOut()}><LogOut size={12} /> Sign out</Btn>
-          </div>
-        </div>
-      </div>
 
-      <div style={{ flex: 1, padding: 24, minWidth: 0, overflowY: "auto" }}>
-        {!loaded ? (
-          <SkeletonLoader />
-        ) : (
-          <div key={tab} className="hldt-tab-content">
-            {tab === "dashboard" && <DashboardTab data={data} setTab={setTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} />}
-            {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} />}
-            {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
-            {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} reload={load} notify={notify} />}
-            {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} reload={load} />}
-            {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
-            {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
-            {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
-            {tab === "chat" && <ChatTab session={session} profile={profile} members={data.members} notify={notify} />}
-            {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} reload={load} notify={notify} />}
+          <div style={{ flex: 1, padding: 24, minWidth: 0, overflowY: "auto" }}>
+            {!loaded ? (
+              <SkeletonLoader />
+            ) : (
+              <div key={tab} className="hldt-tab-content">
+                {tab === "dashboard" && <DashboardTab data={data} setTab={setTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} />}
+                {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} />}
+                {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
+                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} reload={load} notify={notify} />}
+                {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} reload={load} />}
+                {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
+                {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
+                {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
+                {tab === "chat" && <ChatTab session={session} profile={profile} members={data.members} notify={notify} />}
+                {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} reload={load} notify={notify} />}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }
@@ -782,6 +866,7 @@ function SkeletonLoader() {
 
 function NotificationBell({ notifications, readIds, onRead, onNavigate }) {
   const [open, setOpen] = useState(false);
+  const isMobile = useIsMobile();
   const unread = notifications.filter((n) => !readIds.includes(n.id));
 
   function handleClick(n) {
@@ -800,16 +885,16 @@ function NotificationBell({ notifications, readIds, onRead, onNavigate }) {
   }
 
   return (
-    <div style={{ position: "fixed", top: 16, right: 64, zIndex: 1500 }}>
+    <div style={{ position: "fixed", top: isMobile ? 8 : 16, right: isMobile ? 46 : 64, zIndex: 1500 }}>
       <button
         onClick={() => setOpen(!open)}
         aria-label="Notifications"
         style={{
-          width: 36, height: 36, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center",
+          width: isMobile ? 32 : 36, height: isMobile ? 32 : 36, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center",
           background: COLORS.surface2, border: `1px solid ${COLORS.border}`, color: COLORS.textPrimary, cursor: "pointer", position: "relative",
         }}
       >
-        <Bell size={15} />
+        <Bell size={14} />
         {unread.length > 0 && (
           <span style={{ position: "absolute", top: -2, right: -2, minWidth: 15, height: 15, borderRadius: 999, background: COLORS.red, color: "#fff", fontSize: 9, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>
             {unread.length > 9 ? "9+" : unread.length}
@@ -819,7 +904,7 @@ function NotificationBell({ notifications, readIds, onRead, onNavigate }) {
       {open && (
         <div
           className="hldt-modal"
-          style={{ position: "absolute", top: 44, right: 0, width: 320, maxHeight: 400, overflowY: "auto", background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 8 }}
+          style={{ position: "absolute", top: 40, right: 0, width: isMobile ? "calc(100vw - 32px)" : 320, maxWidth: 320, maxHeight: 400, overflowY: "auto", background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 8 }}
         >
           <div style={{ fontSize: 12, fontWeight: 500, color: COLORS.textSecondary, padding: "6px 8px" }}>Notifications</div>
           {notifications.length === 0 ? (
@@ -856,7 +941,7 @@ function NotificationBell({ notifications, readIds, onRead, onNavigate }) {
 
 /* ---------------- announcements ---------------- */
 
-function AnnouncementsTab({ data, isAdmin, reload, notify, adminId, adminName }) {
+function AnnouncementsTab({ data, isAdmin, canPost, reload, notify, adminId, adminName }) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const blank = () => ({ title: "", body: "" });
@@ -907,7 +992,7 @@ function AnnouncementsTab({ data, isAdmin, reload, notify, adminId, adminName })
       <SectionHeader
         title="Announcements"
         subtitle="Auto-removed after 7 days. Editable for 30 minutes after posting."
-        right={isAdmin && <Btn tone="amber" onClick={() => { setForm(blank()); setEditingId(null); setShowForm(true); }}><Plus size={14} /> New announcement</Btn>}
+        right={canPost && <Btn tone="amber" onClick={() => { setForm(blank()); setEditingId(null); setShowForm(true); }}><Plus size={14} /> New announcement</Btn>}
       />
 
       {showForm && (
@@ -929,17 +1014,17 @@ function AnnouncementsTab({ data, isAdmin, reload, notify, adminId, adminName })
           <Panel key={a.id} style={{ marginBottom: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
               <div style={{ fontSize: 15, fontWeight: 500, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{a.title}</div>
-              {isAdmin && (
+              {(canPost || isAdmin) && (
                 <div style={{ display: "flex", gap: 10, flexShrink: 0, marginLeft: 10 }}>
-                  {withinEditWindow(a) && <ChevronRight size={14} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => startEdit(a)} />}
-                  <Trash2 size={14} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => remove(a.id)} />
+                  {canPost && withinEditWindow(a) && <ChevronRight size={14} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => startEdit(a)} />}
+                  {isAdmin && <Trash2 size={14} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => remove(a.id)} />}
                 </div>
               )}
             </div>
             <div style={{ fontSize: 13, color: COLORS.textSecondary, whiteSpace: "pre-wrap", marginBottom: 8 }}>{a.body}</div>
             <div style={{ fontSize: 11, color: COLORS.textMuted, display: "flex", gap: 10 }}>
               <span>{a.createdByName || "Admin"} · {new Date(a.createdAt).toLocaleString()}</span>
-              {isAdmin && withinEditWindow(a) && <span style={{ color: COLORS.amber }}>{timeLeft(a)}</span>}
+              {canPost && withinEditWindow(a) && <span style={{ color: COLORS.amber }}>{timeLeft(a)}</span>}
             </div>
           </Panel>
         ))
@@ -951,6 +1036,8 @@ function AnnouncementsTab({ data, isAdmin, reload, notify, adminId, adminName })
 /* ---------------- chat ---------------- */
 
 function ChatTab({ session, profile, members, notify }) {
+  const isMobile = useIsMobile();
+  const [mobileShowThread, setMobileShowThread] = useState(false);
   const [conversations, setConversations] = useState([]);
   const [thread, setThread] = useState({ type: "team" });
   const [messages, setMessages] = useState([]);
@@ -1047,36 +1134,44 @@ function ChatTab({ session, profile, members, notify }) {
   return (
     <div>
       <SectionHeader title="Chat" subtitle="Messages are removed 24 hours after being seen. Editable for 30 minutes after sending." />
-      <div style={{ display: "flex", gap: 16, height: "65vh" }}>
-        <div style={{ width: 210, flexShrink: 0, display: "flex", flexDirection: "column", gap: 4, overflowY: "auto" }}>
-          <div
-            className="hldt-row" data-clickable="true"
-            onClick={() => setThread({ type: "team" })}
-            style={{ padding: "8px 10px", borderRadius: 6, cursor: "pointer", background: thread.type === "team" ? COLORS.surface2 : "transparent", fontSize: 13 }}
-          >
-            # Team channel
+      <div style={{ display: "flex", gap: 16, height: isMobile ? "calc(100vh - 200px)" : "65vh" }}>
+        {(!isMobile || !mobileShowThread) && (
+          <div style={{ width: isMobile ? "100%" : 210, flexShrink: 0, display: "flex", flexDirection: "column", gap: 4, overflowY: "auto" }}>
+            <div
+              className="hldt-row" data-clickable="true"
+              onClick={() => { setThread({ type: "team" }); setMobileShowThread(true); }}
+              style={{ padding: "8px 10px", borderRadius: 6, cursor: "pointer", background: thread.type === "team" ? COLORS.surface2 : "transparent", fontSize: 13 }}
+            >
+              # Team channel
+            </div>
+            <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", padding: "10px 10px 4px" }}>Direct messages</div>
+            {conversations.map((c) => {
+              const otherId = c.user_a === session.user.id ? c.user_b : c.user_a;
+              const otherMember = dmCandidates.find((m) => m.profileId === otherId);
+              return (
+                <div
+                  key={c.id}
+                  className="hldt-row" data-clickable="true"
+                  onClick={() => { setThread({ type: "dm", conversationId: c.id, otherName: otherMember?.name || "Member" }); setMobileShowThread(true); }}
+                  style={{ padding: "8px 10px", borderRadius: 6, cursor: "pointer", background: thread.type === "dm" && thread.conversationId === c.id ? COLORS.surface2 : "transparent", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}
+                >
+                  <Avatar label={avatarLabels[otherId] || "?"} color={hashColor(otherId)} size={22} />
+                  {otherMember?.name || "Member"}
+                </div>
+              );
+            })}
+            <Btn small tone="ghost" onClick={() => setShowNewDm(true)}><Plus size={12} /> New DM</Btn>
           </div>
-          <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", padding: "10px 10px 4px" }}>Direct messages</div>
-          {conversations.map((c) => {
-            const otherId = c.user_a === session.user.id ? c.user_b : c.user_a;
-            const otherMember = dmCandidates.find((m) => m.profileId === otherId);
-            return (
-              <div
-                key={c.id}
-                className="hldt-row" data-clickable="true"
-                onClick={() => setThread({ type: "dm", conversationId: c.id, otherName: otherMember?.name || "Member" })}
-                style={{ padding: "8px 10px", borderRadius: 6, cursor: "pointer", background: thread.type === "dm" && thread.conversationId === c.id ? COLORS.surface2 : "transparent", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}
-              >
-                <Avatar label={avatarLabels[otherId] || "?"} color={hashColor(otherId)} size={22} />
-                {otherMember?.name || "Member"}
-              </div>
-            );
-          })}
-          <Btn small tone="ghost" onClick={() => setShowNewDm(true)}><Plus size={12} /> New DM</Btn>
-        </div>
+        )}
 
+        {(!isMobile || mobileShowThread) && (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", border: `1px solid ${COLORS.border}`, borderRadius: 8, background: COLORS.surface1, minWidth: 0 }}>
-          <div style={{ padding: "10px 16px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 13, fontWeight: 500 }}>
+          <div style={{ padding: "10px 16px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 13, fontWeight: 500, display: "flex", alignItems: "center", gap: 8 }}>
+            {isMobile && (
+              <button onClick={() => setMobileShowThread(false)} aria-label="Back" style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 0, display: "flex" }}>
+                <ChevronRight size={16} style={{ transform: "rotate(180deg)" }} />
+              </button>
+            )}
             {thread.type === "team" ? "Team channel" : thread.otherName}
           </div>
           <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
@@ -1133,6 +1228,7 @@ function ChatTab({ session, profile, members, notify }) {
             <Btn tone="amber" onClick={send}>Send</Btn>
           </div>
         </div>
+        )}
       </div>
 
       {showNewDm && (
@@ -1357,9 +1453,9 @@ function KYMModal({ onClose, notify }) {
   }
 
   return (
-    <Modal title="A few details about you" onClose={onClose} width={380} footer={<Btn tone="amber" onClick={submit}><Save size={13} /> Save</Btn>}>
+    <Modal title="A few details about you" onClose={onClose} width={380} dismissable={false} footer={<Btn tone="amber" onClick={submit}><Save size={13} /> Save</Btn>}>
       <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 14 }}>
-        One-time — helps the team reach you and know who's who. You won't be asked again.
+        One-time — helps the team reach you and know who's who. This is required before you can continue.
       </div>
       <Field label="Phone number *">
         <input style={inputStyle} value={phone} onChange={(e) => setPhone(e.target.value)} />
@@ -1726,25 +1822,27 @@ function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify })
 
       <Panel>
         {data.members.length === 0 ? <EmptyRow text="No members yet." /> : (
-          <div>
-            <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 0.7fr 0.9fr 0.6fr", fontSize: 11, color: COLORS.textMuted, padding: "0 4px 8px", textTransform: "uppercase", letterSpacing: "0.03em" }}>
-              <div>Name</div><div>Unit</div><div>Tier</div><div>Team</div><div>Account</div><div></div>
-            </div>
-            {data.members.map((m) => (
-              <div key={m.id} style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 0.7fr 0.9fr 0.6fr", alignItems: "center", padding: "8px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 13 }}>
-                <div>{m.name}</div>
-                <div style={{ color: COLORS.textSecondary }}>{m.unit}</div>
-                <div style={{ color: COLORS.textSecondary }}>{m.tier}</div>
-                <div style={{ color: COLORS.textSecondary }}>{m.team}</div>
-                <div>{m.profileId ? <Badge tone="green">Linked</Badge> : <Badge tone="gray">No login</Badge>}</div>
-                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                  {canManage && (<>
-                    <ChevronRight size={14} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => { setForm(m); setShowForm(true); }} />
-                    <Trash2 size={14} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => removeMember(m.id)} />
-                  </>)}
-                </div>
+          <div style={{ overflowX: "auto" }}>
+            <div style={{ minWidth: 560 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 0.7fr 0.9fr 0.6fr", fontSize: 11, color: COLORS.textMuted, padding: "0 4px 8px", textTransform: "uppercase", letterSpacing: "0.03em" }}>
+                <div>Name</div><div>Unit</div><div>Tier</div><div>Team</div><div>Account</div><div></div>
               </div>
-            ))}
+              {data.members.map((m) => (
+                <div key={m.id} style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 0.7fr 0.9fr 0.6fr", alignItems: "center", padding: "8px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 13 }}>
+                  <div>{m.name}</div>
+                  <div style={{ color: COLORS.textSecondary }}>{m.unit}</div>
+                  <div style={{ color: COLORS.textSecondary }}>{m.tier}</div>
+                  <div style={{ color: COLORS.textSecondary }}>{m.team}</div>
+                  <div>{m.profileId ? <Badge tone="green">Linked</Badge> : <Badge tone="gray">No login</Badge>}</div>
+                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                    {canManage && (<>
+                      <ChevronRight size={14} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => { setForm(m); setShowForm(true); }} />
+                      <Trash2 size={14} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => removeMember(m.id)} />
+                    </>)}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </Panel>
@@ -1821,7 +1919,7 @@ function OnboardingTab({ data, isAdmin, reload, adminName, notify }) {
               </div>
             ))}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 10, marginBottom: 10 }}>
             {Object.keys(o.scores).map((k) => (
               <Field key={k} label={k}>
                 <select style={{ ...inputStyle, opacity: isAdmin ? 1 : 0.7 }} value={o.scores[k]} disabled={!isAdmin} onChange={(e) => updateScore(o, k, e.target.value)}>

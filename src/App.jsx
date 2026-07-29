@@ -54,14 +54,14 @@ const inputStyle = {
 
 function StatusDot({ tone }) {
   const map = { green: COLORS.green, amber: COLORS.amber, red: COLORS.red, gray: COLORS.textMuted };
-  return <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: map[tone] || map.gray, marginRight: 6, flexShrink: 0 }} />;
+  return <span className={tone === "red" ? "hldt-pulse" : undefined} style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: map[tone] || map.gray, marginRight: 6, flexShrink: 0 }} />;
 }
 
 function Badge({ children, tone = "gray" }) {
   const bgMap = { green: COLORS.greenDim, amber: COLORS.amberDim, red: COLORS.redDim, gray: COLORS.surface2 };
   const fgMap = { green: COLORS.green, amber: COLORS.amber, red: COLORS.red, gray: COLORS.textSecondary };
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", fontSize: 11, fontFamily: "'IBM Plex Mono', monospace", letterSpacing: "0.03em", textTransform: "uppercase", padding: "3px 8px", borderRadius: 4, background: bgMap[tone], color: fgMap[tone] }}>
+    <span style={{ display: "inline-flex", alignItems: "center", fontSize: 11, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.03em", textTransform: "uppercase", padding: "3px 8px", borderRadius: 4, background: bgMap[tone], color: fgMap[tone] }}>
       {children}
     </span>
   );
@@ -69,10 +69,10 @@ function Badge({ children, tone = "gray" }) {
 
 function Panel({ title, right, children, style }) {
   return (
-    <div style={{ background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, overflow: "hidden", ...style }}>
+    <div className="hldt-panel" style={{ background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, overflow: "hidden", ...style }}>
       {title && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderBottom: `1px solid ${COLORS.border}`, background: COLORS.surface2 }}>
-          <h3 style={{ margin: 0, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: 15, letterSpacing: "0.02em", textTransform: "uppercase", color: COLORS.textPrimary }}>{title}</h3>
+          <h3 style={{ margin: 0, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, fontSize: 15, letterSpacing: "0.02em", textTransform: "uppercase", color: COLORS.textPrimary }}>{title}</h3>
           {right}
         </div>
       )}
@@ -98,7 +98,7 @@ function Btn({ children, onClick, tone = "default", small, type = "button", disa
     danger: { background: "transparent", color: COLORS.red, border: `1px solid ${COLORS.redDim}` },
   };
   return (
-    <button type={type} onClick={onClick} disabled={disabled} style={{ ...toneStyles[tone], borderRadius: 6, padding: small ? "5px 10px" : "8px 14px", fontSize: small ? 12 : 13, fontWeight: 500, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 6 }}>
+    <button className="hldt-btn" type={type} onClick={onClick} disabled={disabled} style={{ ...toneStyles[tone], borderRadius: 6, padding: small ? "5px 10px" : "8px 14px", fontSize: small ? 12 : 13, fontWeight: 500, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 6 }}>
       {children}
     </button>
   );
@@ -108,7 +108,7 @@ function SectionHeader({ title, subtitle, right }) {
   return (
     <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 18 }}>
       <div>
-        <h2 style={{ margin: 0, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: 26, letterSpacing: "0.01em" }}>{title}</h2>
+        <h2 style={{ margin: 0, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, fontSize: 26, letterSpacing: "0.01em" }}>{title}</h2>
         {subtitle && <div style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 2 }}>{subtitle}</div>}
       </div>
       {right}
@@ -120,19 +120,73 @@ function EmptyRow({ text }) {
   return <div style={{ fontSize: 12, color: COLORS.textMuted, padding: "8px 0" }}>{text}</div>;
 }
 
+function ToastStack({ toasts }) {
+  return (
+    <div style={{ position: "fixed", bottom: 20, right: 20, display: "flex", flexDirection: "column", gap: 8, zIndex: 1000 }}>
+      {toasts.map((t) => (
+        <div
+          key={t.id}
+          className="hldt-toast"
+          style={{
+            display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderRadius: 8,
+            background: t.type === "error" ? COLORS.redDim : COLORS.surface2,
+            border: `1px solid ${t.type === "error" ? COLORS.red : COLORS.borderStrong}`,
+            color: t.type === "error" ? COLORS.red : COLORS.textPrimary,
+            fontSize: 13, minWidth: 200, maxWidth: 320,
+          }}
+        >
+          {t.type === "error" ? <span style={{ fontSize: 15 }}>⚠</span> : <CheckCircle2 size={15} color={COLORS.green} />}
+          {t.message}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function useToasts() {
+  const [toasts, setToasts] = useState([]);
+  const notify = useCallback((message, type = "success") => {
+    const id = Math.random().toString(36).slice(2);
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3200);
+  }, []);
+  return { toasts, notify };
+}
+
 function RowLine({ children, onClick }) {
   return (
-    <div onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 4px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 13, cursor: onClick ? "pointer" : "default" }}>
+    <div className="hldt-row" data-clickable={!!onClick} onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 4px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 13, cursor: onClick ? "pointer" : "default" }}>
       {children}
     </div>
   );
 }
 
+function useCountUp(target) {
+  const [display, setDisplay] = useState(0);
+  useEffect(() => {
+    let raf;
+    const start = performance.now();
+    const from = display;
+    const duration = 500;
+    function tick(now) {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplay(Math.round(from + (target - from) * eased));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
+  return display;
+}
+
 function Metric({ label, value, tone }) {
+  const animated = useCountUp(typeof value === "number" ? value : 0);
   return (
     <div style={{ background: COLORS.surface2, borderRadius: 8, padding: "14px 16px", flex: 1, minWidth: 120 }}>
       <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
-      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: 28, color: tone === "amber" ? COLORS.amber : tone === "red" ? COLORS.red : COLORS.textPrimary }}>{value}</div>
+      <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, fontSize: 28, color: tone === "amber" ? COLORS.amber : tone === "red" ? COLORS.red : COLORS.textPrimary }}>{animated}</div>
     </div>
   );
 }
@@ -175,10 +229,10 @@ function AuthScreen() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.bg }}>
-      <div style={{ width: 340, background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 24 }}>
-        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: 20, color: COLORS.textPrimary, marginBottom: 2 }}>DISPLAY TEAM</div>
-        <div style={{ fontSize: 11, color: COLORS.textMuted, fontFamily: "'IBM Plex Mono', monospace", marginBottom: 20 }}>OPS CONSOLE</div>
+    <div className="hldt-app" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.bg }}>
+      <div className="hldt-auth-card" style={{ width: 340, background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 24 }}>
+        <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, fontSize: 20, color: COLORS.textPrimary, marginBottom: 2 }}>DISPLAY TEAM</div>
+        <div style={{ fontSize: 11, color: COLORS.textMuted, fontFamily: "'JetBrains Mono', monospace", marginBottom: 20 }}>OPS CONSOLE</div>
 
         <form onSubmit={submit}>
           {mode === "signup" && (
@@ -197,7 +251,7 @@ function AuthScreen() {
           {error && <div style={{ fontSize: 12, color: COLORS.red, marginBottom: 10 }}>{error}</div>}
           {notice && <div style={{ fontSize: 12, color: COLORS.green, marginBottom: 10 }}>{notice}</div>}
           <Btn tone="amber" type="submit" disabled={busy}>
-            {busy ? "Working..." : mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Send reset link"}
+            {busy ? (<><RefreshCw size={13} className="hldt-spin" /> Working...</>) : mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Send reset link"}
           </Btn>
         </form>
 
@@ -247,9 +301,9 @@ function ResetPasswordScreen() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.bg }}>
-      <div style={{ width: 340, background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 24 }}>
-        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: 20, color: COLORS.textPrimary, marginBottom: 20 }}>Set a new password</div>
+    <div className="hldt-app" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.bg }}>
+      <div className="hldt-auth-card" style={{ width: 340, background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 24 }}>
+        <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, fontSize: 20, color: COLORS.textPrimary, marginBottom: 20 }}>Set a new password</div>
         {done ? (
           <>
             <div style={{ fontSize: 12, color: COLORS.green, marginBottom: 14 }}>Password updated. You can sign in with it now.</div>
@@ -305,7 +359,7 @@ export default function App() {
   }, [session]);
 
   if (authLoading) {
-    return <div style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.textMuted, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Inter, sans-serif", fontSize: 13 }}>Loading...</div>;
+    return <div className="hldt-app" style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.textMuted, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Inter, sans-serif", fontSize: 13 }}><RefreshCw size={14} className="hldt-spin" style={{ marginRight: 8 }} /> Loading...</div>;
   }
 
   if (recoveryMode) return <ResetPasswordScreen />;
@@ -313,7 +367,7 @@ export default function App() {
   if (!session) return <AuthScreen />;
 
   if (!profile) {
-    return <div style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.textMuted, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Inter, sans-serif", fontSize: 13 }}>Setting up your profile...</div>;
+    return <div className="hldt-app" style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.textMuted, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Inter, sans-serif", fontSize: 13 }}><RefreshCw size={14} className="hldt-spin" style={{ marginRight: 8 }} /> Setting up your profile...</div>;
   }
 
   return <Dashboard_Shell session={session} profile={profile} setProfile={setProfile} />;
@@ -326,6 +380,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
   const [data, setData] = useState({ members: [], onboarding: [], tickets: [], feedback: [] });
   const [loaded, setLoaded] = useState(false);
   const isAdmin = profile.role === "admin";
+  const { toasts, notify } = useToasts();
 
   const load = useCallback(async () => {
     const membersPromise = isAdmin
@@ -429,11 +484,12 @@ function Dashboard_Shell({ session, profile, setProfile }) {
   ];
 
   return (
-    <div style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.textPrimary, fontFamily: "'Inter', sans-serif", display: "flex" }}>
+    <div className="hldt-app" style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.textPrimary, fontFamily: "'Inter', sans-serif", display: "flex" }}>
+      <ToastStack toasts={toasts} />
       <div style={{ width: 190, flexShrink: 0, background: COLORS.surface1, borderRight: `1px solid ${COLORS.border}`, display: "flex", flexDirection: "column" }}>
         <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${COLORS.border}` }}>
-          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: 19, letterSpacing: "0.02em", lineHeight: 1.1 }}>DISPLAY TEAM</div>
-          <div style={{ fontSize: 11, color: COLORS.textMuted, fontFamily: "'IBM Plex Mono', monospace", marginTop: 4 }}>OPS CONSOLE</div>
+          <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, fontSize: 19, letterSpacing: "0.02em", lineHeight: 1.1 }}>DISPLAY TEAM</div>
+          <div style={{ fontSize: 11, color: COLORS.textMuted, fontFamily: "'JetBrains Mono', monospace", marginTop: 4 }}>OPS CONSOLE</div>
         </div>
 
         <div style={{ flex: 1, padding: "10px 8px" }}>
@@ -441,7 +497,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
             const Icon = n.icon;
             const active = tab === n.id;
             return (
-              <div key={n.id} onClick={() => setTab(n.id)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", marginBottom: 2, borderRadius: 6, cursor: "pointer", fontSize: 13, color: active ? COLORS.textPrimary : COLORS.textSecondary, background: active ? COLORS.surface2 : "transparent", borderLeft: active ? `2px solid ${COLORS.amber}` : "2px solid transparent" }}>
+              <div key={n.id} className="hldt-nav-item" onClick={() => setTab(n.id)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", marginBottom: 2, borderRadius: 6, cursor: "pointer", fontSize: 13, color: active ? COLORS.textPrimary : COLORS.textSecondary, background: active ? COLORS.surface2 : "transparent", borderLeft: active ? `2px solid ${COLORS.amber}` : "2px solid transparent" }}>
                 <Icon size={15} strokeWidth={1.8} />
                 {n.label}
               </div>
@@ -458,7 +514,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
           </div>
           <Badge tone={isAdmin ? "amber" : "gray"}>{profile.role}</Badge>
           <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-            {isAdmin && <Btn small tone="ghost" onClick={exportAllData}><Download size={12} /> Export data</Btn>}
+            {isAdmin && <Btn small tone="ghost" onClick={() => { exportAllData(); notify("Backup downloaded"); }}><Download size={12} /> Export data</Btn>}
             <Btn small tone="ghost" onClick={() => supabase.auth.signOut()}><LogOut size={12} /> Sign out</Btn>
           </div>
         </div>
@@ -466,18 +522,49 @@ function Dashboard_Shell({ session, profile, setProfile }) {
 
       <div style={{ flex: 1, padding: 24, minWidth: 0, overflowY: "auto" }}>
         {!loaded ? (
-          <div style={{ color: COLORS.textMuted, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><RefreshCw size={14} /> Loading data...</div>
+          <SkeletonLoader />
         ) : (
-          <>
+          <div key={tab} className="hldt-tab-content">
             {tab === "dashboard" && <DashboardTab data={data} setTab={setTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} />}
-            {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} reload={load} currentUserId={session.user.id} />}
-            {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} reload={load} adminName={profile.full_name || session.user.email} />}
-            {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} reload={load} />}
+            {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} reload={load} currentUserId={session.user.id} notify={notify} />}
+            {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
+            {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} reload={load} notify={notify} />}
             {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} reload={load} />}
-            {tab === "dues" && <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} />}
-            {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} reload={load} />}
-          </>
+            {tab === "dues" && <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} />}
+            {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} reload={load} notify={notify} />}
+          </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function SkeletonBar({ width = "100%", height = 14 }) {
+  return <div className="hldt-skeleton" style={{ width, height, marginBottom: 8 }} />;
+}
+
+function SkeletonLoader() {
+  return (
+    <div>
+      <SkeletonBar width={160} height={26} />
+      <div style={{ height: 10 }} />
+      <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} style={{ background: COLORS.surface2, borderRadius: 8, padding: "14px 16px", flex: 1, minWidth: 120 }}>
+            <SkeletonBar width={70} height={10} />
+            <SkeletonBar width={40} height={22} />
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 16 }}>
+        {[0, 1].map((i) => (
+          <div key={i} style={{ flex: 1, background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 16 }}>
+            <SkeletonBar width={140} height={16} />
+            <SkeletonBar />
+            <SkeletonBar />
+            <SkeletonBar width="60%" />
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -556,7 +643,7 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding }) {
 
 /* ---------------- members ---------------- */
 
-function MembersTab({ data, isAdmin, reload, currentUserId }) {
+function MembersTab({ data, isAdmin, reload, currentUserId, notify }) {
   const [showForm, setShowForm] = useState(false);
   const [showRoles, setShowRoles] = useState(false);
   const [profiles, setProfiles] = useState([]);
@@ -571,20 +658,28 @@ function MembersTab({ data, isAdmin, reload, currentUserId }) {
   async function saveMember() {
     if (!form.name.trim()) return;
     const payload = { name: form.name, email: form.email, phone: form.phone, unit: form.unit, tier: form.tier, team: form.team, join_date: form.joinDate, skills: form.skills, dues: form.dues };
-    if (form.id) await supabase.from("members").update(payload).eq("id", form.id);
-    else await supabase.from("members").insert(payload);
+    const isNew = !form.id;
+    const { error } = form.id
+      ? await supabase.from("members").update(payload).eq("id", form.id)
+      : await supabase.from("members").insert(payload);
+    if (error) { notify?.(error.message, "error"); return; }
+    notify?.(isNew ? "Member added" : "Member updated");
     setShowForm(false);
     setForm(blank());
     reload();
   }
 
   async function removeMember(id) {
-    await supabase.from("members").delete().eq("id", id);
+    const { error } = await supabase.from("members").delete().eq("id", id);
+    if (error) { notify?.(error.message, "error"); return; }
+    notify?.("Member removed");
     reload();
   }
 
   async function setRole(userId, role) {
-    await supabase.from("profiles").update({ role }).eq("id", userId);
+    const { error } = await supabase.from("profiles").update({ role }).eq("id", userId);
+    if (error) { notify?.(error.message, "error"); return; }
+    notify?.(role === "admin" ? "Promoted to admin" : "Moved to member");
     loadProfiles();
   }
 
@@ -669,14 +764,16 @@ function MembersTab({ data, isAdmin, reload, currentUserId }) {
 
 /* ---------------- onboarding ---------------- */
 
-function OnboardingTab({ data, isAdmin, reload, adminName }) {
+function OnboardingTab({ data, isAdmin, reload, adminName, notify }) {
   const [showForm, setShowForm] = useState(false);
   const blank = () => ({ memberId: "", name: "", startDate: new Date().toISOString().slice(0, 10), weeks: [false, false, false, false], scores: { proPres: "Average", vmix: "Average", resolume: "Average", hardware: "Average", attention: "Average", responsiveness: "Average", reliability: "Average" }, status: "In training" });
   const [form, setForm] = useState(blank());
 
   async function addTrainee() {
     if (!form.name.trim()) return;
-    await supabase.from("onboarding").insert({ member_id: form.memberId || null, name: form.name, start_date: form.startDate, weeks: form.weeks, scores: form.scores, status: form.status });
+    const { error } = await supabase.from("onboarding").insert({ member_id: form.memberId || null, name: form.name, start_date: form.startDate, weeks: form.weeks, scores: form.scores, status: form.status });
+    if (error) { notify?.(error.message, "error"); return; }
+    notify?.("Trainee added");
     setForm(blank());
     setShowForm(false);
     reload();
@@ -701,6 +798,7 @@ function OnboardingTab({ data, isAdmin, reload, adminName }) {
     if (!isAdmin) return;
     await supabase.from("onboarding").update({ status }).eq("id", record.id);
     await supabase.from("onboarding_history").insert({ onboarding_id: record.id, field: "status", new_value: status, changed_by: (await supabase.auth.getUser()).data.user.id, changed_by_name: adminName });
+    notify?.(`Status set to "${status}"`);
     reload();
   }
 
@@ -728,7 +826,7 @@ function OnboardingTab({ data, isAdmin, reload, adminName }) {
         <Panel key={o.id} style={{ marginBottom: 14 }} title={o.name} right={<Badge tone={o.status.toLowerCase().includes("ready") ? "green" : "amber"}>{o.status}</Badge>}>
           <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
             {["Week 1", "Week 2", "Week 3", "Week 4"].map((w, i) => (
-              <div key={w} onClick={() => toggleWeek(o, i)} style={{ flex: 1, textAlign: "center", padding: "8px 0", borderRadius: 6, fontSize: 12, cursor: isAdmin ? "pointer" : "default", background: o.weeks[i] ? COLORS.greenDim : COLORS.surface2, color: o.weeks[i] ? COLORS.green : COLORS.textMuted, border: `1px solid ${o.weeks[i] ? COLORS.green : COLORS.border}` }}>
+              <div key={w} className="hldt-week-toggle" onClick={() => toggleWeek(o, i)} style={{ flex: 1, textAlign: "center", padding: "8px 0", borderRadius: 6, fontSize: 12, cursor: isAdmin ? "pointer" : "default", background: o.weeks[i] ? COLORS.greenDim : COLORS.surface2, color: o.weeks[i] ? COLORS.green : COLORS.textMuted, border: `1px solid ${o.weeks[i] ? COLORS.green : COLORS.border}` }}>
                 {w} {o.weeks[i] ? "✓" : ""}
               </div>
             ))}
@@ -755,7 +853,7 @@ function OnboardingTab({ data, isAdmin, reload, adminName }) {
               <summary style={{ cursor: "pointer" }}>Edit log ({o.history.length})</summary>
               <div style={{ marginTop: 6 }}>
                 {o.history.slice().reverse().slice(0, 10).map((h, i) => (
-                  <div key={i} style={{ padding: "3px 0", fontFamily: "'IBM Plex Mono', monospace" }}>
+                  <div key={i} style={{ padding: "3px 0", fontFamily: "'JetBrains Mono', monospace" }}>
                     {new Date(h.timestamp).toLocaleString()} — {h.admin} set {h.field} to "{h.newValue}"
                   </div>
                 ))}
@@ -770,7 +868,7 @@ function OnboardingTab({ data, isAdmin, reload, adminName }) {
 
 /* ---------------- equipment ---------------- */
 
-function EquipmentTab({ data, isAdmin, reload }) {
+function EquipmentTab({ data, isAdmin, reload, notify }) {
   const [showForm, setShowForm] = useState(false);
   const blank = () => ({ reporter: "", date: new Date().toISOString().slice(0, 10), systems: Object.fromEntries(SYSTEMS.map((s) => [s, "OK"])), description: "" });
   const [form, setForm] = useState(blank());
@@ -778,7 +876,9 @@ function EquipmentTab({ data, isAdmin, reload }) {
   async function submit() {
     if (!form.reporter.trim()) return;
     const hasIssue = Object.values(form.systems).includes("Issue");
-    await supabase.from("tickets").insert({ reporter: form.reporter, ticket_date: form.date, systems: form.systems, description: form.description, status: hasIssue ? "Open" : "Resolved" });
+    const { error } = await supabase.from("tickets").insert({ reporter: form.reporter, ticket_date: form.date, systems: form.systems, description: form.description, status: hasIssue ? "Open" : "Resolved" });
+    if (error) { notify?.(error.message, "error"); return; }
+    notify?.(hasIssue ? "Check submitted — issue logged" : "Check submitted — all clear");
     setForm(blank());
     setShowForm(false);
     reload();
@@ -786,6 +886,7 @@ function EquipmentTab({ data, isAdmin, reload }) {
 
   async function updateStatus(t, status) {
     await supabase.from("tickets").update({ status }).eq("id", t.id);
+    notify?.(`Ticket set to "${status}"`);
     reload();
   }
 
@@ -957,13 +1058,15 @@ function DuesTab({ data, isAdmin, reload, myMemberId }) {
 
 /* ---------------- feedback ---------------- */
 
-function FeedbackTab({ data, isAdmin, reload }) {
+function FeedbackTab({ data, isAdmin, reload, notify }) {
   const [showForm, setShowForm] = useState(false);
   const blank = () => ({ name: "", engagement: 3, impact: 3, atmosphere: 3, suggestions: "", complaints: "", requests: "" });
   const [form, setForm] = useState(blank());
 
   async function submit() {
-    await supabase.from("feedback").insert({ name: form.name, engagement: form.engagement, impact: form.impact, atmosphere: form.atmosphere, suggestions: form.suggestions, complaints: form.complaints, requests: form.requests });
+    const { error } = await supabase.from("feedback").insert({ name: form.name, engagement: form.engagement, impact: form.impact, atmosphere: form.atmosphere, suggestions: form.suggestions, complaints: form.complaints, requests: form.requests });
+    if (error) { notify?.(error.message, "error"); return; }
+    notify?.("Feedback submitted — thank you");
     setForm(blank());
     setShowForm(false);
     reload();

@@ -2,11 +2,13 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   LayoutDashboard, Users, GraduationCap, Wrench, CalendarDays,
   Wallet, MessageSquare, Plus, X, ChevronRight, Shield, User,
-  CheckCircle2, Clock, Trash2, Save, LogOut, RefreshCw, Download
+  CheckCircle2, Clock, Trash2, Save, LogOut, RefreshCw, Download,
+  Sun, Moon
 } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "./supabaseClient";
 
-const COLORS = {
+const DARK_COLORS = {
   bg: "#14171C",
   surface1: "#1C2027",
   surface2: "#242933",
@@ -23,6 +25,33 @@ const COLORS = {
   redDim: "#3D1E20",
 };
 
+const LIGHT_COLORS = {
+  bg: "#F7F7F5",
+  surface1: "#FFFFFF",
+  surface2: "#F1F1EE",
+  border: "#E3E3DE",
+  borderStrong: "#CFCFC8",
+  textPrimary: "#191A1C",
+  textSecondary: "#5B5D62",
+  textMuted: "#8C8E92",
+  amber: "#B8710A",
+  amberDim: "#FBEAD2",
+  green: "#158055",
+  greenDim: "#E1F5EB",
+  red: "#C0292E",
+  redDim: "#FBE7E6",
+};
+
+const COLORS = { ...DARK_COLORS };
+
+function applyTheme(mode) {
+  Object.assign(COLORS, mode === "light" ? LIGHT_COLORS : DARK_COLORS);
+  if (typeof document !== "undefined") {
+    document.documentElement.dataset.theme = mode;
+    document.body.style.background = COLORS.bg;
+  }
+}
+
 const UNITS = ["Admin", "Welfare", "Technical", "Operations"];
 const TIERS = ["Trainee", "Member", "Leader", "HOD"];
 const RATING_WORDS = ["Poor", "Average", "Good", "Very good"];
@@ -37,6 +66,33 @@ const MONTHS = () => {
   }
   return out;
 };
+
+function monthsRange(n) {
+  const out = [];
+  const d = new Date();
+  for (let i = n - 1; i >= 0; i--) {
+    const dt = new Date(d.getFullYear(), d.getMonth() - i, 1);
+    out.push(dt.toISOString().slice(0, 7));
+  }
+  return out;
+}
+
+function rate(m) {
+  return m.tier === "Leader" || m.tier === "HOD" ? 5500 : 3500;
+}
+
+// Reads a due entry for a given month, tolerant of the old string-only
+// format ("paid") as well as the current { status, amount } object shape.
+function getDue(m, month) {
+  const raw = (m.dues || {})[month];
+  if (!raw) return { status: "unset", amount: 0 };
+  if (typeof raw === "string") return { status: raw, amount: raw === "paid" ? null : 0 };
+  return { status: raw.status || "unset", amount: typeof raw.amount === "number" ? raw.amount : 0 };
+}
+
+function currency(n) {
+  return `₦${Math.round(n || 0).toLocaleString()}`;
+}
 
 const inputStyle = {
   width: "100%",
@@ -72,7 +128,7 @@ function Panel({ title, right, children, style }) {
     <div className="hldt-panel" style={{ background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, overflow: "hidden", ...style }}>
       {title && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderBottom: `1px solid ${COLORS.border}`, background: COLORS.surface2 }}>
-          <h3 style={{ margin: 0, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, fontSize: 15, letterSpacing: "0.02em", textTransform: "uppercase", color: COLORS.textPrimary }}>{title}</h3>
+          <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 15, letterSpacing: "0.02em", textTransform: "uppercase", color: COLORS.textPrimary }}>{title}</h3>
           {right}
         </div>
       )}
@@ -108,7 +164,7 @@ function SectionHeader({ title, subtitle, right }) {
   return (
     <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 18 }}>
       <div>
-        <h2 style={{ margin: 0, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, fontSize: 26, letterSpacing: "0.01em" }}>{title}</h2>
+        <h2 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 26, letterSpacing: "0.01em" }}>{title}</h2>
         {subtitle && <div style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 2 }}>{subtitle}</div>}
       </div>
       {right}
@@ -181,13 +237,62 @@ function useCountUp(target) {
   return display;
 }
 
-function Metric({ label, value, tone }) {
+function Metric({ label, value, tone, isCurrency, onClick }) {
   const animated = useCountUp(typeof value === "number" ? value : 0);
+  const display = isCurrency ? currency(animated) : animated;
   return (
-    <div style={{ background: COLORS.surface2, borderRadius: 8, padding: "14px 16px", flex: 1, minWidth: 120 }}>
+    <div
+      onClick={onClick}
+      style={{
+        background: COLORS.surface2, borderRadius: 8, padding: "14px 16px", flex: 1, minWidth: 120,
+        cursor: onClick ? "pointer" : "default",
+        transition: "background-color 150ms ease, transform 150ms ease",
+      }}
+      onMouseEnter={(e) => { if (onClick) e.currentTarget.style.background = COLORS.border; }}
+      onMouseLeave={(e) => { if (onClick) e.currentTarget.style.background = COLORS.surface2; }}
+    >
       <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
-      <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, fontSize: 28, color: tone === "amber" ? COLORS.amber : tone === "red" ? COLORS.red : COLORS.textPrimary }}>{animated}</div>
+      <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: isCurrency ? 22 : 28, color: tone === "amber" ? COLORS.amber : tone === "red" ? COLORS.red : tone === "green" ? COLORS.green : COLORS.textPrimary }}>{display}</div>
     </div>
+  );
+}
+
+function Modal({ title, onClose, children, width = 480, footer }) {
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, padding: 20 }}
+      onClick={onClose}
+    >
+      <div
+        className="hldt-modal"
+        style={{ width, maxWidth: "100%", maxHeight: "85vh", overflowY: "auto", background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 20 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 17, color: COLORS.textPrimary }}>{title}</h3>
+          <X size={18} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={onClose} />
+        </div>
+        {children}
+        {footer && <div style={{ marginTop: 16, display: "flex", gap: 8, justifyContent: "flex-end" }}>{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
+function ThemeToggle({ mode, onToggle }) {
+  return (
+    <button
+      onClick={onToggle}
+      aria-label="Toggle light/dark mode"
+      style={{
+        position: "fixed", top: 16, right: 16, zIndex: 1500,
+        width: 36, height: 36, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center",
+        background: COLORS.surface2, border: `1px solid ${COLORS.border}`, color: COLORS.textPrimary, cursor: "pointer",
+        transition: "transform 150ms ease, background-color 150ms ease",
+      }}
+    >
+      {mode === "light" ? <Moon size={15} /> : <Sun size={15} />}
+    </button>
   );
 }
 
@@ -231,7 +336,7 @@ function AuthScreen() {
   return (
     <div className="hldt-app" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.bg }}>
       <div className="hldt-auth-card" style={{ width: 340, background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 24 }}>
-        <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, fontSize: 20, color: COLORS.textPrimary, marginBottom: 2 }}>DISPLAY TEAM</div>
+        <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 20, color: COLORS.textPrimary, marginBottom: 2 }}>DISPLAY TEAM</div>
         <div style={{ fontSize: 11, color: COLORS.textMuted, fontFamily: "'JetBrains Mono', monospace", marginBottom: 20 }}>OPS CONSOLE</div>
 
         <form onSubmit={submit}>
@@ -303,7 +408,7 @@ function ResetPasswordScreen() {
   return (
     <div className="hldt-app" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.bg }}>
       <div className="hldt-auth-card" style={{ width: 340, background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 24 }}>
-        <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, fontSize: 20, color: COLORS.textPrimary, marginBottom: 20 }}>Set a new password</div>
+        <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 20, color: COLORS.textPrimary, marginBottom: 20 }}>Set a new password</div>
         {done ? (
           <>
             <div style={{ fontSize: 12, color: COLORS.green, marginBottom: 14 }}>Password updated. You can sign in with it now.</div>
@@ -333,6 +438,18 @@ export default function App() {
   const [profile, setProfile] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [recoveryMode, setRecoveryMode] = useState(false);
+  const [themeMode, setThemeMode] = useState(() => {
+    if (typeof window === "undefined") return "dark";
+    const saved = localStorage.getItem("hldt-theme");
+    if (saved) return saved;
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  });
+
+  applyTheme(themeMode);
+
+  useEffect(() => {
+    localStorage.setItem("hldt-theme", themeMode);
+  }, [themeMode]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -358,19 +475,27 @@ export default function App() {
     return () => { cancelled = true; };
   }, [session]);
 
+  const toggle = <ThemeToggle mode={themeMode} onToggle={() => setThemeMode((m) => (m === "dark" ? "light" : "dark"))} />;
+
+  let content;
   if (authLoading) {
-    return <div className="hldt-app" style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.textMuted, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Inter, sans-serif", fontSize: 13 }}><RefreshCw size={14} className="hldt-spin" style={{ marginRight: 8 }} /> Loading...</div>;
+    content = <div className="hldt-app" style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.textMuted, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Inter, sans-serif", fontSize: 13 }}><RefreshCw size={14} className="hldt-spin" style={{ marginRight: 8 }} /> Loading...</div>;
+  } else if (recoveryMode) {
+    content = <ResetPasswordScreen />;
+  } else if (!session) {
+    content = <AuthScreen />;
+  } else if (!profile) {
+    content = <div className="hldt-app" style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.textMuted, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Inter, sans-serif", fontSize: 13 }}><RefreshCw size={14} className="hldt-spin" style={{ marginRight: 8 }} /> Setting up your profile...</div>;
+  } else {
+    content = <Dashboard_Shell session={session} profile={profile} setProfile={setProfile} />;
   }
 
-  if (recoveryMode) return <ResetPasswordScreen />;
-
-  if (!session) return <AuthScreen />;
-
-  if (!profile) {
-    return <div className="hldt-app" style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.textMuted, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Inter, sans-serif", fontSize: 13 }}><RefreshCw size={14} className="hldt-spin" style={{ marginRight: 8 }} /> Setting up your profile...</div>;
-  }
-
-  return <Dashboard_Shell session={session} profile={profile} setProfile={setProfile} />;
+  return (
+    <>
+      {toggle}
+      {content}
+    </>
+  );
 }
 
 /* ---------------- authenticated shell ---------------- */
@@ -381,6 +506,12 @@ function Dashboard_Shell({ session, profile, setProfile }) {
   const [loaded, setLoaded] = useState(false);
   const isAdmin = profile.role === "admin";
   const { toasts, notify } = useToasts();
+
+  useEffect(() => {
+    const name = profile.full_name?.split(" ")[0] || session.user.email.split("@")[0];
+    notify(`Welcome back, ${name}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const load = useCallback(async () => {
     const membersPromise = isAdmin
@@ -488,7 +619,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
       <ToastStack toasts={toasts} />
       <div style={{ width: 190, flexShrink: 0, background: COLORS.surface1, borderRight: `1px solid ${COLORS.border}`, display: "flex", flexDirection: "column" }}>
         <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${COLORS.border}` }}>
-          <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, fontSize: 19, letterSpacing: "0.02em", lineHeight: 1.1 }}>DISPLAY TEAM</div>
+          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 19, letterSpacing: "0.02em", lineHeight: 1.1 }}>DISPLAY TEAM</div>
           <div style={{ fontSize: 11, color: COLORS.textMuted, fontFamily: "'JetBrains Mono', monospace", marginTop: 4 }}>OPS CONSOLE</div>
         </div>
 
@@ -572,11 +703,95 @@ function SkeletonLoader() {
 
 /* ---------------- dashboard ---------------- */
 
+function OwingDuesModal({ data, onClose }) {
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const owing = data.members
+    .map((m) => ({ m, due: getDue(m, month) }))
+    .filter((x) => x.due.status === "owing");
+
+  return (
+    <Modal title="Members owing dues" onClose={onClose} width={520}>
+      <Field label="Month">
+        <select style={inputStyle} value={month} onChange={(e) => setMonth(e.target.value)}>
+          {monthsRange(12).map((mo) => <option key={mo} value={mo}>{mo}</option>)}
+        </select>
+      </Field>
+      {owing.length === 0 ? (
+        <EmptyRow text="No one owing for this month." />
+      ) : (
+        owing.map(({ m, due }) => {
+          const owed = Math.max(0, rate(m) - (due.amount || 0));
+          return (
+            <RowLine key={m.id}>
+              <span style={{ flex: 1 }}>{m.name}</span>
+              <span style={{ color: COLORS.red, fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>{currency(owed)}</span>
+            </RowLine>
+          );
+        })
+      )}
+    </Modal>
+  );
+}
+
+function WalletPanel({ data }) {
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+
+  function statsFor(mo) {
+    let expected = 0, collected = 0;
+    data.members.forEach((m) => {
+      const due = getDue(m, mo);
+      if (due.status !== "free") expected += rate(m);
+      collected += due.amount || 0;
+    });
+    return { expected, collected };
+  }
+
+  const current = statsFor(month);
+  const chartData = monthsRange(6).map((mo) => {
+    const s = statsFor(mo);
+    return { month: mo.slice(5), Expected: s.expected, Collected: s.collected };
+  });
+
+  return (
+    <Panel
+      title="Wallet"
+      right={
+        <select style={{ ...inputStyle, width: 130, padding: "5px 8px", fontSize: 12 }} value={month} onChange={(e) => setMonth(e.target.value)}>
+          {monthsRange(12).map((mo) => <option key={mo} value={mo}>{mo}</option>)}
+        </select>
+      }
+    >
+      <div style={{ display: "flex", gap: 12, marginBottom: 18 }}>
+        <Metric label="Expected balance" value={current.expected} isCurrency tone="amber" />
+        <Metric label="Total collected" value={current.collected} isCurrency tone="green" />
+      </div>
+      <div style={{ height: 200 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} vertical={false} />
+            <XAxis dataKey="month" stroke={COLORS.textMuted} fontSize={11} tickLine={false} axisLine={false} />
+            <YAxis stroke={COLORS.textMuted} fontSize={11} tickLine={false} axisLine={false} />
+            <Tooltip
+              contentStyle={{ background: COLORS.surface2, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 12, color: COLORS.textPrimary }}
+              labelStyle={{ color: COLORS.textSecondary }}
+              formatter={(v) => currency(v)}
+            />
+            <Bar dataKey="Expected" fill={COLORS.amber} radius={[4, 4, 0, 0]} maxBarSize={22} />
+            <Bar dataKey="Collected" fill={COLORS.green} radius={[4, 4, 0, 0]} maxBarSize={22} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </Panel>
+  );
+}
+
 function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding }) {
+  const [showOwingModal, setShowOwingModal] = useState(false);
+  const currentMonth = new Date().toISOString().slice(0, 7);
   const openTickets = data.tickets.filter((t) => t.status !== "Resolved");
   const inTraining = data.onboarding.filter((o) => o.status !== "Graduated");
   const readyToGraduate = data.onboarding.filter((o) => o.status === "Independently ready" || o.status === "Ready");
-  const owingCount = data.members.filter((m) => Object.values(m.dues || {}).includes("owing")).length;
+  const owingCount = data.members.filter((m) => getDue(m, currentMonth).status === "owing").length;
 
   return (
     <div>
@@ -585,10 +800,10 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding }) {
         <Metric label="Active members" value={data.members.length} />
         {isAdmin && <Metric label="In onboarding" value={inTraining.length} tone={inTraining.length ? "amber" : undefined} />}
         <Metric label="Open tickets" value={openTickets.length} tone={openTickets.length ? "red" : undefined} />
-        {isAdmin && <Metric label="Owing dues" value={owingCount} tone={owingCount ? "amber" : undefined} />}
+        {isAdmin && <Metric label="Owing dues" value={owingCount} tone={owingCount ? "amber" : undefined} onClick={() => setShowOwingModal(true)} />}
       </div>
 
-      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <Panel title="Open equipment tickets" style={{ flex: 1, minWidth: 280 }}>
           {openTickets.length === 0 ? (
             <EmptyRow text="No open tickets." />
@@ -637,6 +852,10 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding }) {
           </Panel>
         )}
       </div>
+
+      {isAdmin && <WalletPanel data={data} />}
+
+      {showOwingModal && <OwingDuesModal data={data} onClose={() => setShowOwingModal(false)} />}
     </div>
   );
 }
@@ -988,9 +1207,48 @@ function RosterTab({ data, isAdmin, reload }) {
 
 /* ---------------- dues ---------------- */
 
-function DuesTab({ data, isAdmin, reload, myMemberId }) {
+function DueEditModal({ member, month, onClose, onSaved, notify }) {
+  const existing = getDue(member, month);
+  const [status, setStatus] = useState(existing.status === "unset" ? "paid" : existing.status);
+  const [amount, setAmount] = useState(existing.amount ?? (existing.status === "paid" ? rate(member) : 0));
+
+  async function save() {
+    const dues = { ...(member.dues || {}), [month]: { status, amount: Number(amount) || 0 } };
+    const { error } = await supabase.from("members").update({ dues }).eq("id", member.id);
+    if (error) { notify?.(error.message, "error"); return; }
+    notify?.(`${member.name}'s ${month} dues updated`);
+    onSaved();
+    onClose();
+  }
+
+  return (
+    <Modal
+      title={`${member.name} — ${month}`}
+      onClose={onClose}
+      width={360}
+      footer={<><Btn tone="ghost" onClick={onClose}>Cancel</Btn><Btn tone="amber" onClick={save}><Save size={13} /> Save</Btn></>}
+    >
+      <Field label="Status">
+        <select style={inputStyle} value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="unset">Not set</option>
+          <option value="paid">Paid</option>
+          <option value="owing">Owing</option>
+          <option value="free">Free</option>
+        </select>
+      </Field>
+      <Field label={`Amount paid (expected ${currency(rate(member))})`}>
+        <input type="number" min={0} step={100} style={inputStyle} value={amount} onChange={(e) => setAmount(e.target.value)} />
+      </Field>
+      <div style={{ fontSize: 11, color: COLORS.textMuted }}>
+        Paying above the expected amount is fine — the extra just shows in the collected total.
+      </div>
+    </Modal>
+  );
+}
+
+function DuesTab({ data, isAdmin, reload, myMemberId, notify }) {
   const months = MONTHS();
-  const rate = (m) => (m.tier === "Leader" || m.tier === "HOD" ? 5500 : 3500);
+  const [editing, setEditing] = useState(null);
 
   if (!isAdmin) {
     const mine = data.members.find((m) => m.id === myMemberId);
@@ -1002,14 +1260,15 @@ function DuesTab({ data, isAdmin, reload, myMemberId }) {
             <EmptyRow text="No member record is linked to your account yet — ask an admin." />
           ) : (
             <>
-              <div style={{ fontSize: 13, marginBottom: 10, color: COLORS.textSecondary }}>{mine.name} · ₦{rate(mine)}/month</div>
+              <div style={{ fontSize: 13, marginBottom: 10, color: COLORS.textSecondary }}>{mine.name} · {currency(rate(mine))}/month</div>
               {months.map((mo) => {
-                const status = (mine.dues || {})[mo] || "unset";
-                const tone = status === "paid" ? "green" : status === "owing" ? "red" : status === "free" ? "amber" : "gray";
+                const due = getDue(mine, mo);
+                const tone = due.status === "paid" ? "green" : due.status === "owing" ? "red" : due.status === "free" ? "amber" : "gray";
                 return (
                   <RowLine key={mo}>
                     <span style={{ flex: 1 }}>{mo}</span>
-                    <Badge tone={tone}>{status === "unset" ? "Not set" : status}</Badge>
+                    {due.amount ? <span style={{ fontSize: 11, color: COLORS.textMuted, marginRight: 8 }}>{currency(due.amount)}</span> : null}
+                    <Badge tone={tone}>{due.status === "unset" ? "Not set" : due.status}</Badge>
                   </RowLine>
                 );
               })}
@@ -1020,31 +1279,23 @@ function DuesTab({ data, isAdmin, reload, myMemberId }) {
     );
   }
 
-  async function setDue(m, month, status) {
-    const dues = { ...(m.dues || {}), [month]: status };
-    await supabase.from("members").update({ dues }).eq("id", m.id);
-    reload();
-  }
-
   return (
     <div>
-      <SectionHeader title="Dues" subtitle="Members ₦3,500 · Leaders ₦5,500. First month free after graduation." />
+      <SectionHeader title="Dues" subtitle="Members ₦3,500 · Leaders ₦5,500 expected. Click a cell to record what was actually paid." />
       <Panel>
         <div style={{ overflowX: "auto" }}>
-          <div style={{ display: "grid", gridTemplateColumns: `1.4fr repeat(${months.length}, 0.8fr)`, fontSize: 11, color: COLORS.textMuted, padding: "0 4px 8px", textTransform: "uppercase" }}>
+          <div style={{ display: "grid", gridTemplateColumns: `1.4fr repeat(${months.length}, 0.9fr)`, fontSize: 11, color: COLORS.textMuted, padding: "0 4px 8px", textTransform: "uppercase" }}>
             <div>Member</div>{months.map((mo) => <div key={mo} style={{ textAlign: "center" }}>{mo}</div>)}
           </div>
           {data.members.length === 0 ? <EmptyRow text="No members yet." /> : data.members.map((m) => (
-            <div key={m.id} style={{ display: "grid", gridTemplateColumns: `1.4fr repeat(${months.length}, 0.8fr)`, alignItems: "center", padding: "8px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 12 }}>
-              <div>{m.name} <span style={{ color: COLORS.textMuted }}>· ₦{rate(m)}</span></div>
+            <div key={m.id} style={{ display: "grid", gridTemplateColumns: `1.4fr repeat(${months.length}, 0.9fr)`, alignItems: "center", padding: "8px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 12 }}>
+              <div>{m.name} <span style={{ color: COLORS.textMuted }}>· {currency(rate(m))}</span></div>
               {months.map((mo) => {
-                const status = (m.dues || {})[mo] || "unset";
-                const tone = status === "paid" ? "green" : status === "owing" ? "red" : status === "free" ? "amber" : "gray";
+                const due = getDue(m, mo);
+                const tone = due.status === "paid" ? "green" : due.status === "owing" ? "red" : due.status === "free" ? "amber" : "gray";
                 return (
-                  <div key={mo} style={{ textAlign: "center" }}>
-                    <select disabled={!isAdmin} value={status} onChange={(e) => setDue(m, mo, e.target.value)} style={{ background: "transparent", border: "none", fontSize: 11, textAlign: "center", color: tone === "green" ? COLORS.green : tone === "red" ? COLORS.red : tone === "amber" ? COLORS.amber : COLORS.textMuted, cursor: isAdmin ? "pointer" : "default" }}>
-                      <option value="unset">—</option><option value="paid">Paid</option><option value="owing">Owing</option><option value="free">Free</option>
-                    </select>
+                  <div key={mo} style={{ textAlign: "center", cursor: "pointer" }} onClick={() => setEditing({ member: m, month: mo })}>
+                    <Badge tone={tone}>{due.status === "unset" ? "—" : due.amount ? currency(due.amount) : due.status}</Badge>
                   </div>
                 );
               })}
@@ -1052,6 +1303,15 @@ function DuesTab({ data, isAdmin, reload, myMemberId }) {
           ))}
         </div>
       </Panel>
+      {editing && (
+        <DueEditModal
+          member={editing.member}
+          month={editing.month}
+          notify={notify}
+          onClose={() => setEditing(null)}
+          onSaved={reload}
+        />
+      )}
     </div>
   );
 }

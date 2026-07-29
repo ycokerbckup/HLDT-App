@@ -134,6 +134,21 @@ body {
   animation: hldt-fade-in-up 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
+.hldt-modal {
+  animation: hldt-fade-in-up 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+[data-theme="light"] .hldt-app ::-webkit-scrollbar-thumb {
+  background: #D6D6D0;
+  border-color: #F7F7F5;
+}
+[data-theme="light"] .hldt-app ::-webkit-scrollbar-thumb:hover {
+  background: #C0C0B8;
+}
+[data-theme="light"] ::selection {
+  background: rgba(184, 113, 10, 0.18);
+}
+
 .hldt-week-toggle {
   transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
 }

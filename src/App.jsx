@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, GraduationCap, Wrench, CalendarDays,
   Wallet, MessageSquare, Plus, X, ChevronRight, Shield, User,
   CheckCircle2, Clock, Trash2, Save, LogOut, RefreshCw, Download,
-  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil
+  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil, GripVertical, Eye, EyeOff
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "./supabaseClient";
@@ -100,6 +100,17 @@ function duesExempt(m) {
 }
 
 const AVATAR_PALETTE = ["#E8A33D", "#3DDC97", "#5B9BE0", "#D4537E", "#7F77DD", "#E24B4A", "#0F6E56", "#B87A1F"];
+
+const TUESDAY_TEMPLATE = [
+  { title: "Welcome Speech/Greeting", duration_minutes: 3 },
+  { title: "Opening Prayer", duration_minutes: 2 },
+  { title: "Prayer 1", duration_minutes: 3 },
+  { title: "Prayer 2", duration_minutes: 3 },
+  { title: "Prayer 3", duration_minutes: 3 },
+  { title: "Group discussion (Q&A, icebreaker etc.)", duration_minutes: 20 },
+  { title: "Observations & announcements", duration_minutes: 4 },
+  { title: "Closing prayer", duration_minutes: 2 },
+];
 
 function hashColor(id) {
   let hash = 0;
@@ -663,6 +674,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
   const canManageMembers = isAdmin && myUnit === "Operations";
   const canManageFeed = isAdmin && (myUnit === "Operations" || myUnit === "Technical");
   const canManageOnboarding = isAdmin && myUnit === "Operations";
+  const canManageRosters = isAdmin && (myUnit === "Operations" || myUnit === "Admin");
   const canSeeDues = myUnit === "Welfare" || myUnit === "Operations";
 
   const [showKym, setShowKym] = useState(false);
@@ -759,7 +771,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
                 {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} reload={load} notify={notify} />}
-                {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} reload={load} />}
+                {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} reload={load} notify={notify} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
                 {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
@@ -837,7 +849,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
                 {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} reload={load} notify={notify} />}
-                {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} reload={load} />}
+                {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} reload={load} notify={notify} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
                 {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
@@ -2087,11 +2099,195 @@ function EquipmentTab({ data, isAdmin, reload, notify }) {
 
 /* ---------------- roster ---------------- */
 
-function RosterTab({ data, isAdmin, reload }) {
+function TuesdayRosterEditor({ existing, members, onClose, onSaved, notify }) {
+  const [eventDate, setEventDate] = useState(existing?.eventDate || "");
+  const [items, setItems] = useState(existing?.items?.length ? existing.items : TUESDAY_TEMPLATE.map((t, i) => ({ ...t, position: i, assigned_member_id: "", assigned_name: "" })));
+  const [published, setPublished] = useState(existing?.published || false);
+
+  function updateItem(idx, patch) {
+    setItems(items.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
+  }
+  function addItem() {
+    setItems([...items, { title: "", duration_minutes: 5, position: items.length, assigned_member_id: "", assigned_name: "" }]);
+  }
+  function removeItem(idx) {
+    setItems(items.filter((_, i) => i !== idx));
+  }
+
+  async function save() {
+    if (!eventDate) { notify?.("Pick a date", "error"); return; }
+    let rosterId = existing?.id;
+    if (rosterId) {
+      const { error } = await supabase.from("tuesday_rosters").update({ event_date: eventDate, published }).eq("id", rosterId);
+      if (error) { notify?.(error.message, "error"); return; }
+      await supabase.from("tuesday_roster_items").delete().eq("roster_id", rosterId);
+    } else {
+      const { data: created, error } = await supabase.from("tuesday_rosters").insert({ event_date: eventDate, published }).select().single();
+      if (error) { notify?.(error.message, "error"); return; }
+      rosterId = created.id;
+    }
+    const rows = items.map((it, i) => ({
+      roster_id: rosterId, position: i, title: it.title, duration_minutes: it.duration_minutes || null,
+      assigned_member_id: it.assigned_member_id || null, assigned_name: it.assigned_name || null,
+    }));
+    if (rows.length) {
+      const { error } = await supabase.from("tuesday_roster_items").insert(rows);
+      if (error) { notify?.(error.message, "error"); return; }
+    }
+    notify?.(existing ? "Tuesday roster updated" : "Tuesday roster created");
+    onSaved();
+    onClose();
+  }
+
+  return (
+    <Modal title={existing ? "Edit Tuesday roster" : "New Tuesday roster"} onClose={onClose} width={520} footer={<><Btn tone="ghost" onClick={onClose}>Cancel</Btn><Btn tone="amber" onClick={save}><Save size={13} /> Save</Btn></>}>
+      <Field label="Date"><input type="date" style={inputStyle} value={eventDate} onChange={(e) => setEventDate(e.target.value)} /></Field>
+      <div style={{ fontSize: 12, color: COLORS.textSecondary, margin: "10px 0 6px" }}>Flow</div>
+      {items.map((it, idx) => (
+        <div key={idx} style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
+          <input style={{ ...inputStyle, flex: 2 }} placeholder="Item title" value={it.title} onChange={(e) => updateItem(idx, { title: e.target.value })} />
+          <input type="number" style={{ ...inputStyle, width: 56 }} value={it.duration_minutes || ""} onChange={(e) => updateItem(idx, { duration_minutes: Number(e.target.value) })} />
+          <select style={{ ...inputStyle, flex: 1.3 }} value={it.assigned_member_id || ""} onChange={(e) => { const mem = members.find((m) => m.id === e.target.value); updateItem(idx, { assigned_member_id: e.target.value, assigned_name: mem?.name || "" }); }}>
+            <option value="">Unassigned</option>
+            {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+          <Trash2 size={14} style={{ cursor: "pointer", color: COLORS.textMuted, flexShrink: 0 }} onClick={() => removeItem(idx)} />
+        </div>
+      ))}
+      <Btn small tone="ghost" onClick={addItem}><Plus size={12} /> Add item</Btn>
+      <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 8 }}>
+        <Btn small tone={published ? "amber" : "ghost"} onClick={() => setPublished(!published)}>
+          {published ? <Eye size={12} /> : <EyeOff size={12} />} {published ? "Published" : "Draft"}
+        </Btn>
+        <span style={{ fontSize: 11, color: COLORS.textMuted }}>{published ? "Visible to everyone" : "Only visible to roster managers"}</span>
+      </div>
+    </Modal>
+  );
+}
+
+function SaturdayRosterEditor({ existing, members, onClose, onSaved, notify }) {
+  const [eventDate, setEventDate] = useState(existing?.eventDate || "");
+  const [callTime, setCallTime] = useState(existing?.callTime || "9:50 AM");
+  const [duration, setDuration] = useState(existing?.durationMinutes || 120);
+  const [notes, setNotes] = useState(existing?.focusNotes || "");
+  const [trainerIds, setTrainerIds] = useState(existing?.trainers?.map((t) => t.memberId).filter(Boolean) || []);
+  const [published, setPublished] = useState(existing?.published || false);
+
+  function toggleTrainer(id) {
+    setTrainerIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  async function save() {
+    if (!eventDate) { notify?.("Pick a date", "error"); return; }
+    let rosterId = existing?.id;
+    const payload = { event_date: eventDate, call_time: callTime, duration_minutes: Number(duration), focus_notes: notes, published };
+    if (rosterId) {
+      const { error } = await supabase.from("saturday_rosters").update(payload).eq("id", rosterId);
+      if (error) { notify?.(error.message, "error"); return; }
+      await supabase.from("saturday_roster_trainers").delete().eq("roster_id", rosterId);
+    } else {
+      const { data: created, error } = await supabase.from("saturday_rosters").insert(payload).select().single();
+      if (error) { notify?.(error.message, "error"); return; }
+      rosterId = created.id;
+    }
+    const rows = trainerIds.map((id) => ({ roster_id: rosterId, member_id: id, name: members.find((m) => m.id === id)?.name || "" }));
+    if (rows.length) {
+      const { error } = await supabase.from("saturday_roster_trainers").insert(rows);
+      if (error) { notify?.(error.message, "error"); return; }
+    }
+    notify?.(existing ? "Saturday roster updated" : "Saturday roster created");
+    onSaved();
+    onClose();
+  }
+
+  return (
+    <Modal title={existing ? "Edit Saturday roster" : "New Saturday roster"} onClose={onClose} width={460} footer={<><Btn tone="ghost" onClick={onClose}>Cancel</Btn><Btn tone="amber" onClick={save}><Save size={13} /> Save</Btn></>}>
+      <Field label="Date"><input type="date" style={inputStyle} value={eventDate} onChange={(e) => setEventDate(e.target.value)} /></Field>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <Field label="Call time"><input style={inputStyle} value={callTime} onChange={(e) => setCallTime(e.target.value)} /></Field>
+        <Field label="Duration (minutes)"><input type="number" style={inputStyle} value={duration} onChange={(e) => setDuration(e.target.value)} /></Field>
+      </div>
+      <Field label="Trainers this week">
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {members.map((m) => (
+            <Btn key={m.id} small tone={trainerIds.includes(m.id) ? "amber" : "ghost"} onClick={() => toggleTrainer(m.id)}>{m.name}</Btn>
+          ))}
+        </div>
+      </Field>
+      <Field label="Focus notes (choir, lyrics, announcements, etc.)">
+        <textarea style={{ ...inputStyle, minHeight: 70 }} value={notes} onChange={(e) => setNotes(e.target.value)} />
+      </Field>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Btn small tone={published ? "amber" : "ghost"} onClick={() => setPublished(!published)}>
+          {published ? <Eye size={12} /> : <EyeOff size={12} />} {published ? "Published" : "Draft"}
+        </Btn>
+        <span style={{ fontSize: 11, color: COLORS.textMuted }}>{published ? "Visible to everyone" : "Only visible to roster managers"}</span>
+      </div>
+    </Modal>
+  );
+}
+
+function RosterTab({ data, isAdmin, canManageRosters, reload, notify }) {
   const teamA = data.members.filter((m) => m.team === "A");
   const teamB = data.members.filter((m) => m.team === "B");
-
   const services = ["Sunday services (x4)", "Wednesday midweek", "Saturday training", "Tuesday 8PM meeting (mandatory)"];
+
+  const [tuesdayRosters, setTuesdayRosters] = useState([]);
+  const [saturdayRosters, setSaturdayRosters] = useState([]);
+  const [editingTuesday, setEditingTuesday] = useState(null);
+  const [editingSaturday, setEditingSaturday] = useState(null);
+  const [showNewTuesday, setShowNewTuesday] = useState(false);
+  const [showNewSaturday, setShowNewSaturday] = useState(false);
+
+  async function loadRosters() {
+    const [tRes, tiRes, sRes, stRes] = await Promise.all([
+      supabase.from("tuesday_rosters").select("*").order("event_date"),
+      supabase.from("tuesday_roster_items").select("*").order("position"),
+      supabase.from("saturday_rosters").select("*").order("event_date"),
+      supabase.from("saturday_roster_trainers").select("*"),
+    ]);
+    const itemsByRoster = {};
+    (tiRes.data || []).forEach((it) => {
+      if (!itemsByRoster[it.roster_id]) itemsByRoster[it.roster_id] = [];
+      itemsByRoster[it.roster_id].push(it);
+    });
+    setTuesdayRosters((tRes.data || []).map((r) => ({
+      id: r.id, eventDate: r.event_date, published: r.published,
+      items: (itemsByRoster[r.id] || []).map((it) => ({ title: it.title, duration_minutes: it.duration_minutes, assigned_member_id: it.assigned_member_id, assigned_name: it.assigned_name })),
+    })));
+    const trainersByRoster = {};
+    (stRes.data || []).forEach((t) => {
+      if (!trainersByRoster[t.roster_id]) trainersByRoster[t.roster_id] = [];
+      trainersByRoster[t.roster_id].push({ memberId: t.member_id, name: t.name });
+    });
+    setSaturdayRosters((sRes.data || []).map((r) => ({
+      id: r.id, eventDate: r.event_date, callTime: r.call_time, durationMinutes: r.duration_minutes,
+      focusNotes: r.focus_notes, published: r.published, trainers: trainersByRoster[r.id] || [],
+    })));
+  }
+
+  useEffect(() => {
+    loadRosters();
+    const channel = supabase
+      .channel("roster-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "tuesday_rosters" }, loadRosters)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tuesday_roster_items" }, loadRosters)
+      .on("postgres_changes", { event: "*", schema: "public", table: "saturday_rosters" }, loadRosters)
+      .on("postgres_changes", { event: "*", schema: "public", table: "saturday_roster_trainers" }, loadRosters)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  async function deleteTuesday(id) {
+    await supabase.from("tuesday_rosters").delete().eq("id", id);
+    notify?.("Tuesday roster deleted");
+    loadRosters();
+  }
+  async function deleteSaturday(id) {
+    await supabase.from("saturday_rosters").delete().eq("id", id);
+    notify?.("Saturday roster deleted");
+    loadRosters();
+  }
 
   return (
     <div>
@@ -2102,22 +2298,92 @@ function RosterTab({ data, isAdmin, reload }) {
       <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
         <Panel title="Team A" style={{ flex: 1 }}>
           {teamA.length === 0 ? <EmptyRow text="No members assigned." /> : teamA.map((m) => (
-            <RowLine key={m.id}>
-              <span style={{ flex: 1 }}>{m.name}</span><span style={{ fontSize: 11, color: COLORS.textMuted }}>{m.unit}</span>
-            </RowLine>
+            <RowLine key={m.id}><span style={{ flex: 1 }}>{m.name}</span><span style={{ fontSize: 11, color: COLORS.textMuted }}>{m.unit}</span></RowLine>
           ))}
         </Panel>
         <Panel title="Team B" style={{ flex: 1 }}>
           {teamB.length === 0 ? <EmptyRow text="No members assigned." /> : teamB.map((m) => (
-            <RowLine key={m.id}>
-              <span style={{ flex: 1 }}>{m.name}</span><span style={{ fontSize: 11, color: COLORS.textMuted }}>{m.unit}</span>
-            </RowLine>
+            <RowLine key={m.id}><span style={{ flex: 1 }}>{m.name}</span><span style={{ fontSize: 11, color: COLORS.textMuted }}>{m.unit}</span></RowLine>
           ))}
         </Panel>
       </div>
-      <Panel title="Weekly commitment">
+      <Panel title="Weekly commitment" style={{ marginBottom: 20 }}>
         {services.map((s) => <RowLine key={s}><Clock size={13} style={{ color: COLORS.textMuted, marginRight: 4 }} />{s}</RowLine>)}
       </Panel>
+
+      <SectionHeader title="Tuesday prayer meeting" subtitle="8PM" right={canManageRosters && <Btn small tone="amber" onClick={() => setShowNewTuesday(true)}><Plus size={12} /> New</Btn>} />
+      {tuesdayRosters.length === 0 ? (
+        <Panel style={{ marginBottom: 20 }}><EmptyRow text="No upcoming Tuesday rosters." /></Panel>
+      ) : (
+        tuesdayRosters.map((r) => (
+          <Panel key={r.id} style={{ marginBottom: 12 }} title={new Date(r.eventDate + "T00:00").toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
+            right={
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {!r.published && <Badge tone="gray">Draft</Badge>}
+                {canManageRosters && (<>
+                  <Pencil size={13} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => setEditingTuesday(r)} />
+                  <Trash2 size={13} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => deleteTuesday(r.id)} />
+                </>)}
+              </div>
+            }
+          >
+            {r.items.map((it, i) => (
+              <RowLine key={i}>
+                <span style={{ flex: 1 }}>{it.title}</span>
+                <span style={{ fontSize: 11, color: COLORS.textMuted, marginRight: 10 }}>{it.duration_minutes} min</span>
+                <span style={{ fontSize: 12, color: COLORS.textSecondary }}>{it.assigned_name || "—"}</span>
+              </RowLine>
+            ))}
+          </Panel>
+        ))
+      )}
+
+      <SectionHeader title="Saturday training" subtitle="Call time 9:50 AM · ~2 hours" right={canManageRosters && <Btn small tone="amber" onClick={() => setShowNewSaturday(true)}><Plus size={12} /> New</Btn>} />
+      {saturdayRosters.length === 0 ? (
+        <Panel><EmptyRow text="No upcoming Saturday rosters." /></Panel>
+      ) : (
+        saturdayRosters.map((r) => (
+          <Panel key={r.id} style={{ marginBottom: 12 }} title={new Date(r.eventDate + "T00:00").toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
+            right={
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {!r.published && <Badge tone="gray">Draft</Badge>}
+                {canManageRosters && (<>
+                  <Pencil size={13} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => setEditingSaturday(r)} />
+                  <Trash2 size={13} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => deleteSaturday(r.id)} />
+                </>)}
+              </div>
+            }
+          >
+            <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 6 }}>Call time {r.callTime} · {r.durationMinutes} min</div>
+            {r.trainers.length > 0 && (
+              <div style={{ fontSize: 12, marginBottom: 6 }}>
+                <span style={{ color: COLORS.textMuted }}>Training this week: </span>
+                {r.trainers.map((t) => t.name).join(", ")}
+              </div>
+            )}
+            {r.focusNotes && <div style={{ fontSize: 12, color: COLORS.textSecondary, whiteSpace: "pre-wrap" }}>{r.focusNotes}</div>}
+          </Panel>
+        ))
+      )}
+
+      {(showNewTuesday || editingTuesday) && (
+        <TuesdayRosterEditor
+          existing={editingTuesday}
+          members={data.members}
+          notify={notify}
+          onClose={() => { setShowNewTuesday(false); setEditingTuesday(null); }}
+          onSaved={loadRosters}
+        />
+      )}
+      {(showNewSaturday || editingSaturday) && (
+        <SaturdayRosterEditor
+          existing={editingSaturday}
+          members={data.members}
+          notify={notify}
+          onClose={() => { setShowNewSaturday(false); setEditingSaturday(null); }}
+          onSaved={loadRosters}
+        />
+      )}
     </div>
   );
 }

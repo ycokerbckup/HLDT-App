@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, GraduationCap, Wrench, CalendarDays,
   Wallet, MessageSquare, Plus, X, ChevronRight, Shield, User,
   CheckCircle2, Clock, Trash2, Save, LogOut, RefreshCw, Download,
-  Sun, Moon
+  Sun, Moon, Bell, Megaphone
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "./supabaseClient";
@@ -502,7 +502,7 @@ export default function App() {
 
 function Dashboard_Shell({ session, profile, setProfile }) {
   const [tab, setTab] = useState("dashboard");
-  const [data, setData] = useState({ members: [], onboarding: [], tickets: [], feedback: [] });
+  const [data, setData] = useState({ members: [], onboarding: [], tickets: [], feedback: [], announcements: [], notifications: [], readIds: [] });
   const [loaded, setLoaded] = useState(false);
   const isAdmin = profile.role === "admin";
   const { toasts, notify } = useToasts();
@@ -518,12 +518,15 @@ function Dashboard_Shell({ session, profile, setProfile }) {
       ? supabase.from("members").select("*").order("name")
       : supabase.from("members_directory").select("*").order("name");
 
-    const [membersRes, onboardingRes, historyRes, ticketsRes, feedbackRes] = await Promise.all([
+    const [membersRes, onboardingRes, historyRes, ticketsRes, feedbackRes, announcementsRes, notificationsRes, readsRes] = await Promise.all([
       membersPromise,
       supabase.from("onboarding").select("*").order("start_date", { ascending: false }),
       supabase.from("onboarding_history").select("*").order("changed_at", { ascending: true }),
       supabase.from("tickets").select("*").order("created_at", { ascending: false }),
       supabase.from("feedback").select("*").order("created_at", { ascending: false }),
+      supabase.from("announcements").select("*").order("created_at", { ascending: false }),
+      supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(50),
+      supabase.from("notification_reads").select("notification_id").eq("profile_id", session.user.id),
     ]);
 
     let ownMemberRow = null;
@@ -563,6 +566,13 @@ function Dashboard_Shell({ session, profile, setProfile }) {
         id: f.id, name: f.name, engagement: f.engagement, impact: f.impact, atmosphere: f.atmosphere,
         suggestions: f.suggestions, complaints: f.complaints, requests: f.requests, timestamp: f.created_at,
       })),
+      announcements: (announcementsRes.data || []).map((a) => ({
+        id: a.id, title: a.title, body: a.body, createdBy: a.created_by, createdByName: a.created_by_name, createdAt: a.created_at,
+      })),
+      notifications: (notificationsRes.data || []).map((n) => ({
+        id: n.id, type: n.type, title: n.title, body: n.body, linkTab: n.link_tab, targetRole: n.target_role, createdAt: n.created_at,
+      })),
+      readIds: (readsRes.data || []).map((r) => r.notification_id),
     });
     setLoaded(true);
   }, [isAdmin, session.user.id]);
@@ -576,12 +586,20 @@ function Dashboard_Shell({ session, profile, setProfile }) {
       .on("postgres_changes", { event: "*", schema: "public", table: "onboarding_history" }, load)
       .on("postgres_changes", { event: "*", schema: "public", table: "tickets" }, load)
       .on("postgres_changes", { event: "*", schema: "public", table: "feedback" }, load)
+      .on("postgres_changes", { event: "*", schema: "public", table: "announcements" }, load)
+      .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, load)
+      .on("postgres_changes", { event: "*", schema: "public", table: "notification_reads" }, load)
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [load]);
 
   const myMember = data.members.find((m) => m.profileId === session.user.id) || null;
   const myOnboarding = myMember ? data.onboarding.find((o) => o.memberId === myMember.id) || null : null;
+
+  async function markNotificationRead(id) {
+    if (data.readIds.includes(id)) return;
+    await supabase.from("notification_reads").insert({ notification_id: id, profile_id: session.user.id });
+  }
 
   async function exportAllData() {
     const [m, o, h, t, f] = await Promise.all([
@@ -606,6 +624,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
 
   const nav = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { id: "announcements", label: "Announcements", icon: Megaphone },
     { id: "members", label: "Members", icon: Users },
     { id: "onboarding", label: "Onboarding", icon: GraduationCap },
     { id: "equipment", label: "Equipment", icon: Wrench },
@@ -617,6 +636,12 @@ function Dashboard_Shell({ session, profile, setProfile }) {
   return (
     <div className="hldt-app" style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.textPrimary, fontFamily: "'Inter', sans-serif", display: "flex" }}>
       <ToastStack toasts={toasts} />
+      <NotificationBell
+        notifications={data.notifications}
+        readIds={data.readIds}
+        onRead={markNotificationRead}
+        onNavigate={setTab}
+      />
       <div style={{ width: 190, flexShrink: 0, background: COLORS.surface1, borderRight: `1px solid ${COLORS.border}`, display: "flex", flexDirection: "column" }}>
         <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${COLORS.border}` }}>
           <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 19, letterSpacing: "0.02em", lineHeight: 1.1 }}>DISPLAY TEAM</div>
@@ -662,6 +687,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
             {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} reload={load} notify={notify} />}
             {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} reload={load} />}
             {tab === "dues" && <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} />}
+            {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
             {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} reload={load} notify={notify} />}
           </div>
         )}
@@ -697,6 +723,174 @@ function SkeletonLoader() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function NotificationBell({ notifications, readIds, onRead, onNavigate }) {
+  const [open, setOpen] = useState(false);
+  const unread = notifications.filter((n) => !readIds.includes(n.id));
+
+  function handleClick(n) {
+    onRead(n.id);
+    if (n.linkTab) onNavigate(n.linkTab);
+    setOpen(false);
+  }
+
+  function timeAgo(ts) {
+    const mins = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 60000));
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.round(hrs / 24)}d ago`;
+  }
+
+  return (
+    <div style={{ position: "fixed", top: 16, right: 64, zIndex: 1500 }}>
+      <button
+        onClick={() => setOpen(!open)}
+        aria-label="Notifications"
+        style={{
+          width: 36, height: 36, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center",
+          background: COLORS.surface2, border: `1px solid ${COLORS.border}`, color: COLORS.textPrimary, cursor: "pointer", position: "relative",
+        }}
+      >
+        <Bell size={15} />
+        {unread.length > 0 && (
+          <span style={{ position: "absolute", top: -2, right: -2, minWidth: 15, height: 15, borderRadius: 999, background: COLORS.red, color: "#fff", fontSize: 9, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>
+            {unread.length > 9 ? "9+" : unread.length}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div
+          className="hldt-modal"
+          style={{ position: "absolute", top: 44, right: 0, width: 320, maxHeight: 400, overflowY: "auto", background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 8 }}
+        >
+          <div style={{ fontSize: 12, fontWeight: 500, color: COLORS.textSecondary, padding: "6px 8px" }}>Notifications</div>
+          {notifications.length === 0 ? (
+            <div style={{ padding: "16px 8px", fontSize: 12, color: COLORS.textMuted }}>Nothing yet.</div>
+          ) : (
+            notifications.slice(0, 20).map((n) => {
+              const isUnread = !readIds.includes(n.id);
+              return (
+                <div
+                  key={n.id}
+                  onClick={() => handleClick(n)}
+                  style={{
+                    padding: "8px 8px", borderRadius: 6, cursor: "pointer", marginBottom: 2,
+                    background: isUnread ? COLORS.surface2 : "transparent",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+                    {isUnread && <span style={{ width: 6, height: 6, borderRadius: 999, background: COLORS.amber, marginTop: 5, flexShrink: 0 }} />}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 12, color: COLORS.textPrimary, fontWeight: isUnread ? 500 : 400 }}>{n.title}</div>
+                      {n.body && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 2 }}>{n.body}</div>}
+                      <div style={{ fontSize: 10, color: COLORS.textMuted, marginTop: 3, fontFamily: "'JetBrains Mono', monospace" }}>{timeAgo(n.createdAt)}</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- announcements ---------------- */
+
+function AnnouncementsTab({ data, isAdmin, reload, notify, adminId, adminName }) {
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const blank = () => ({ title: "", body: "" });
+  const [form, setForm] = useState(blank());
+
+  function withinEditWindow(a) {
+    return Date.now() - new Date(a.createdAt).getTime() < 30 * 60 * 1000;
+  }
+
+  async function submit() {
+    if (!form.title.trim() || !form.body.trim()) return;
+    if (editingId) {
+      const { error } = await supabase.from("announcements").update({ title: form.title, body: form.body }).eq("id", editingId);
+      if (error) { notify?.(error.message, "error"); return; }
+      notify?.("Announcement updated");
+    } else {
+      const { error } = await supabase.from("announcements").insert({ title: form.title, body: form.body, created_by: adminId, created_by_name: adminName });
+      if (error) { notify?.(error.message, "error"); return; }
+      notify?.("Announcement posted");
+    }
+    setForm(blank());
+    setEditingId(null);
+    setShowForm(false);
+    reload();
+  }
+
+  async function remove(id) {
+    const { error } = await supabase.from("announcements").delete().eq("id", id);
+    if (error) { notify?.(error.message, "error"); return; }
+    notify?.("Announcement deleted");
+    reload();
+  }
+
+  function startEdit(a) {
+    setForm({ title: a.title, body: a.body });
+    setEditingId(a.id);
+    setShowForm(true);
+  }
+
+  function timeLeft(a) {
+    const msLeft = 30 * 60 * 1000 - (Date.now() - new Date(a.createdAt).getTime());
+    if (msLeft <= 0) return null;
+    return `${Math.ceil(msLeft / 60000)}m left to edit`;
+  }
+
+  return (
+    <div>
+      <SectionHeader
+        title="Announcements"
+        subtitle="Auto-removed after 7 days. Editable for 30 minutes after posting."
+        right={isAdmin && <Btn tone="amber" onClick={() => { setForm(blank()); setEditingId(null); setShowForm(true); }}><Plus size={14} /> New announcement</Btn>}
+      />
+
+      {showForm && (
+        <Panel title={editingId ? "Edit announcement" : "New announcement"} style={{ marginBottom: 16 }} right={<X size={16} style={{ cursor: "pointer" }} onClick={() => setShowForm(false)} />}>
+          <Field label="Title">
+            <input style={inputStyle} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+          </Field>
+          <Field label="Message">
+            <textarea style={{ ...inputStyle, minHeight: 80 }} value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} />
+          </Field>
+          <Btn tone="amber" onClick={submit}><Save size={13} /> {editingId ? "Save changes" : "Post announcement"}</Btn>
+        </Panel>
+      )}
+
+      {data.announcements.length === 0 ? (
+        <Panel><EmptyRow text="No announcements yet." /></Panel>
+      ) : (
+        data.announcements.map((a) => (
+          <Panel key={a.id} style={{ marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+              <div style={{ fontSize: 15, fontWeight: 500, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{a.title}</div>
+              {isAdmin && (
+                <div style={{ display: "flex", gap: 10, flexShrink: 0, marginLeft: 10 }}>
+                  {withinEditWindow(a) && <ChevronRight size={14} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => startEdit(a)} />}
+                  <Trash2 size={14} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => remove(a.id)} />
+                </div>
+              )}
+            </div>
+            <div style={{ fontSize: 13, color: COLORS.textSecondary, whiteSpace: "pre-wrap", marginBottom: 8 }}>{a.body}</div>
+            <div style={{ fontSize: 11, color: COLORS.textMuted, display: "flex", gap: 10 }}>
+              <span>{a.createdByName || "Admin"} · {new Date(a.createdAt).toLocaleString()}</span>
+              {isAdmin && withinEditWindow(a) && <span style={{ color: COLORS.amber }}>{timeLeft(a)}</span>}
+            </div>
+          </Panel>
+        ))
+      )}
     </div>
   );
 }

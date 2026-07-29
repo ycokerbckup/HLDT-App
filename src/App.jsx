@@ -563,22 +563,35 @@ function Dashboard_Shell({ session, profile, setProfile }) {
       ? supabase.from("members").select("*").order("name")
       : supabase.from("members_directory").select("*").order("name");
 
-    const [membersRes, onboardingRes, historyRes, ticketsRes, feedbackRes, announcementsRes, notificationsRes, readsRes] = await Promise.all([
-      membersPromise,
-      supabase.from("onboarding").select("*").order("start_date", { ascending: false }),
-      supabase.from("onboarding_history").select("*").order("changed_at", { ascending: true }),
-      supabase.from("tickets").select("*").order("created_at", { ascending: false }),
-      supabase.from("feedback").select("*").order("created_at", { ascending: false }),
-      supabase.from("announcements").select("*").order("created_at", { ascending: false }),
-      supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(50),
-      supabase.from("notification_reads").select("notification_id").eq("profile_id", session.user.id),
-    ]);
+    const membersRes = await membersPromise;
 
     let ownMemberRow = null;
     if (!isAdmin) {
       const { data: own } = await supabase.from("members").select("*").eq("profile_id", session.user.id).maybeSingle();
       ownMemberRow = own;
     }
+
+    const myUnitNow = isAdmin
+      ? (membersRes.data || []).find((m) => m.profile_id === session.user.id)?.unit
+      : ownMemberRow?.unit;
+    const canManageOnboardingNow = isAdmin && myUnitNow === "Operations";
+
+    const onboardingPromise = canManageOnboardingNow
+      ? supabase.from("onboarding").select("*").order("start_date", { ascending: false })
+      : supabase.from("onboarding_public").select("*").order("start_date", { ascending: false });
+    const historyPromise = canManageOnboardingNow
+      ? supabase.from("onboarding_history").select("*").order("changed_at", { ascending: true })
+      : Promise.resolve({ data: [] });
+
+    const [onboardingRes, historyRes, ticketsRes, feedbackRes, announcementsRes, notificationsRes, readsRes] = await Promise.all([
+      onboardingPromise,
+      historyPromise,
+      supabase.from("tickets").select("*").order("created_at", { ascending: false }),
+      supabase.from("feedback").select("*").order("created_at", { ascending: false }),
+      supabase.from("announcements").select("*").order("created_at", { ascending: false }),
+      supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(50),
+      supabase.from("notification_reads").select("notification_id").eq("profile_id", session.user.id),
+    ]);
 
     const historyByOnboarding = {};
     (historyRes.data || []).forEach((h) => {
@@ -644,7 +657,8 @@ function Dashboard_Shell({ session, profile, setProfile }) {
   const myUnit = myMember?.unit;
   const canManageMembers = isAdmin && myUnit === "Operations";
   const canManageFeed = isAdmin && (myUnit === "Operations" || myUnit === "Technical");
-  const canSeeDues = isAdmin || myUnit === "Welfare" || myUnit === "Operations";
+  const canManageOnboarding = isAdmin && myUnit === "Operations";
+  const canSeeDues = myUnit === "Welfare" || myUnit === "Operations";
 
   const [showKym, setShowKym] = useState(false);
   const kymPromptedRef = useRef(false);
@@ -738,7 +752,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
               <div key={tab} className="hldt-tab-content">
                 {tab === "dashboard" && <DashboardTab data={data} setTab={setTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} />}
                 {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} />}
-                {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
+                {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
                 {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} reload={load} notify={notify} />}
                 {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} reload={load} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
@@ -816,7 +830,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
               <div key={tab} className="hldt-tab-content">
                 {tab === "dashboard" && <DashboardTab data={data} setTab={setTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} />}
                 {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} />}
-                {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
+                {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
                 {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} reload={load} notify={notify} />}
                 {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} reload={load} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
@@ -1646,7 +1660,7 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWel
         <Metric label="Active members" value={data.members.length} />
         {isAdmin && <Metric label="In onboarding" value={inTraining.length} tone={inTraining.length ? "amber" : undefined} />}
         <Metric label="Open tickets" value={openTickets.length} tone={openTickets.length ? "red" : undefined} />
-        {isAdmin && <Metric label="Owing dues" value={owingCount} tone={owingCount ? "amber" : undefined} onClick={() => setShowOwingModal(true)} />}
+        {canSeeWelfareInfo && <Metric label="Owing dues" value={owingCount} tone={owingCount ? "amber" : undefined} onClick={() => setShowOwingModal(true)} />}
       </div>
 
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
@@ -1816,7 +1830,10 @@ function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify })
               <Field key={k} label={k}><input type="number" min={1} max={5} style={inputStyle} value={form.skills[k]} onChange={(e) => setForm({ ...form, skills: { ...form.skills, [k]: Number(e.target.value) } })} /></Field>
             ))}
           </div>
-          <Btn tone="amber" onClick={saveMember}><Save size={13} /> Save member</Btn>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <Btn tone="amber" onClick={saveMember}><Save size={13} /> Save member</Btn>
+            {form.id && <Btn tone="danger" onClick={() => { removeMember(form.id); setShowForm(false); }}><Trash2 size={13} /> Delete member</Btn>}
+          </div>
         </Panel>
       )}
 
@@ -1828,17 +1845,20 @@ function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify })
                 <div>Name</div><div>Unit</div><div>Tier</div><div>Team</div><div>Account</div><div></div>
               </div>
               {data.members.map((m) => (
-                <div key={m.id} style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 0.7fr 0.9fr 0.6fr", alignItems: "center", padding: "8px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 13 }}>
+                <div
+                  key={m.id}
+                  onClick={() => canManage && (setForm(m), setShowForm(true))}
+                  className={canManage ? "hldt-row" : undefined}
+                  data-clickable={canManage}
+                  style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 0.7fr 0.9fr 0.6fr", alignItems: "center", padding: "8px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 13, cursor: canManage ? "pointer" : "default" }}
+                >
                   <div>{m.name}</div>
                   <div style={{ color: COLORS.textSecondary }}>{m.unit}</div>
                   <div style={{ color: COLORS.textSecondary }}>{m.tier}</div>
                   <div style={{ color: COLORS.textSecondary }}>{m.team}</div>
                   <div>{m.profileId ? <Badge tone="green">Linked</Badge> : <Badge tone="gray">No login</Badge>}</div>
-                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                    {canManage && (<>
-                      <ChevronRight size={14} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => { setForm(m); setShowForm(true); }} />
-                      <Trash2 size={14} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => removeMember(m.id)} />
-                    </>)}
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    {canManage && <ChevronRight size={14} style={{ color: COLORS.textMuted }} />}
                   </div>
                 </div>
               ))}
@@ -1852,7 +1872,7 @@ function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify })
 
 /* ---------------- onboarding ---------------- */
 
-function OnboardingTab({ data, isAdmin, reload, adminName, notify }) {
+function OnboardingTab({ data, isAdmin, canManage, reload, adminName, notify }) {
   const [showForm, setShowForm] = useState(false);
   const blank = () => ({ memberId: "", name: "", startDate: new Date().toISOString().slice(0, 10), weeks: [false, false, false, false], scores: { proPres: "Average", vmix: "Average", resolume: "Average", hardware: "Average", attention: "Average", responsiveness: "Average", reliability: "Average" }, status: "In training" });
   const [form, setForm] = useState(blank());
@@ -1868,14 +1888,14 @@ function OnboardingTab({ data, isAdmin, reload, adminName, notify }) {
   }
 
   async function updateScore(record, field, value) {
-    if (!isAdmin) return;
+    if (!canManage) return;
     await supabase.from("onboarding").update({ scores: { ...record.scores, [field]: value } }).eq("id", record.id);
     await supabase.from("onboarding_history").insert({ onboarding_id: record.id, field, new_value: value, changed_by: (await supabase.auth.getUser()).data.user.id, changed_by_name: adminName });
     reload();
   }
 
   async function toggleWeek(record, idx) {
-    if (!isAdmin) return;
+    if (!canManage) return;
     const weeks = [...record.weeks];
     weeks[idx] = !weeks[idx];
     await supabase.from("onboarding").update({ weeks }).eq("id", record.id);
@@ -1883,7 +1903,7 @@ function OnboardingTab({ data, isAdmin, reload, adminName, notify }) {
   }
 
   async function setStatus(record, status) {
-    if (!isAdmin) return;
+    if (!canManage) return;
     await supabase.from("onboarding").update({ status }).eq("id", record.id);
     await supabase.from("onboarding_history").insert({ onboarding_id: record.id, field: "status", new_value: status, changed_by: (await supabase.auth.getUser()).data.user.id, changed_by_name: adminName });
     notify?.(`Status set to "${status}"`);
@@ -1892,7 +1912,11 @@ function OnboardingTab({ data, isAdmin, reload, adminName, notify }) {
 
   return (
     <div>
-      <SectionHeader title="Onboarding" subtitle="Week-by-week tracking. Scores are admin-only, database-enforced, and logged." right={isAdmin && <Btn tone="amber" onClick={() => setShowForm(true)}><Plus size={14} /> Add trainee</Btn>} />
+      <SectionHeader
+        title="Onboarding"
+        subtitle={canManage ? "Week-by-week tracking. Scores are Operations-only, database-enforced, and logged." : "Trainee progress. Detailed scores are visible to Operations only."}
+        right={canManage && <Btn tone="amber" onClick={() => setShowForm(true)}><Plus size={14} /> Add trainee</Btn>}
+      />
 
       {showForm && (
         <Panel title="New trainee" style={{ marginBottom: 16 }} right={<X size={16} style={{ cursor: "pointer" }} onClick={() => setShowForm(false)} />}>
@@ -1912,41 +1936,44 @@ function OnboardingTab({ data, isAdmin, reload, adminName, notify }) {
 
       {data.onboarding.length === 0 ? <Panel><EmptyRow text="No trainees currently onboarding." /></Panel> : data.onboarding.map((o) => (
         <Panel key={o.id} style={{ marginBottom: 14 }} title={o.name} right={<Badge tone={o.status.toLowerCase().includes("ready") ? "green" : "amber"}>{o.status}</Badge>}>
-          <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+          <div style={{ display: "flex", gap: 10, marginBottom: canManage ? 14 : 0 }}>
             {["Week 1", "Week 2", "Week 3", "Week 4"].map((w, i) => (
-              <div key={w} className="hldt-week-toggle" onClick={() => toggleWeek(o, i)} style={{ flex: 1, textAlign: "center", padding: "8px 0", borderRadius: 6, fontSize: 12, cursor: isAdmin ? "pointer" : "default", background: o.weeks[i] ? COLORS.greenDim : COLORS.surface2, color: o.weeks[i] ? COLORS.green : COLORS.textMuted, border: `1px solid ${o.weeks[i] ? COLORS.green : COLORS.border}` }}>
+              <div key={w} className="hldt-week-toggle" onClick={() => toggleWeek(o, i)} style={{ flex: 1, textAlign: "center", padding: "8px 0", borderRadius: 6, fontSize: 12, cursor: canManage ? "pointer" : "default", background: o.weeks[i] ? COLORS.greenDim : COLORS.surface2, color: o.weeks[i] ? COLORS.green : COLORS.textMuted, border: `1px solid ${o.weeks[i] ? COLORS.green : COLORS.border}` }}>
                 {w} {o.weeks[i] ? "✓" : ""}
               </div>
             ))}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 10, marginBottom: 10 }}>
-            {Object.keys(o.scores).map((k) => (
-              <Field key={k} label={k}>
-                <select style={{ ...inputStyle, opacity: isAdmin ? 1 : 0.7 }} value={o.scores[k]} disabled={!isAdmin} onChange={(e) => updateScore(o, k, e.target.value)}>
-                  {RATING_WORDS.map((r) => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </Field>
-            ))}
-          </div>
-          {isAdmin && (
-            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 12, color: COLORS.textSecondary }}>Status:</span>
-              {["In training", "Fairly ready", "Ready", "Independently ready", "Graduated"].map((s) => (
-                <Btn key={s} small tone={o.status === s ? "amber" : "ghost"} onClick={() => setStatus(o, s)}>{s}</Btn>
-              ))}
-            </div>
-          )}
-          {o.history && o.history.length > 0 && (
-            <details style={{ fontSize: 11, color: COLORS.textMuted }}>
-              <summary style={{ cursor: "pointer" }}>Edit log ({o.history.length})</summary>
-              <div style={{ marginTop: 6 }}>
-                {o.history.slice().reverse().slice(0, 10).map((h, i) => (
-                  <div key={i} style={{ padding: "3px 0", fontFamily: "'JetBrains Mono', monospace" }}>
-                    {new Date(h.timestamp).toLocaleString()} — {h.admin} set {h.field} to "{h.newValue}"
-                  </div>
+
+          {canManage && (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 10, marginBottom: 10, marginTop: 14 }}>
+                {Object.keys(o.scores).map((k) => (
+                  <Field key={k} label={k}>
+                    <select style={inputStyle} value={o.scores[k]} onChange={(e) => updateScore(o, k, e.target.value)}>
+                      {RATING_WORDS.map((r) => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </Field>
                 ))}
               </div>
-            </details>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12, color: COLORS.textSecondary }}>Status:</span>
+                {["In training", "Fairly ready", "Ready", "Independently ready", "Graduated"].map((s) => (
+                  <Btn key={s} small tone={o.status === s ? "amber" : "ghost"} onClick={() => setStatus(o, s)}>{s}</Btn>
+                ))}
+              </div>
+              {o.history && o.history.length > 0 && (
+                <details style={{ fontSize: 11, color: COLORS.textMuted }}>
+                  <summary style={{ cursor: "pointer" }}>Edit log ({o.history.length})</summary>
+                  <div style={{ marginTop: 6 }}>
+                    {o.history.slice().reverse().slice(0, 10).map((h, i) => (
+                      <div key={i} style={{ padding: "3px 0", fontFamily: "'JetBrains Mono', monospace" }}>
+                        {new Date(h.timestamp).toLocaleString()} — {h.admin} set {h.field} to "{h.newValue}"
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </>
           )}
         </Panel>
       ))}

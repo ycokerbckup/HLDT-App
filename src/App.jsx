@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, GraduationCap, Wrench, CalendarDays,
   Wallet, MessageSquare, Plus, X, ChevronRight, Shield, User,
   CheckCircle2, Clock, Trash2, Save, LogOut, RefreshCw, Download,
-  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil, GripVertical, Eye, EyeOff, Camera
+  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil, GripVertical, Eye, EyeOff, Camera, Menu
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "./supabaseClient";
@@ -793,28 +793,64 @@ function Dashboard_Shell({ session, profile, setProfile }) {
 
       {isMobile ? (
         <>
-          {/* Compact top bar: hamburger opens account menu */}
+          {/* Hamburger opens a full drawer with every tab, so nothing is scrolled off-screen */}
           <div style={{ position: "fixed", top: 8, left: 8, zIndex: 1500 }}>
             <button
               onClick={() => setShowAccountMenu(!showAccountMenu)}
-              aria-label="Account menu"
-              style={{ width: 32, height: 32, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.surface2, border: `1px solid ${COLORS.border}`, color: COLORS.textPrimary, cursor: "pointer" }}
+              aria-label="Menu"
+              style={{ width: 32, height: 32, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.surface2, border: `1px solid ${COLORS.border}`, color: COLORS.textPrimary, cursor: "pointer", position: "relative" }}
             >
-              {isAdmin ? <Shield size={14} color={COLORS.amber} /> : <User size={14} />}
+              <Menu size={16} />
+              {Object.keys(unreadByTab).length > 0 && <span style={{ position: "absolute", top: -2, right: -2, width: 8, height: 8, borderRadius: 999, background: COLORS.red, border: `1.5px solid ${COLORS.bg}` }} />}
             </button>
-            {showAccountMenu && (
-              <div className="hldt-modal" style={{ position: "absolute", top: 38, left: 0, width: 220, background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 12 }}>
-                <div style={{ fontSize: 12, color: COLORS.textPrimary, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profile.full_name || session.user.email}</div>
-                <Badge tone={isAdmin ? "amber" : "gray"}>{profile.role}</Badge>
-                <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-                  {isAdmin && <Btn small tone="ghost" onClick={() => { exportAllData(); notify("Backup downloaded"); setShowAccountMenu(false); }}><Download size={12} /> Export data</Btn>}
-                  <Btn small tone="ghost" onClick={() => supabase.auth.signOut()}><LogOut size={12} /> Sign out</Btn>
-                </div>
-              </div>
-            )}
           </div>
 
-          <div style={{ padding: "56px 14px 70px", minWidth: 0, flex: 1, overflowY: "auto" }}>
+          {showAccountMenu && (
+            <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 1600 }} onClick={() => setShowAccountMenu(false)}>
+              <div
+                className="hldt-modal"
+                onClick={(e) => e.stopPropagation()}
+                style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 250, background: COLORS.surface1, borderRight: `1px solid ${COLORS.border}`, display: "flex", flexDirection: "column", overflowY: "auto" }}
+              >
+                <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${COLORS.border}` }}>
+                  <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 17 }}>DISPLAY TEAM</div>
+                  <div style={{ fontSize: 10, color: COLORS.textMuted, fontFamily: "'JetBrains Mono', monospace", marginTop: 2 }}>OPS CONSOLE</div>
+                </div>
+
+                <div style={{ flex: 1, padding: "8px" }}>
+                  {nav.map((n) => {
+                    const Icon = n.icon;
+                    const active = tab === n.id;
+                    const hasUnread = unreadByTab[n.id] > 0;
+                    return (
+                      <div
+                        key={n.id}
+                        onClick={() => { setTab(n.id); setShowAccountMenu(false); }}
+                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 10px", marginBottom: 2, borderRadius: 6, cursor: "pointer", fontSize: 13, color: active ? COLORS.textPrimary : COLORS.textSecondary, background: active ? COLORS.surface2 : "transparent" }}
+                      >
+                        <div style={{ position: "relative", display: "flex" }}>
+                          <Icon size={16} strokeWidth={1.8} />
+                          {hasUnread && <span style={{ position: "absolute", top: -2, right: -3, width: 6, height: 6, borderRadius: 999, background: COLORS.red }} />}
+                        </div>
+                        {n.label}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div style={{ padding: 12, borderTop: `1px solid ${COLORS.border}` }}>
+                  <div style={{ fontSize: 12, color: COLORS.textPrimary, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profile.full_name || session.user.email}</div>
+                  <Badge tone={isAdmin ? "amber" : "gray"}>{profile.role}</Badge>
+                  <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                    {isAdmin && <Btn small tone="ghost" onClick={() => { exportAllData(); notify("Backup downloaded"); setShowAccountMenu(false); }}><Download size={12} /> Export data</Btn>}
+                    <Btn small tone="ghost" onClick={() => supabase.auth.signOut()}><LogOut size={12} /> Sign out</Btn>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div style={{ padding: "56px 14px 20px", minWidth: 0, flex: 1, overflowY: "auto" }}>
             {!loaded ? (
               <SkeletonLoader />
             ) : (
@@ -831,33 +867,6 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} canReadFeedback={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} />}
               </div>
             )}
-          </div>
-
-          {/* Bottom tab bar */}
-          <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, display: "flex", overflowX: "auto", background: COLORS.surface1, borderTop: `1px solid ${COLORS.border}`, zIndex: 1400 }}>
-            {nav.map((n) => {
-              const Icon = n.icon;
-              const active = tab === n.id;
-              const hasUnread = unreadByTab[n.id] > 0;
-              return (
-                <div
-                  key={n.id}
-                  onClick={() => setTab(n.id)}
-                  style={{
-                    flex: "0 0 auto", minWidth: 62, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                    gap: 3, padding: "8px 6px", cursor: "pointer",
-                    color: active ? COLORS.amber : COLORS.textMuted,
-                    borderTop: active ? `2px solid ${COLORS.amber}` : "2px solid transparent",
-                  }}
-                >
-                  <div style={{ position: "relative" }}>
-                    <Icon size={17} strokeWidth={1.8} />
-                    {hasUnread && <span style={{ position: "absolute", top: -2, right: -3, width: 7, height: 7, borderRadius: 999, background: COLORS.red, border: `1.5px solid ${COLORS.surface1}` }} />}
-                  </div>
-                  <span style={{ fontSize: 9, textAlign: "center", lineHeight: 1.1 }}>{n.label}</span>
-                </div>
-              );
-            })}
           </div>
         </>
       ) : (

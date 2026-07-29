@@ -1,0 +1,19 @@
+name: Birthday Email Reminders
+
+on:
+  schedule:
+    - cron: '15 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Send birthday reminder emails
+        env:
+          SUPABASE_URL: https://jsxatpqdolmgcoyibbam.supabase.co
+          SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: python3 scripts/send_birthday_emails.py

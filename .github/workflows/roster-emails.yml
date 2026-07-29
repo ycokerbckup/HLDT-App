@@ -1,0 +1,19 @@
+name: Roster and Assignment Emails
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Send roster/assignment emails
+        env:
+          SUPABASE_URL: https://jsxatpqdolmgcoyibbam.supabase.co
+          SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: python3 scripts/send_roster_emails.py

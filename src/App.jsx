@@ -94,6 +94,11 @@ function currency(n) {
   return `₦${Math.round(n || 0).toLocaleString()}`;
 }
 
+// Dues aren't expected from a trainee until they're promoted to full membership.
+function duesExempt(m) {
+  return m.tier === "Trainee";
+}
+
 const AVATAR_PALETTE = ["#E8A33D", "#3DDC97", "#5B9BE0", "#D4537E", "#7F77DD", "#E24B4A", "#0F6E56", "#B87A1F"];
 
 function hashColor(id) {
@@ -1501,7 +1506,7 @@ function OwingDuesModal({ data, onClose }) {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const owing = data.members
     .map((m) => ({ m, due: getDue(m, month) }))
-    .filter((x) => x.due.status === "owing");
+    .filter((x) => x.due.status === "owing" && !duesExempt(x.m));
 
   return (
     <Modal title="Members owing dues" onClose={onClose} width={520}>
@@ -1560,7 +1565,7 @@ function WalletPanel({ data, isAdmin }) {
       data.members.forEach((m) => {
         Object.keys(m.dues || {}).forEach((recordedMonth) => {
           const due = getDue(m, recordedMonth);
-          if (due.status !== "free") expected += rate(m);
+          if (due.status !== "free" && !duesExempt(m)) expected += rate(m);
           collected += due.amount || 0;
         });
       });
@@ -1568,7 +1573,7 @@ function WalletPanel({ data, isAdmin }) {
     }
     data.members.forEach((m) => {
       const due = getDue(m, mo);
-      if (due.status !== "free") expected += rate(m);
+      if (due.status !== "free" && !duesExempt(m)) expected += rate(m);
       collected += due.amount || 0;
     });
     return { expected, collected };
@@ -1636,7 +1641,7 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWel
   const openTickets = data.tickets.filter((t) => t.status !== "Resolved");
   const inTraining = data.onboarding.filter((o) => o.status !== "Graduated");
   const readyToGraduate = data.onboarding.filter((o) => o.status === "Independently ready" || o.status === "Ready");
-  const owingCount = data.members.filter((m) => getDue(m, currentMonth).status === "owing").length;
+  const owingCount = data.members.filter((m) => !duesExempt(m) && getDue(m, currentMonth).status === "owing").length;
 
   const todayKey = (() => {
     const d = new Date();
@@ -2206,13 +2211,13 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify }) {
           </div>
           {data.members.length === 0 ? <EmptyRow text="No members yet." /> : data.members.map((m) => (
             <div key={m.id} style={{ display: "grid", gridTemplateColumns: `1.4fr repeat(${months.length}, 0.9fr)`, alignItems: "center", padding: "8px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 12 }}>
-              <div>{m.name} <span style={{ color: COLORS.textMuted }}>· {currency(rate(m))}</span></div>
+              <div>{m.name} <span style={{ color: COLORS.textMuted }}>· {duesExempt(m) ? "no dues yet (trainee)" : currency(rate(m))}</span></div>
               {months.map((mo) => {
                 const due = getDue(m, mo);
                 const tone = due.status === "paid" ? "green" : due.status === "owing" ? "red" : due.status === "free" ? "amber" : "gray";
                 return (
                   <div key={mo} style={{ textAlign: "center", cursor: "pointer" }} onClick={() => setEditing({ member: m, month: mo })}>
-                    <Badge tone={tone}>{due.status === "unset" ? "—" : due.amount ? currency(due.amount) : due.status}</Badge>
+                    <Badge tone={tone}>{due.status === "unset" ? (duesExempt(m) ? "Trainee" : "—") : due.amount ? currency(due.amount) : due.status}</Badge>
                   </div>
                 );
               })}

@@ -17,6 +17,18 @@ SUPABASE_URL = os.environ["SUPABASE_URL"]
 SERVICE_KEY = os.environ["SERVICE_ROLE_KEY"]
 RESEND_KEY = os.environ.get("RESEND_API_KEY")
 FROM_ADDRESS = os.environ.get("RESEND_FROM", "Display Team Ops <onboarding@resend.dev>")
+APP_URL = os.environ.get("APP_URL", "").rstrip("/")
+
+
+def cta_button():
+    if not APP_URL:
+        return ""
+    return (
+        f'<p><a href="{APP_URL}/?tab=dashboard" '
+        f'style="display:inline-block;padding:10px 16px;background:#E8A33D;'
+        f'color:#14171C;text-decoration:none;border-radius:6px;font-weight:600;">'
+        f'Open in app</a></p>'
+    )
 
 
 def api_get(path):
@@ -80,7 +92,7 @@ def main():
             target = today + datetime.timedelta(days=offset)
             if target.day == day and target.month == month:
                 subject = f"Birthday reminder: {m['name']} is {label}"
-                html = f"<p><strong>{m['name']}'s</strong> birthday is {label} ({dob}).</p><p>Time to plan something for them.</p>"
+                html = f"<p><strong>{m['name']}'s</strong> birthday is {label} ({dob}).</p><p>Time to plan something for them.</p>" + cta_button()
                 send_email(list(eligible_emails), subject, html)
 
     print("Done.")

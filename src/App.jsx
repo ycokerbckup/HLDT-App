@@ -57,12 +57,15 @@ const TIERS = ["Trainee", "Member", "Leader", "HOD"];
 const RATING_WORDS = ["Poor", "Average", "Good", "Very good"];
 const TICKET_STATUSES = ["Open", "Assigned", "In progress", "Resolved"];
 const SYSTEMS = ["proPresenter", "vmix", "resolume", "monitors", "screens", "network"];
+const DUES_START_MONTH = "2026-06";
+
 const MONTHS = () => {
   const out = [];
   const d = new Date();
   for (let i = -2; i <= 2; i++) {
     const dt = new Date(d.getFullYear(), d.getMonth() + i, 1);
-    out.push(dt.toISOString().slice(0, 7));
+    const mo = dt.toISOString().slice(0, 7);
+    if (mo >= DUES_START_MONTH) out.push(mo);
   }
   return out;
 };
@@ -72,7 +75,8 @@ function monthsRange(n) {
   const d = new Date();
   for (let i = n - 1; i >= 0; i--) {
     const dt = new Date(d.getFullYear(), d.getMonth() - i, 1);
-    out.push(dt.toISOString().slice(0, 7));
+    const mo = dt.toISOString().slice(0, 7);
+    if (mo >= DUES_START_MONTH) out.push(mo);
   }
   return out;
 }
@@ -592,7 +596,11 @@ export default function App() {
 /* ---------------- authenticated shell ---------------- */
 
 function Dashboard_Shell({ session, profile, setProfile }) {
-  const [tab, setTab] = useState("dashboard");
+  const [tab, setTab] = useState(() => {
+    if (typeof window === "undefined") return "dashboard";
+    const params = new URLSearchParams(window.location.search);
+    return params.get("tab") || "dashboard";
+  });
   const [data, setData] = useState({ members: [], onboarding: [], tickets: [], feedback: [], announcements: [], notifications: [], readIds: [] });
   const [loaded, setLoaded] = useState(false);
   const isAdmin = profile.role === "admin";
@@ -715,7 +723,17 @@ function Dashboard_Shell({ session, profile, setProfile }) {
   });
 
   const [showKym, setShowKym] = useState(false);
-  const [pendingDm, setPendingDm] = useState(null);
+  const [pendingDm, setPendingDm] = useState(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("dm") || null;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.location.search) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
   const [celebrantType, setCelebrantType] = useState(null);
   const kymPromptedRef = useRef(false);
   useEffect(() => {
@@ -2189,7 +2207,9 @@ function EquipmentTab({ data, isAdmin, myMember, reload, notify }) {
 
   async function assign(t, memberId) {
     const member = data.members.find((m) => m.id === memberId);
-    await supabase.from("tickets").update({ assigned_to_id: memberId || null, assigned_to: member?.name || null }).eq("id", t.id);
+    const payload = { assigned_to_id: memberId || null, assigned_to: member?.name || null };
+    if (memberId && t.status !== "Resolved") payload.status = "Assigned";
+    await supabase.from("tickets").update(payload).eq("id", t.id);
     reload();
   }
 

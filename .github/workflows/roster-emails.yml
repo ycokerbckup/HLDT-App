@@ -16,4 +16,5 @@ jobs:
           SUPABASE_URL: https://jsxatpqdolmgcoyibbam.supabase.co
           SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          APP_URL: ${{ vars.APP_URL }}
         run: python3 scripts/send_roster_emails.py

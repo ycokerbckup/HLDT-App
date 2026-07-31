@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, GraduationCap, Wrench, CalendarDays,
   Wallet, MessageSquare, Plus, X, ChevronRight, Shield, User,
   CheckCircle2, Clock, Trash2, Save, LogOut, RefreshCw, Download,
-  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil, GripVertical, Eye, EyeOff, Camera, Menu
+  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil, GripVertical, Eye, EyeOff, Camera, Menu, CornerUpLeft, Check, CheckCheck
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "./supabaseClient";
@@ -1159,6 +1159,8 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
   const [conversations, setConversations] = useState([]);
   const [thread, setThread] = useState({ type: "team" });
   const [messages, setMessages] = useState([]);
+  const [reads, setReads] = useState([]);
+  const [replyingTo, setReplyingTo] = useState(null);
   const [text, setText] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState("");
@@ -1190,8 +1192,16 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
     query = thread.type === "team" ? query.is("conversation_id", null) : query.eq("conversation_id", thread.conversationId);
     const { data } = await query;
     setMessages(data || []);
-    (data || []).filter((m) => m.sender_id !== session.user.id && !m.seen_at).forEach((m) => {
-      supabase.rpc("mark_message_seen", { msg_id: m.id });
+    const ids = (data || []).map((m) => m.id);
+    if (ids.length) {
+      const { data: readRows } = await supabase.from("message_reads").select("message_id, profile_id").in("message_id", ids);
+      setReads(readRows || []);
+    } else {
+      setReads([]);
+    }
+    (data || []).filter((m) => m.sender_id !== session.user.id).forEach((m) => {
+      if (!m.seen_at) supabase.rpc("mark_message_seen", { msg_id: m.id });
+      supabase.rpc("mark_message_read", { msg_id: m.id });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thread.type, thread.conversationId]);
@@ -1201,6 +1211,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
     const channel = supabase
       .channel(`chat-${thread.type}-${thread.conversationId || "team"}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, loadMessages)
+      .on("postgres_changes", { event: "*", schema: "public", table: "message_reads" }, loadMessages)
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [loadMessages]);
@@ -1216,10 +1227,20 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
       sender_name: profile.full_name || session.user.email,
       body: text.trim(),
       conversation_id: thread.type === "dm" ? thread.conversationId : null,
+      reply_to_id: replyingTo?.id || null,
     };
     const { error } = await supabase.from("messages").insert(payload);
     if (error) { notify?.(error.message, "error"); return; }
     setText("");
+    setReplyingTo(null);
+  }
+
+  function receiptFor(m) {
+    if (m.sender_id !== session.user.id) return null;
+    const readers = reads.filter((r) => r.message_id === m.id && r.profile_id !== session.user.id);
+    if (readers.length === 0) return null;
+    if (thread.type === "dm") return "Seen";
+    return `Seen by ${readers.length}`;
   }
 
   function startEdit(m) {
@@ -1314,6 +1335,8 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
             ) : (
               messages.map((m) => {
                 const mine = m.sender_id === session.user.id;
+                const quoted = m.reply_to_id ? messages.find((x) => x.id === m.reply_to_id) : null;
+                const receipt = receiptFor(m);
                 return (
                   <div key={m.id} style={{ display: "flex", gap: 8, flexDirection: mine ? "row-reverse" : "row" }}>
                     <Avatar label={avatarLabels[m.sender_id] || m.sender_name?.[0] || "?"} color={hashColor(m.sender_id)} size={26} celebration={celebrationForProfile(m.sender_id)} />
@@ -1333,22 +1356,38 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                               padding: "8px 12px", borderRadius: 10, fontSize: 13,
                             }}
                           >
+                            {quoted && (
+                              <div style={{ borderLeft: `2px solid ${mine ? COLORS.amber : COLORS.textMuted}`, paddingLeft: 8, marginBottom: 5, opacity: 0.75, fontSize: 11 }}>
+                                <div style={{ fontWeight: 500 }}>{quoted.sender_id === session.user.id ? "You" : quoted.sender_name}</div>
+                                <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>{quoted.body}</div>
+                              </div>
+                            )}
                             {m.body}
                             {m.edited_at && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 6 }}>(edited)</span>}
                           </div>
-                          {mine && withinEditWindow(m) && (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                            {mine && withinEditWindow(m) && (
+                              <button
+                                onClick={() => startEdit(m)}
+                                aria-label="Edit message"
+                                style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex" }}
+                              >
+                                <Pencil size={12} />
+                              </button>
+                            )}
                             <button
-                              onClick={() => startEdit(m)}
-                              aria-label="Edit message"
+                              onClick={() => setReplyingTo(m)}
+                              aria-label="Reply"
                               style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex" }}
                             >
-                              <Pencil size={12} />
+                              <CornerUpLeft size={12} />
                             </button>
-                          )}
+                          </div>
                         </div>
                       )}
-                      <div style={{ fontSize: 10, color: COLORS.textMuted, marginTop: 2 }}>
+                      <div style={{ fontSize: 10, color: COLORS.textMuted, marginTop: 2, display: "flex", alignItems: "center", gap: 4, justifyContent: mine ? "flex-end" : "flex-start" }}>
                         {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        {receipt && (<><CheckCheck size={11} color={COLORS.green} /> {receipt}</>)}
                       </div>
                     </div>
                   </div>
@@ -1357,6 +1396,16 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
             )}
             <div ref={bottomRef} />
           </div>
+          {replyingTo && (
+            <div style={{ padding: "8px 12px", borderTop: `1px solid ${COLORS.border}`, background: COLORS.surface2, display: "flex", alignItems: "center", gap: 8 }}>
+              <CornerUpLeft size={12} color={COLORS.textMuted} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, color: COLORS.textSecondary, fontWeight: 500 }}>Replying to {replyingTo.sender_id === session.user.id ? "yourself" : replyingTo.sender_name}</div>
+                <div style={{ fontSize: 11, color: COLORS.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{replyingTo.body}</div>
+              </div>
+              <X size={14} style={{ cursor: "pointer", color: COLORS.textMuted, flexShrink: 0 }} onClick={() => setReplyingTo(null)} />
+            </div>
+          )}
           <div style={{ padding: 12, borderTop: `1px solid ${COLORS.border}`, display: "flex", gap: 8 }}>
             <input style={{ ...inputStyle, flex: 1 }} placeholder="Type a message..." value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} />
             <Btn tone="amber" onClick={send}>Send</Btn>

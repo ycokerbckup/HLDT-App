@@ -765,6 +765,18 @@ function Dashboard_Shell({ session, profile, setProfile }) {
     await supabase.from("notification_reads").insert({ notification_id: id, profile_id: session.user.id });
   }
 
+  async function goToTab(tabId, dmProfileId) {
+    setTab(tabId);
+    if (dmProfileId) setPendingDm(dmProfileId);
+    const toMark = data.notifications.filter((n) => n.linkTab === tabId && !data.readIds.includes(n.id));
+    if (toMark.length > 0) {
+      await supabase.from("notification_reads").upsert(
+        toMark.map((n) => ({ notification_id: n.id, profile_id: session.user.id })),
+        { onConflict: "notification_id,profile_id", ignoreDuplicates: true }
+      );
+    }
+  }
+
   async function exportAllData() {
     const [m, o, h, t, f] = await Promise.all([
       supabase.from("members").select("*"),
@@ -809,7 +821,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
         notifications={data.notifications}
         readIds={data.readIds}
         onRead={markNotificationRead}
-        onNavigate={(tabId, dmProfileId) => { setTab(tabId); if (dmProfileId) setPendingDm(dmProfileId); }}
+        onNavigate={(tabId, dmProfileId) => goToTab(tabId, dmProfileId)}
       />
       {showKym && <KYMModal onClose={() => { setShowKym(false); load(); }} notify={notify} />}
       {celebrantType && <CelebrantPopup type={celebrantType} name={profile.full_name?.split(" ")[0] || "there"} onClose={() => setCelebrantType(null)} />}
@@ -848,7 +860,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                     return (
                       <div
                         key={n.id}
-                        onClick={() => { setTab(n.id); setShowAccountMenu(false); }}
+                        onClick={() => { goToTab(n.id); setShowAccountMenu(false); }}
                         style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 10px", marginBottom: 2, borderRadius: 6, cursor: "pointer", fontSize: 13, color: active ? COLORS.textPrimary : COLORS.textSecondary, background: active ? COLORS.surface2 : "transparent" }}
                       >
                         <div style={{ position: "relative", display: "flex" }}>
@@ -878,7 +890,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
               <SkeletonLoader />
             ) : (
               <div key={tab} className="hldt-tab-content">
-                {tab === "dashboard" && <DashboardTab data={data} setTab={setTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} />}
+                {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} />}
                 {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
                 {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} reload={load} notify={notify} />}
@@ -906,7 +918,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 const active = tab === n.id;
                 const hasUnread = unreadByTab[n.id] > 0;
                 return (
-                  <div key={n.id} className="hldt-nav-item" onClick={() => setTab(n.id)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", marginBottom: 2, borderRadius: 6, cursor: "pointer", fontSize: 13, color: active ? COLORS.textPrimary : COLORS.textSecondary, background: active ? COLORS.surface2 : "transparent", borderLeft: active ? `2px solid ${COLORS.amber}` : "2px solid transparent" }}>
+                  <div key={n.id} className="hldt-nav-item" onClick={() => goToTab(n.id)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", marginBottom: 2, borderRadius: 6, cursor: "pointer", fontSize: 13, color: active ? COLORS.textPrimary : COLORS.textSecondary, background: active ? COLORS.surface2 : "transparent", borderLeft: active ? `2px solid ${COLORS.amber}` : "2px solid transparent" }}>
                     <div style={{ position: "relative", display: "flex" }}>
                       <Icon size={15} strokeWidth={1.8} />
                       {hasUnread && <span style={{ position: "absolute", top: -2, right: -3, width: 6, height: 6, borderRadius: 999, background: COLORS.red, border: `1.5px solid ${COLORS.surface1}` }} />}
@@ -937,7 +949,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
               <SkeletonLoader />
             ) : (
               <div key={tab} className="hldt-tab-content">
-                {tab === "dashboard" && <DashboardTab data={data} setTab={setTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} />}
+                {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} />}
                 {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
                 {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} reload={load} notify={notify} />}

@@ -15,6 +15,7 @@ jobs:
         env:
           SUPABASE_URL: https://jsxatpqdolmgcoyibbam.supabase.co
           SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           APP_URL: ${{ vars.APP_URL }}
         run: python3 scripts/send_birthday_emails.py

@@ -1,23 +1,32 @@
 """
 Sends birthday reminder emails (7 days before, 1 day before, day-of) to
-Welfare/Operations/Admin-unit admins, via Resend's email API (free tier:
-3,000 emails/month, no cost). Mirrors the in-app reminder logic that
-already runs inside Supabase via pg_cron — this is the email half of it.
+Welfare/Operations/Admin-unit admins, via Gmail SMTP (see email_utils.py).
+Mirrors the in-app reminder logic that already runs inside Supabase via
+pg_cron — this is the email half of it.
 
-If RESEND_API_KEY isn't set, this exits quietly. In-app reminders keep
-working either way; email is additive, not a dependency.
+If Gmail SMTP isn't configured, this exits quietly. In-app reminders
+keep working either way; email is additive, not a dependency.
 """
 import datetime
 import json
 import os
-import urllib.error
 import urllib.request
+
+from email_utils import send_email, email_configured
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SERVICE_KEY = os.environ["SERVICE_ROLE_KEY"]
-RESEND_KEY = os.environ.get("RESEND_API_KEY")
-FROM_ADDRESS = os.environ.get("RESEND_FROM", "Display Team Ops <onboarding@resend.dev>")
 APP_URL = os.environ.get("APP_URL", "").rstrip("/")
+
+
+def api_get(path):
+    req = urllib.request.Request(
+        SUPABASE_URL + path,
+        headers={"apikey": SERVICE_KEY, "Authorization": f"Bearer {SERVICE_KEY}"},
+    )
+    with urllib.request.urlopen(req, timeout=20) as r:
+        body = r.read().decode()
+        return json.loads(body) if body else []
 
 
 def cta_button():
@@ -31,35 +40,9 @@ def cta_button():
     )
 
 
-def api_get(path):
-    req = urllib.request.Request(
-        SUPABASE_URL + path,
-        headers={"apikey": SERVICE_KEY, "Authorization": f"Bearer {SERVICE_KEY}"},
-    )
-    with urllib.request.urlopen(req, timeout=20) as r:
-        body = r.read().decode()
-        return json.loads(body) if body else []
-
-
-def send_email(to_list, subject, html):
-    if not to_list:
-        return
-    req = urllib.request.Request(
-        "https://api.resend.com/emails",
-        method="POST",
-        headers={"Authorization": f"Bearer {RESEND_KEY}", "Content-Type": "application/json"},
-        data=json.dumps({"from": FROM_ADDRESS, "to": to_list, "subject": subject, "html": html}).encode(),
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            print("sent:", subject, "->", len(to_list), "recipients")
-    except urllib.error.HTTPError as e:
-        print("send failed:", e.code, e.read().decode()[:300])
-
-
 def main():
-    if not RESEND_KEY:
-        print("RESEND_API_KEY not set — skipping email send (in-app reminders are unaffected).")
+    if not email_configured():
+        print("Gmail SMTP not configured — skipping email send (in-app reminders are unaffected).")
         return
 
     members = api_get("/rest/v1/members?select=id,name,dob,unit,profile_id")

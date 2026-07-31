@@ -1,9 +1,10 @@
 """
 Sends emails for roster, assignment, new-signup, and DM-chat notifications.
-Polls the notifications table for rows not yet emailed, sends via Resend,
-marks them processed either way (so a bad email address doesn't retry
-forever). Team-channel chat broadcasts are intentionally skipped — every
-message in a group channel emailing everyone would be unusable spam.
+Polls the notifications table for rows not yet emailed, sends via Gmail
+SMTP (see email_utils.py), marks them processed either way (so a bad
+email address doesn't retry forever). Team-channel chat broadcasts are
+intentionally skipped — every message in a group channel emailing
+everyone would be unusable spam.
 
 Every email includes a clickable "Open in app" button pointing at the
 right tab (and, for DMs, the right conversation), built from the APP_URL
@@ -11,13 +12,12 @@ environment variable / repo variable.
 """
 import json
 import os
-import urllib.error
 import urllib.request
+
+from email_utils import send_email, email_configured
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SERVICE_KEY = os.environ["SERVICE_ROLE_KEY"]
-RESEND_KEY = os.environ.get("RESEND_API_KEY")
-FROM_ADDRESS = os.environ.get("RESEND_FROM", "Display Team Ops <onboarding@resend.dev>")
 APP_URL = os.environ.get("APP_URL", "").rstrip("/")
 
 
@@ -42,24 +42,6 @@ def api_patch(path, payload):
         r.read()
 
 
-def send_email(to_list, subject, html):
-    if not to_list:
-        return False
-    req = urllib.request.Request(
-        "https://api.resend.com/emails",
-        method="POST",
-        headers={"Authorization": f"Bearer {RESEND_KEY}", "Content-Type": "application/json"},
-        data=json.dumps({"from": FROM_ADDRESS, "to": to_list, "subject": subject, "html": html}).encode(),
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            r.read()
-        return True
-    except urllib.error.HTTPError as e:
-        print("send failed:", e.code, e.read().decode()[:300])
-        return False
-
-
 def cta_button(link_tab, dm_with):
     if not APP_URL:
         return ""
@@ -75,8 +57,8 @@ def cta_button(link_tab, dm_with):
 
 
 def main():
-    if not RESEND_KEY:
-        print("RESEND_API_KEY not set — skipping (in-app notifications are unaffected).")
+    if not email_configured():
+        print("Gmail SMTP not configured — skipping (in-app notifications are unaffected).")
         return
     if not APP_URL:
         print("Warning: APP_URL not set — emails will send without a clickable link.")

@@ -1281,10 +1281,14 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
       setReads([]);
       setReactions([]);
     }
-    (data || []).filter((m) => m.sender_id !== session.user.id).forEach((m) => {
-      if (!m.seen_at) supabase.rpc("mark_message_seen", { msg_id: m.id });
-      supabase.rpc("mark_message_read", { msg_id: m.id });
-    });
+    const others = (data || []).filter((m) => m.sender_id !== session.user.id);
+    await Promise.all(
+      others.flatMap((m) => {
+        const calls = [supabase.rpc("mark_message_read", { msg_id: m.id })];
+        if (!m.seen_at) calls.push(supabase.rpc("mark_message_seen", { msg_id: m.id }));
+        return calls;
+      })
+    );
     loadUnreadStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thread.type, thread.conversationId]);

@@ -64,8 +64,8 @@ def main():
         print("Warning: APP_URL not set — emails will send without a clickable link.")
 
     pending = api_get(
-        "/rest/v1/notifications?type=in.(roster,assignment,signup,chat,announcement)&emailed=eq.false"
-        "&select=id,type,title,body,link_tab,target_profile_id,dm_with_profile_id,message_id"
+        "/rest/v1/notifications?type=in.(roster,assignment,signup,announcement)&emailed=eq.false"
+        "&select=id,type,title,body,link_tab,target_profile_id,dm_with_profile_id"
     )
     if not pending:
         print("Nothing to send.")
@@ -75,25 +75,10 @@ def main():
     email_by_id = {p["id"]: p.get("email") for p in profiles}
     all_emails = [e for e in email_by_id.values() if e]
 
-    message_sender_cache = {}
-
-    def sender_of(message_id):
-        if not message_id:
-            return None
-        if message_id not in message_sender_cache:
-            rows = api_get(f"/rest/v1/messages?id=eq.{message_id}&select=sender_id")
-            message_sender_cache[message_id] = rows[0]["sender_id"] if rows else None
-        return message_sender_cache[message_id]
-
     for n in pending:
-        if n["type"] == "chat" and not n.get("target_profile_id"):
-            # Team-channel broadcast: email everyone except whoever sent it.
-            sender_id = sender_of(n.get("message_id"))
-            to = [e for pid, e in email_by_id.items() if e and pid != sender_id]
-        else:
-            target = n.get("target_profile_id")
-            to = [email_by_id.get(target)] if target else all_emails
-            to = [t for t in to if t]
+        target = n.get("target_profile_id")
+        to = [email_by_id.get(target)] if target else all_emails
+        to = [t for t in to if t]
 
         html = f"<p>{n.get('body') or ''}</p>" + cta_button(n.get("link_tab"), n.get("dm_with_profile_id"))
         sent = send_email(to, n["title"], html)

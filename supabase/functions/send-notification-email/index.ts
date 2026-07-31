@@ -14,7 +14,7 @@ const GMAIL_APP_PASSWORD = Deno.env.get("GMAIL_APP_PASSWORD")!;
 const APP_URL = (Deno.env.get("APP_URL") || "").replace(/\/$/, "");
 const FROM_NAME = "Display Team Ops";
 
-const EMAILABLE_TYPES = ["roster", "assignment", "signup", "chat", "announcement"];
+const EMAILABLE_TYPES = ["roster", "assignment", "signup", "announcement"];
 
 function ctaButton(linkTab?: string, dmWith?: string): string {
   if (!APP_URL) return "";
@@ -85,21 +85,7 @@ serve(async (req) => {
 
     let to: string[] = [];
 
-    if (record.type === "chat" && !record.target_profile_id) {
-      // Team-channel broadcast: everyone except whoever sent it.
-      let senderId: string | null = null;
-      if (record.message_id) {
-        const { data: msg } = await supabase
-          .from("messages")
-          .select("sender_id")
-          .eq("id", record.message_id)
-          .maybeSingle();
-        senderId = msg?.sender_id ?? null;
-      }
-      to = Object.entries(emailById)
-        .filter(([pid]) => pid !== senderId)
-        .map(([, email]) => email);
-    } else if (record.target_profile_id) {
+    if (record.target_profile_id) {
       const email = emailById[record.target_profile_id];
       to = email ? [email] : [];
       console.log("Targeted notification for profile", record.target_profile_id, "-> email found:", !!email);

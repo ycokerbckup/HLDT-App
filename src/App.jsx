@@ -1248,6 +1248,11 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversations, session.user.id]);
 
+  const loadUnreadStatusRef = useRef(loadUnreadStatus);
+  useEffect(() => {
+    loadUnreadStatusRef.current = loadUnreadStatus;
+  }, [loadUnreadStatus]);
+
   useEffect(() => {
     loadConversations().then((data) => loadUnreadStatus(data));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1289,7 +1294,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
         return calls;
       })
     );
-    loadUnreadStatus();
+    loadUnreadStatusRef.current();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thread.type, thread.conversationId]);
 

@@ -1176,6 +1176,13 @@ function DateDivider({ date }) {
 
 /* ---------------- chat ---------------- */
 
+const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "🙏", "🎉"];
+const PIN_DURATIONS = [
+  { label: "24h", hours: 24 },
+  { label: "7d", hours: 24 * 7 },
+  { label: "30d", hours: 24 * 30 },
+];
+
 function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfileId, onPendingDmConsumed }) {
   const isMobile = useIsMobile();
   const [mobileShowThread, setMobileShowThread] = useState(false);
@@ -1183,11 +1190,17 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
   const [thread, setThread] = useState({ type: "team" });
   const [messages, setMessages] = useState([]);
   const [reads, setReads] = useState([]);
+  const [reactions, setReactions] = useState([]);
+  const [pins, setPins] = useState([]);
   const [replyingTo, setReplyingTo] = useState(null);
   const [text, setText] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState("");
-  const [showNewDm, setShowNewDm] = useState(false);
+  const [unreadByThread, setUnreadByThread] = useState({});
+  const [highlightedId, setHighlightedId] = useState(null);
+  const [showReactionPickerFor, setShowReactionPickerFor] = useState(null);
+  const [showPinPickerFor, setShowPinPickerFor] = useState(null);
+  const [showReceiptsFor, setShowReceiptsFor] = useState(null);
   const bottomRef = useRef(null);
 
   const dmCandidates = members.filter((m) => m.profileId && m.profileId !== session.user.id);
@@ -1206,9 +1219,50 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
   async function loadConversations() {
     const { data } = await supabase.from("conversations").select("*").or(`user_a.eq.${session.user.id},user_b.eq.${session.user.id}`);
     setConversations(data || []);
+    return data || [];
   }
 
-  useEffect(() => { loadConversations(); }, []);
+  const loadUnreadStatus = useCallback(async (convList) => {
+    const convIds = (convList || conversations).map((c) => c.id);
+    let query = supabase.from("messages").select("id, conversation_id, sender_id");
+    query = convIds.length > 0
+      ? query.or(`conversation_id.is.null,conversation_id.in.(${convIds.join(",")})`)
+      : query.is("conversation_id", null);
+    const { data: allMsgs } = await query;
+    const others = (allMsgs || []).filter((m) => m.sender_id !== session.user.id);
+    let readSet = new Set();
+    if (others.length) {
+      const { data: readRows } = await supabase
+        .from("message_reads")
+        .select("message_id")
+        .eq("profile_id", session.user.id)
+        .in("message_id", others.map((m) => m.id));
+      readSet = new Set((readRows || []).map((r) => r.message_id));
+    }
+    const map = {};
+    others.forEach((m) => {
+      if (readSet.has(m.id)) return;
+      map[m.conversation_id || "team"] = true;
+    });
+    setUnreadByThread(map);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversations, session.user.id]);
+
+  useEffect(() => {
+    loadConversations().then((data) => loadUnreadStatus(data));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("chat-unread-tracker")
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () => loadUnreadStatus())
+      .on("postgres_changes", { event: "*", schema: "public", table: "message_reads" }, () => loadUnreadStatus())
+      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => loadConversations().then((data) => loadUnreadStatus(data)))
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadUnreadStatus]);
 
   const loadMessages = useCallback(async () => {
     let query = supabase.from("messages").select("*").order("created_at", { ascending: true });
@@ -1217,26 +1271,43 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
     setMessages(data || []);
     const ids = (data || []).map((m) => m.id);
     if (ids.length) {
-      const { data: readRows } = await supabase.from("message_reads").select("message_id, profile_id").in("message_id", ids);
+      const [{ data: readRows }, { data: reactionRows }] = await Promise.all([
+        supabase.from("message_reads").select("message_id, profile_id").in("message_id", ids),
+        supabase.from("message_reactions").select("message_id, profile_id, emoji").in("message_id", ids),
+      ]);
       setReads(readRows || []);
+      setReactions(reactionRows || []);
     } else {
       setReads([]);
+      setReactions([]);
     }
     (data || []).filter((m) => m.sender_id !== session.user.id).forEach((m) => {
       if (!m.seen_at) supabase.rpc("mark_message_seen", { msg_id: m.id });
       supabase.rpc("mark_message_read", { msg_id: m.id });
     });
+    loadUnreadStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thread.type, thread.conversationId]);
 
+  async function loadPins() {
+    let query = supabase.from("message_pins").select("*, messages(id, body, sender_name, sender_id)").order("created_at", { ascending: false });
+    query = thread.type === "team" ? query.is("conversation_id", null) : query.eq("conversation_id", thread.conversationId);
+    const { data } = await query;
+    setPins(data || []);
+  }
+
   useEffect(() => {
     loadMessages();
+    loadPins();
     const channel = supabase
       .channel(`chat-${thread.type}-${thread.conversationId || "team"}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, loadMessages)
       .on("postgres_changes", { event: "*", schema: "public", table: "message_reads" }, loadMessages)
+      .on("postgres_changes", { event: "*", schema: "public", table: "message_reactions" }, loadMessages)
+      .on("postgres_changes", { event: "*", schema: "public", table: "message_pins" }, loadPins)
       .subscribe();
     return () => supabase.removeChannel(channel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadMessages]);
 
   useEffect(() => {
@@ -1291,7 +1362,6 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
       loadConversations();
     }
     setThread({ type: "dm", conversationId: existing.id, otherName: member.name });
-    setShowNewDm(false);
   }
 
   useEffect(() => {
@@ -1319,7 +1389,53 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
     loadMessages();
   }
 
-  const [showReceiptsFor, setShowReceiptsFor] = useState(null);
+  function scrollToMessage(id) {
+    const el = document.getElementById(`msg-${id}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedId(id);
+    setTimeout(() => setHighlightedId((cur) => (cur === id ? null : cur)), 1600);
+  }
+
+  function reactionsFor(messageId) {
+    const rows = reactions.filter((r) => r.message_id === messageId);
+    const byEmoji = {};
+    rows.forEach((r) => {
+      if (!byEmoji[r.emoji]) byEmoji[r.emoji] = [];
+      byEmoji[r.emoji].push(r.profile_id);
+    });
+    return byEmoji;
+  }
+
+  async function toggleReaction(messageId, emoji) {
+    const mine = reactions.find((r) => r.message_id === messageId && r.profile_id === session.user.id && r.emoji === emoji);
+    if (mine) {
+      await supabase.from("message_reactions").delete().eq("message_id", messageId).eq("profile_id", session.user.id).eq("emoji", emoji);
+    } else {
+      await supabase.from("message_reactions").insert({ message_id: messageId, profile_id: session.user.id, emoji });
+    }
+    setShowReactionPickerFor(null);
+    loadMessages();
+  }
+
+  async function pinMessage(messageId, hours) {
+    const expiresAt = new Date(Date.now() + hours * 3600 * 1000).toISOString();
+    const { error } = await supabase.from("message_pins").insert({
+      message_id: messageId,
+      conversation_id: thread.type === "dm" ? thread.conversationId : null,
+      pinned_by: session.user.id,
+      expires_at: expiresAt,
+    });
+    if (error) { notify?.(error.message, "error"); setShowPinPickerFor(null); return; }
+    notify?.("Message pinned");
+    setShowPinPickerFor(null);
+    loadPins();
+  }
+
+  async function unpinMessage(pinId) {
+    await supabase.from("message_pins").delete().eq("id", pinId);
+    loadPins();
+  }
 
   return (
     <div>
@@ -1330,27 +1446,33 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
             <div
               className="hldt-row" data-clickable="true"
               onClick={() => { setThread({ type: "team" }); setMobileShowThread(true); }}
-              style={{ padding: "8px 10px", borderRadius: 6, cursor: "pointer", background: thread.type === "team" ? COLORS.surface2 : "transparent", fontSize: 13 }}
+              style={{ padding: "8px 10px", borderRadius: 6, cursor: "pointer", background: thread.type === "team" ? COLORS.surface2 : "transparent", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}
             >
-              # Team channel
+              <span style={{ flex: 1 }}># Team channel</span>
+              {unreadByThread.team && <span style={{ width: 7, height: 7, borderRadius: 999, background: COLORS.red, flexShrink: 0 }} />}
             </div>
             <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", padding: "10px 10px 4px" }}>Direct messages</div>
-            {conversations.map((c) => {
-              const otherId = c.user_a === session.user.id ? c.user_b : c.user_a;
-              const otherMember = dmCandidates.find((m) => m.profileId === otherId);
-              return (
-                <div
-                  key={c.id}
-                  className="hldt-row" data-clickable="true"
-                  onClick={() => { setThread({ type: "dm", conversationId: c.id, otherName: otherMember?.name || "Member" }); setMobileShowThread(true); }}
-                  style={{ padding: "8px 10px", borderRadius: 6, cursor: "pointer", background: thread.type === "dm" && thread.conversationId === c.id ? COLORS.surface2 : "transparent", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}
-                >
-                  <Avatar label={avatarLabels[otherId] || "?"} color={hashColor(otherId)} size={22} celebration={celebrationForProfile(otherId)} />
-                  {otherMember?.name || "Member"}
-                </div>
-              );
-            })}
-            <Btn small tone="ghost" onClick={() => setShowNewDm(true)}><Plus size={12} /> New DM</Btn>
+            {dmCandidates.length === 0 ? (
+              <div style={{ fontSize: 11, color: COLORS.textMuted, padding: "4px 10px" }}>No other members with accounts yet.</div>
+            ) : (
+              dmCandidates.map((m) => {
+                const conv = conversations.find((c) => (c.user_a === session.user.id ? c.user_b : c.user_a) === m.profileId);
+                const active = thread.type === "dm" && conv && thread.conversationId === conv.id;
+                const hasUnread = conv && unreadByThread[conv.id];
+                return (
+                  <div
+                    key={m.id}
+                    className="hldt-row" data-clickable="true"
+                    onClick={() => { startDm(m); setMobileShowThread(true); }}
+                    style={{ padding: "8px 10px", borderRadius: 6, cursor: "pointer", background: active ? COLORS.surface2 : "transparent", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}
+                  >
+                    <Avatar label={avatarLabels[m.profileId] || "?"} color={hashColor(m.profileId)} size={22} celebration={celebrationForProfile(m.profileId)} />
+                    <span style={{ flex: 1 }}>{m.name}</span>
+                    {hasUnread && <span style={{ width: 7, height: 7, borderRadius: 999, background: COLORS.red, flexShrink: 0 }} />}
+                  </div>
+                );
+              })
+            )}
           </div>
         )}
 
@@ -1364,6 +1486,21 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
             )}
             {thread.type === "team" ? "Team channel" : thread.otherName}
           </div>
+
+          {pins.length > 0 && (
+            <div style={{ padding: "8px 16px", borderBottom: `1px solid ${COLORS.border}`, background: COLORS.surface2, display: "flex", flexDirection: "column", gap: 4 }}>
+              {pins.map((p) => (
+                <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11 }}>
+                  <span style={{ flexShrink: 0 }}>📌</span>
+                  <span style={{ cursor: p.messages ? "pointer" : "default", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: COLORS.textSecondary }} onClick={() => p.messages && scrollToMessage(p.messages.id)}>
+                    <b style={{ color: COLORS.textPrimary, fontWeight: 500 }}>{p.messages?.sender_id === session.user.id ? "You" : p.messages?.sender_name}:</b> {p.messages?.body || "(message removed)"}
+                  </span>
+                  <X size={12} style={{ cursor: "pointer", color: COLORS.textMuted, flexShrink: 0 }} onClick={() => unpinMessage(p.id)} />
+                </div>
+              ))}
+            </div>
+          )}
+
           <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
             {messages.length === 0 ? (
               <EmptyRow text="No messages yet." />
@@ -1377,10 +1514,19 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                 const readerNames = reads
                   .filter((r) => r.message_id === m.id && r.profile_id !== session.user.id)
                   .map((r) => members.find((mem) => mem.profileId === r.profile_id)?.name || "Someone");
+                const msgReactions = reactionsFor(m.id);
                 return (
                   <React.Fragment key={m.id}>
                     {showDateDivider && <DateDivider date={m.created_at} />}
-                    <div style={{ display: "flex", gap: 8, flexDirection: mine ? "row-reverse" : "row" }}>
+                    <div
+                      id={`msg-${m.id}`}
+                      style={{
+                        display: "flex", gap: 8, flexDirection: mine ? "row-reverse" : "row",
+                        borderRadius: 8, transition: "background-color 400ms ease",
+                        background: highlightedId === m.id ? COLORS.amberDim : "transparent",
+                        padding: highlightedId === m.id ? 6 : 0, margin: highlightedId === m.id ? -6 : 0,
+                      }}
+                    >
                     <Avatar label={avatarLabels[m.sender_id] || m.sender_name?.[0] || "?"} color={hashColor(m.sender_id)} size={26} celebration={celebrationForProfile(m.sender_id)} />
                     <div style={{ maxWidth: "70%" }}>
                       {!mine && <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 2 }}>{m.sender_name}</div>}
@@ -1399,7 +1545,10 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                             }}
                           >
                             {quoted && (
-                              <div style={{ borderLeft: `2px solid ${mine ? COLORS.amber : COLORS.textMuted}`, paddingLeft: 8, marginBottom: 5, opacity: 0.75, fontSize: 11 }}>
+                              <div
+                                onClick={() => scrollToMessage(quoted.id)}
+                                style={{ borderLeft: `2px solid ${mine ? COLORS.amber : COLORS.textMuted}`, paddingLeft: 8, marginBottom: 5, opacity: 0.75, fontSize: 11, cursor: "pointer" }}
+                              >
                                 <div style={{ fontWeight: 500 }}>{quoted.sender_id === session.user.id ? "You" : quoted.sender_name}</div>
                                 <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>{quoted.body}</div>
                               </div>
@@ -1407,33 +1556,62 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                             {m.body}
                             {m.edited_at && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 6 }}>(edited)</span>}
                           </div>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 2, position: "relative" }}>
                             {mine && withinEditWindow(m) && (
-                              <button
-                                onClick={() => startEdit(m)}
-                                aria-label="Edit message"
-                                style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex" }}
-                              >
+                              <button onClick={() => startEdit(m)} aria-label="Edit message" style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex" }}>
                                 <Pencil size={12} />
                               </button>
                             )}
                             {mine && withinDeleteWindow(m) && (
-                              <button
-                                onClick={() => deleteMessage(m)}
-                                aria-label="Delete message"
-                                style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex" }}
-                              >
+                              <button onClick={() => deleteMessage(m)} aria-label="Delete message" style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex" }}>
                                 <Trash2 size={12} />
                               </button>
                             )}
-                            <button
-                              onClick={() => setReplyingTo(m)}
-                              aria-label="Reply"
-                              style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex" }}
-                            >
+                            <button onClick={() => setReplyingTo(m)} aria-label="Reply" style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex" }}>
                               <CornerUpLeft size={12} />
                             </button>
+                            <button onClick={() => setShowReactionPickerFor(showReactionPickerFor === m.id ? null : m.id)} aria-label="React" style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex", fontSize: 12 }}>
+                              🙂
+                            </button>
+                            <button onClick={() => setShowPinPickerFor(showPinPickerFor === m.id ? null : m.id)} aria-label="Pin" style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex", fontSize: 12 }}>
+                              📌
+                            </button>
+                            {showReactionPickerFor === m.id && (
+                              <div className="hldt-modal" style={{ position: "absolute", top: 0, [mine ? "right" : "left"]: "100%", background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 6, display: "flex", gap: 4, zIndex: 60 }}>
+                                {REACTION_EMOJIS.map((e) => (
+                                  <span key={e} onClick={() => toggleReaction(m.id, e)} style={{ cursor: "pointer", fontSize: 16, padding: 2 }}>{e}</span>
+                                ))}
+                              </div>
+                            )}
+                            {showPinPickerFor === m.id && (
+                              <div className="hldt-modal" style={{ position: "absolute", top: 0, [mine ? "right" : "left"]: "100%", background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 6, display: "flex", flexDirection: "column", gap: 4, zIndex: 60, minWidth: 90 }}>
+                                <div style={{ fontSize: 10, color: COLORS.textMuted, padding: "0 4px" }}>Pin for...</div>
+                                {PIN_DURATIONS.map((d) => (
+                                  <Btn key={d.label} small tone="ghost" onClick={() => pinMessage(m.id, d.hours)}>{d.label}</Btn>
+                                ))}
+                              </div>
+                            )}
                           </div>
+                        </div>
+                      )}
+                      {Object.keys(msgReactions).length > 0 && (
+                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 3, justifyContent: mine ? "flex-end" : "flex-start" }}>
+                          {Object.entries(msgReactions).map(([emoji, profileIds]) => {
+                            const reactedByMe = profileIds.includes(session.user.id);
+                            return (
+                              <span
+                                key={emoji}
+                                onClick={() => toggleReaction(m.id, emoji)}
+                                style={{
+                                  fontSize: 11, padding: "1px 6px", borderRadius: 999, cursor: "pointer",
+                                  background: reactedByMe ? COLORS.amberDim : COLORS.surface2,
+                                  border: `1px solid ${reactedByMe ? COLORS.amber : COLORS.border}`,
+                                }}
+                              >
+                                {emoji} {profileIds.length}
+                              </span>
+                            );
+                          })}
                         </div>
                       )}
                       <div style={{ fontSize: 10, color: COLORS.textMuted, marginTop: 2, display: "flex", alignItems: "center", gap: 4, justifyContent: mine ? "flex-end" : "flex-start", position: "relative" }}>
@@ -1476,21 +1654,6 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
         </div>
         )}
       </div>
-
-      {showNewDm && (
-        <Modal title="Start a conversation" onClose={() => setShowNewDm(false)} width={320}>
-          {dmCandidates.length === 0 ? (
-            <EmptyRow text="No other members with accounts yet." />
-          ) : (
-            dmCandidates.map((m) => (
-              <RowLine key={m.id} onClick={() => startDm(m)}>
-                <Avatar label={avatarLabels[m.profileId] || "?"} color={hashColor(m.profileId)} size={22} celebration={celebrationForProfile(m.profileId)} />
-                <span style={{ marginLeft: 8 }}>{m.name}</span>
-              </RowLine>
-            ))
-          )}
-        </Modal>
-      )}
     </div>
   );
 }

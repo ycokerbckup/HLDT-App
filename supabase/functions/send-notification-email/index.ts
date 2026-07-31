@@ -23,6 +23,8 @@ function ctaButton(linkTab?: string, dmWith?: string): string {
   return `<p><a href="${url}" style="display:inline-block;padding:10px 16px;background:#E8A33D;color:#14171C;text-decoration:none;border-radius:6px;font-weight:600;">Open in app</a></p>`;
 }
 
+const THREAD_ROOT_ID = `<hldt-notifications-root@${(GMAIL_ADDRESS || "display-team-ops").split("@").pop()}>`;
+
 async function sendEmail(to: string[], subject: string, html: string) {
   if (to.length === 0) return;
   const client = new SMTPClient({
@@ -36,7 +38,9 @@ async function sendEmail(to: string[], subject: string, html: string) {
   try {
     // One individual copy per recipient (their own address in "To:"),
     // not one bulk BCC message — a BCC blast with the sender's own
-    // address in "To" is a known spam signal.
+    // address in "To" is a known spam signal. Every message shares the
+    // same In-Reply-To/References so Gmail stacks them into one ongoing
+    // conversation per recipient instead of separate top-level emails.
     for (const recipient of to) {
       try {
         await client.send({
@@ -44,6 +48,9 @@ async function sendEmail(to: string[], subject: string, html: string) {
           to: recipient,
           subject,
           html,
+          content: html.replace(/<[^>]+>/g, "").trim(),
+          inReplyTo: THREAD_ROOT_ID,
+          references: THREAD_ROOT_ID,
         });
       } catch (e) {
         console.log(`send to ${recipient} failed:`, String(e));

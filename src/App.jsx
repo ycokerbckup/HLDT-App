@@ -407,25 +407,30 @@ function AuthScreen() {
     setError("");
     setNotice("");
     setBusy(true);
-    if (mode === "signin") {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) setError(error.message);
-    } else if (mode === "signup") {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { full_name: fullName } },
-      });
-      if (error) setError(error.message);
-      else setNotice("Account created. Check your email to confirm, then sign in.");
-    } else if (mode === "forgot") {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin,
-      });
-      if (error) setError(error.message);
-      else setNotice("If that email has an account, a reset link is on its way. Check your inbox.");
+    try {
+      if (mode === "signin") {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) setError(error.message || "Something went wrong signing in. Please try again.");
+      } else if (mode === "signup") {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { full_name: fullName } },
+        });
+        if (error) setError(error.message || "Something went wrong creating your account. Please try again in a moment.");
+        else setNotice("Account created. Check your email to confirm, then sign in.");
+      } else if (mode === "forgot") {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin,
+        });
+        if (error) setError(error.message || "Something went wrong sending the reset link. Please try again.");
+        else setNotice("If that email has an account, a reset link is on its way. Check your inbox.");
+      }
+    } catch (err) {
+      setError((err && err.message) || "Something went wrong. Please check your connection and try again.");
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   return (
@@ -1151,6 +1156,24 @@ function AnnouncementsTab({ data, isAdmin, canPost, reload, notify, adminId, adm
   );
 }
 
+function DateDivider({ date }) {
+  const d = new Date(date);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  let label;
+  if (d.toDateString() === today.toDateString()) label = "Today";
+  else if (d.toDateString() === yesterday.toDateString()) label = "Yesterday";
+  else label = d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "4px 0" }}>
+      <div style={{ flex: 1, height: 1, background: COLORS.border }} />
+      <div style={{ fontSize: 10, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.04em", flexShrink: 0 }}>{label}</div>
+      <div style={{ flex: 1, height: 1, background: COLORS.border }} />
+    </div>
+  );
+}
+
 /* ---------------- chat ---------------- */
 
 function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfileId, onPendingDmConsumed }) {
@@ -1283,12 +1306,24 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
   }, [pendingDmProfileId, dmCandidates.length]);
 
   function withinEditWindow(m) {
-    return Date.now() - new Date(m.created_at).getTime() < 30 * 60 * 1000;
+    return Date.now() - new Date(m.created_at).getTime() < 5 * 60 * 1000;
   }
+
+  function withinDeleteWindow(m) {
+    return m.seen_at && Date.now() - new Date(m.seen_at).getTime() < 5 * 60 * 1000;
+  }
+
+  async function deleteMessage(m) {
+    const { error } = await supabase.from("messages").delete().eq("id", m.id);
+    if (error) { notify?.(error.message, "error"); return; }
+    loadMessages();
+  }
+
+  const [showReceiptsFor, setShowReceiptsFor] = useState(null);
 
   return (
     <div>
-      <SectionHeader title="Chat" subtitle="Messages are removed 24 hours after being seen. Editable for 30 minutes after sending." />
+      <SectionHeader title="Chat" subtitle="Messages are removed 24 hours after being seen. Editable for 5 minutes after sending, deletable for 5 minutes after being seen." />
       <div style={{ display: "flex", gap: 16, height: isMobile ? "calc(100vh - 200px)" : "65vh" }}>
         {(!isMobile || !mobileShowThread) && (
           <div style={{ width: isMobile ? "100%" : 210, flexShrink: 0, display: "flex", flexDirection: "column", gap: 4, overflowY: "auto" }}>
@@ -1333,12 +1368,19 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
             {messages.length === 0 ? (
               <EmptyRow text="No messages yet." />
             ) : (
-              messages.map((m) => {
+              messages.map((m, idx) => {
                 const mine = m.sender_id === session.user.id;
                 const quoted = m.reply_to_id ? messages.find((x) => x.id === m.reply_to_id) : null;
                 const receipt = receiptFor(m);
+                const prev = messages[idx - 1];
+                const showDateDivider = !prev || new Date(prev.created_at).toDateString() !== new Date(m.created_at).toDateString();
+                const readerNames = reads
+                  .filter((r) => r.message_id === m.id && r.profile_id !== session.user.id)
+                  .map((r) => members.find((mem) => mem.profileId === r.profile_id)?.name || "Someone");
                 return (
-                  <div key={m.id} style={{ display: "flex", gap: 8, flexDirection: mine ? "row-reverse" : "row" }}>
+                  <React.Fragment key={m.id}>
+                    {showDateDivider && <DateDivider date={m.created_at} />}
+                    <div style={{ display: "flex", gap: 8, flexDirection: mine ? "row-reverse" : "row" }}>
                     <Avatar label={avatarLabels[m.sender_id] || m.sender_name?.[0] || "?"} color={hashColor(m.sender_id)} size={26} celebration={celebrationForProfile(m.sender_id)} />
                     <div style={{ maxWidth: "70%" }}>
                       {!mine && <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 2 }}>{m.sender_name}</div>}
@@ -1375,6 +1417,15 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                                 <Pencil size={12} />
                               </button>
                             )}
+                            {mine && withinDeleteWindow(m) && (
+                              <button
+                                onClick={() => deleteMessage(m)}
+                                aria-label="Delete message"
+                                style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex" }}
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            )}
                             <button
                               onClick={() => setReplyingTo(m)}
                               aria-label="Reply"
@@ -1385,12 +1436,24 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                           </div>
                         </div>
                       )}
-                      <div style={{ fontSize: 10, color: COLORS.textMuted, marginTop: 2, display: "flex", alignItems: "center", gap: 4, justifyContent: mine ? "flex-end" : "flex-start" }}>
+                      <div style={{ fontSize: 10, color: COLORS.textMuted, marginTop: 2, display: "flex", alignItems: "center", gap: 4, justifyContent: mine ? "flex-end" : "flex-start", position: "relative" }}>
                         {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        {receipt && (<><CheckCheck size={11} color={COLORS.green} /> {receipt}</>)}
+                        {receipt && (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 3, cursor: "pointer" }} onClick={() => setShowReceiptsFor(showReceiptsFor === m.id ? null : m.id)}>
+                            <CheckCheck size={11} color={COLORS.green} /> {receipt}
+                          </span>
+                        )}
+                        {showReceiptsFor === m.id && readerNames.length > 0 && (
+                          <div className="hldt-modal" style={{ position: "absolute", bottom: 18, [mine ? "right" : "left"]: 0, background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 8, minWidth: 120, zIndex: 50 }}>
+                            {readerNames.map((n, i) => (
+                              <div key={i} style={{ fontSize: 11, color: COLORS.textSecondary, padding: "2px 4px", whiteSpace: "nowrap" }}>{n}</div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
-                  </div>
+                    </div>
+                  </React.Fragment>
                 );
               })
             )}

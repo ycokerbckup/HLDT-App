@@ -49,19 +49,24 @@ async function sendEmail(to: string[], subject: string, html: string) {
 serve(async (req) => {
   try {
     const payload = await req.json();
+    console.log("Webhook payload received, type:", payload?.record?.type, "| full:", JSON.stringify(payload).slice(0, 800));
+
     const record = payload?.record;
     if (!record || !EMAILABLE_TYPES.includes(record.type)) {
+      console.log("Skipping — record.type is", record?.type, "which is not in EMAILABLE_TYPES");
       return new Response("skip", { status: 200 });
     }
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
-    const { data: profiles } = await supabase.from("profiles").select("id,email");
+    const { data: profiles, error: profilesError } = await supabase.from("profiles").select("id,email");
+    if (profilesError) console.log("profiles query error:", JSON.stringify(profilesError));
     const emailById: Record<string, string> = {};
     (profiles || []).forEach((p: { id: string; email: string | null }) => {
       if (p.email) emailById[p.id] = p.email;
     });
     const allEmails = Object.values(emailById);
+    console.log("Total profiles with email on file:", allEmails.length);
 
     let to: string[] = [];
 
@@ -82,13 +87,24 @@ serve(async (req) => {
     } else if (record.target_profile_id) {
       const email = emailById[record.target_profile_id];
       to = email ? [email] : [];
+      console.log("Targeted notification for profile", record.target_profile_id, "-> email found:", !!email);
     } else {
       to = allEmails;
     }
 
+    console.log("Final recipient count:", to.length);
+
     if (to.length > 0) {
       const html = `<p>${record.body || ""}</p>` + ctaButton(record.link_tab, record.dm_with_profile_id);
-      await sendEmail(to, record.title, html);
+      try {
+        await sendEmail(to, record.title, html);
+        console.log("Email sent successfully to", to.length, "recipients");
+      } catch (sendErr) {
+        console.log("sendEmail threw:", String(sendErr));
+        throw sendErr;
+      }
+    } else {
+      console.log("No recipients resolved — nothing sent.");
     }
 
     await supabase.from("notifications").update({ emailed: true }).eq("id", record.id);

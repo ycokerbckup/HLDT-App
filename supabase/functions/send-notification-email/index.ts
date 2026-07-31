@@ -34,13 +34,21 @@ async function sendEmail(to: string[], subject: string, html: string) {
     },
   });
   try {
-    await client.send({
-      from: `${FROM_NAME} <${GMAIL_ADDRESS}>`,
-      to: GMAIL_ADDRESS, // visible header stays generic; real recipients via bcc
-      bcc: to,
-      subject,
-      html,
-    });
+    // One individual copy per recipient (their own address in "To:"),
+    // not one bulk BCC message — a BCC blast with the sender's own
+    // address in "To" is a known spam signal.
+    for (const recipient of to) {
+      try {
+        await client.send({
+          from: `${FROM_NAME} <${GMAIL_ADDRESS}>`,
+          to: recipient,
+          subject,
+          html,
+        });
+      } catch (e) {
+        console.log(`send to ${recipient} failed:`, String(e));
+      }
+    }
   } finally {
     await client.close();
   }

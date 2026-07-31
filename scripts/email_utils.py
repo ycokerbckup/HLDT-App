@@ -4,9 +4,10 @@ Google Account + App Password already configured for Supabase Auth emails
 — one consistent, real sending identity, instead of a shared/generic
 testing address that has nothing to do with this app's reputation.
 
-Recipients go in the SMTP envelope (BCC-style), not the visible "To:"
-header, so a broadcast email doesn't expose everyone's address to
-everyone else.
+Sends one individual copy per recipient (each with their own address in
+the "To:" header) rather than one bulk BCC message. A BCC blast with the
+sender's own address in "To" is a known spam signal — an individually
+addressed copy looks like ordinary person-to-person mail instead.
 """
 import os
 import smtplib
@@ -29,17 +30,22 @@ def send_email(to_list, subject, html):
         print("GMAIL_ADDRESS / GMAIL_APP_PASSWORD not set — skipping send.")
         return False
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = f"{FROM_NAME} <{GMAIL_ADDRESS}>"
-    msg["To"] = GMAIL_ADDRESS  # visible header stays generic; real recipients go via envelope below
-    msg.attach(MIMEText(html, "html"))
-
+    ok = True
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=20) as server:
             server.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
-            server.sendmail(GMAIL_ADDRESS, to_list, msg.as_string())
-        return True
+            for recipient in to_list:
+                msg = MIMEMultipart("alternative")
+                msg["Subject"] = subject
+                msg["From"] = f"{FROM_NAME} <{GMAIL_ADDRESS}>"
+                msg["To"] = recipient
+                msg.attach(MIMEText(html, "html"))
+                try:
+                    server.sendmail(GMAIL_ADDRESS, [recipient], msg.as_string())
+                except Exception as e:
+                    print(f"send to {recipient} failed:", e)
+                    ok = False
+        return ok
     except Exception as e:
-        print("send failed:", e)
+        print("SMTP connection failed:", e)
         return False

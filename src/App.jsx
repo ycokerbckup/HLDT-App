@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, GraduationCap, Wrench, CalendarDays,
   Wallet, MessageSquare, Plus, X, ChevronRight, Shield, User,
   CheckCircle2, Clock, Trash2, Save, LogOut, RefreshCw, Download,
-  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil, GripVertical, Eye, EyeOff, Camera, Menu, CornerUpLeft, Check, CheckCheck
+  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil, GripVertical, Eye, EyeOff, Camera, Menu, CornerUpLeft, Check, CheckCheck, Boxes, DollarSign
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "./supabaseClient";
@@ -719,6 +719,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
   const canManageMembers = isAdmin && myUnit === "Operations";
   const canManageFeed = isAdmin && (myUnit === "Operations" || myUnit === "Technical");
   const canManageOnboarding = isAdmin && myUnit === "Operations";
+  const isTechnical = myUnit === "Technical";
   const canManageRosters = isAdmin && (myUnit === "Operations" || myUnit === "Admin");
   const canSeeDues = myUnit === "Welfare" || myUnit === "Operations";
 
@@ -893,7 +894,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} />}
                 {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
-                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} reload={load} notify={notify} />}
+                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} isTechnical={isTechnical} reload={load} notify={notify} />}
                 {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} reload={load} notify={notify} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
@@ -952,7 +953,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} />}
                 {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
-                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} reload={load} notify={notify} />}
+                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} isTechnical={isTechnical} reload={load} notify={notify} />}
                 {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} reload={load} notify={notify} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
@@ -2454,7 +2455,170 @@ function OnboardingTab({ data, isAdmin, canManage, reload, adminName, notify }) 
 
 /* ---------------- equipment ---------------- */
 
-function EquipmentTab({ data, isAdmin, myMember, reload, notify }) {
+const INVENTORY_CATEGORIES = ["Projector", "Camera", "Screen", "Mixer", "Cable", "Microphone", "Computer", "Lighting", "Other"];
+const CONDITIONS = ["New", "Good", "Fair", "Poor", "Faulty"];
+
+function InventoryPanel({ notify }) {
+  const [items, setItems] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const blank = () => ({ id: null, name: "", category: "Other", quantity: 1, condition: "Good", purchase_date: "", purchase_price: "", estimated_value: "", notes: "" });
+  const [form, setForm] = useState(blank());
+
+  async function load() {
+    const { data } = await supabase.from("equipment_inventory").select("*").order("category").order("name");
+    setItems(data || []);
+    setLoaded(true);
+  }
+
+  useEffect(() => {
+    load();
+    const channel = supabase
+      .channel("inventory-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "equipment_inventory" }, load)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  async function save() {
+    if (!form.name.trim()) return;
+    const payload = {
+      name: form.name, category: form.category, quantity: Number(form.quantity) || 1, condition: form.condition,
+      purchase_date: form.purchase_date || null, purchase_price: form.purchase_price === "" ? null : Number(form.purchase_price),
+      estimated_value: form.estimated_value === "" ? null : Number(form.estimated_value), notes: form.notes,
+    };
+    const { error } = form.id
+      ? await supabase.from("equipment_inventory").update(payload).eq("id", form.id)
+      : await supabase.from("equipment_inventory").insert(payload);
+    if (error) { notify?.(error.message, "error"); return; }
+    notify?.(form.id ? "Item updated" : "Item added");
+    setForm(blank());
+    setShowForm(false);
+    load();
+  }
+
+  async function remove(id) {
+    await supabase.from("equipment_inventory").delete().eq("id", id);
+    notify?.("Item removed");
+    load();
+  }
+
+  function exportCsv() {
+    const rows = ["Name,Category,Quantity,Condition,Purchase Date,Purchase Price,Estimated Value,Notes"];
+    items.forEach((it) => {
+      rows.push([it.name, it.category, it.quantity, it.condition, it.purchase_date || "", it.purchase_price ?? "", it.estimated_value ?? "", (it.notes || "").replace(/"/g, "'")]
+        .map((v) => `"${v}"`).join(","));
+    });
+    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `equipment-inventory-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const totalPurchaseValue = items.reduce((sum, it) => sum + (Number(it.purchase_price) || 0) * (it.quantity || 1), 0);
+  const totalEstimatedValue = items.reduce((sum, it) => sum + (Number(it.estimated_value) || 0) * (it.quantity || 1), 0);
+  const totalItems = items.reduce((sum, it) => sum + (it.quantity || 1), 0);
+
+  const byCategory = {};
+  items.forEach((it) => {
+    const cat = it.category || "Other";
+    byCategory[cat] = (byCategory[cat] || 0) + (Number(it.estimated_value) || Number(it.purchase_price) || 0) * (it.quantity || 1);
+  });
+  const chartData = Object.entries(byCategory).map(([category, value]) => ({ category, value })).filter((d) => d.value > 0);
+
+  if (!loaded) return <SkeletonLoader />;
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+        <Metric label="Total items" value={totalItems} />
+        <Metric label="Purchase value" value={totalPurchaseValue} isCurrency tone="amber" />
+        <Metric label="Estimated value now" value={totalEstimatedValue} isCurrency tone="green" />
+      </div>
+
+      {chartData.length > 0 && (
+        <Panel title="Value by category" style={{ marginBottom: 16 }}>
+          <div style={{ height: 200 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} vertical={false} />
+                <XAxis dataKey="category" stroke={COLORS.textMuted} fontSize={11} tickLine={false} axisLine={false} />
+                <YAxis stroke={COLORS.textMuted} fontSize={11} tickLine={false} axisLine={false} />
+                <Tooltip contentStyle={{ background: COLORS.surface2, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 12, color: COLORS.textPrimary }} formatter={(v) => currency(v)} />
+                <Bar dataKey="value" fill={COLORS.amber} radius={[4, 4, 0, 0]} maxBarSize={36} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Panel>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 12 }}>
+        <Btn tone="ghost" onClick={exportCsv}><Download size={13} /> Export CSV</Btn>
+        <Btn tone="amber" onClick={() => { setForm(blank()); setShowForm(true); }}><Plus size={13} /> Add item</Btn>
+      </div>
+
+      {showForm && (
+        <Panel title={form.id ? "Edit item" : "New item"} style={{ marginBottom: 16 }} right={<X size={16} style={{ cursor: "pointer" }} onClick={() => setShowForm(false)} />}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label="Name"><input style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+            <Field label="Category">
+              <select style={inputStyle} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+                {INVENTORY_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </Field>
+            <Field label="Quantity"><input type="number" min={1} style={inputStyle} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} /></Field>
+            <Field label="Condition">
+              <select style={inputStyle} value={form.condition} onChange={(e) => setForm({ ...form, condition: e.target.value })}>
+                {CONDITIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </Field>
+            <Field label="Purchase date"><input type="date" style={inputStyle} value={form.purchase_date} onChange={(e) => setForm({ ...form, purchase_date: e.target.value })} /></Field>
+            <Field label="Purchase price (₦)"><input type="number" style={inputStyle} value={form.purchase_price} onChange={(e) => setForm({ ...form, purchase_price: e.target.value })} /></Field>
+            <Field label="Estimated value now (₦)"><input type="number" style={inputStyle} value={form.estimated_value} onChange={(e) => setForm({ ...form, estimated_value: e.target.value })} /></Field>
+          </div>
+          <Field label="Notes"><textarea style={{ ...inputStyle, minHeight: 50 }} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn tone="amber" onClick={save}><Save size={13} /> Save</Btn>
+            {form.id && <Btn tone="danger" onClick={() => { remove(form.id); setShowForm(false); }}><Trash2 size={13} /> Delete</Btn>}
+          </div>
+        </Panel>
+      )}
+
+      <Panel>
+        {items.length === 0 ? <EmptyRow text="No inventory items yet." /> : (
+          <div style={{ overflowX: "auto" }}>
+            <div style={{ minWidth: 640 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 0.6fr 0.8fr 0.9fr 0.9fr", fontSize: 11, color: COLORS.textMuted, padding: "0 4px 8px", textTransform: "uppercase" }}>
+                <div>Name</div><div>Category</div><div>Qty</div><div>Condition</div><div>Purchased</div><div>Est. value</div>
+              </div>
+              {items.map((it) => (
+                <div
+                  key={it.id}
+                  className="hldt-row" data-clickable="true"
+                  onClick={() => { setForm({ ...it, purchase_price: it.purchase_price ?? "", estimated_value: it.estimated_value ?? "", purchase_date: it.purchase_date || "" }); setShowForm(true); }}
+                  style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 0.6fr 0.8fr 0.9fr 0.9fr", alignItems: "center", padding: "8px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 13, cursor: "pointer" }}
+                >
+                  <div>{it.name}</div>
+                  <div style={{ color: COLORS.textSecondary }}>{it.category}</div>
+                  <div style={{ color: COLORS.textSecondary }}>{it.quantity}</div>
+                  <div><Badge tone={it.condition === "Faulty" || it.condition === "Poor" ? "red" : it.condition === "Fair" ? "amber" : "green"}>{it.condition}</Badge></div>
+                  <div style={{ color: COLORS.textSecondary, fontSize: 12 }}>{it.purchase_date || "—"}</div>
+                  <div style={{ color: COLORS.textSecondary, fontSize: 12 }}>{it.estimated_value ? currency(it.estimated_value) : "—"}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+function EquipmentTab({ data, isAdmin, myMember, isTechnical, reload, notify }) {
+  const [view, setView] = useState("tickets");
   const [showForm, setShowForm] = useState(false);
   const blank = () => ({ date: new Date().toISOString().slice(0, 10), systems: Object.fromEntries(SYSTEMS.map((s) => [s, "OK"])), description: "" });
   const [form, setForm] = useState(blank());
@@ -2511,8 +2675,26 @@ function EquipmentTab({ data, isAdmin, myMember, reload, notify }) {
 
   return (
     <div>
-      <SectionHeader title="Equipment" subtitle="Pre/post-service system checks and incident tickets" right={<Btn tone="amber" onClick={() => setShowForm(true)}><Plus size={14} /> New check</Btn>} />
+      <SectionHeader
+        title="Equipment"
+        subtitle={view === "tickets" ? "Pre/post-service system checks and incident tickets" : "Inventory, valuation, and requests — Technical unit"}
+        right={
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {isTechnical && (
+              <div style={{ display: "flex", gap: 4, background: COLORS.surface2, borderRadius: 8, padding: 3 }}>
+                <Btn small tone={view === "tickets" ? "amber" : "ghost"} onClick={() => setView("tickets")}>Tickets</Btn>
+                <Btn small tone={view === "inventory" ? "amber" : "ghost"} onClick={() => setView("inventory")}><Boxes size={12} /> Inventory</Btn>
+              </div>
+            )}
+            {view === "tickets" && <Btn tone="amber" onClick={() => setShowForm(true)}><Plus size={14} /> New check</Btn>}
+          </div>
+        }
+      />
 
+      {view === "inventory" ? (
+        <InventoryPanel notify={notify} />
+      ) : (
+      <>
       {showForm && (
         <Panel title="System check" style={{ marginBottom: 16 }} right={<X size={16} style={{ cursor: "pointer" }} onClick={() => setShowForm(false)} />}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -2573,6 +2755,8 @@ function EquipmentTab({ data, isAdmin, myMember, reload, notify }) {
           </Panel>
         );
       })}
+      </>
+      )}
     </div>
   );
 }

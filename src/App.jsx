@@ -2468,6 +2468,23 @@ function InventoryPanel({ notify }) {
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [chatSending, setChatSending] = useState(false);
+  const [quotaStatus, setQuotaStatus] = useState(null);
+
+  async function loadQuotaStatus() {
+    const { data } = await supabase.from("ai_quota_status").select("*").eq("id", 1).maybeSingle();
+    setQuotaStatus(data);
+  }
+
+  useEffect(() => {
+    loadQuotaStatus();
+    const channel = supabase
+      .channel("ai-quota-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "ai_quota_status" }, loadQuotaStatus)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  const quotaExhausted = quotaStatus?.next_reset_at && new Date(quotaStatus.next_reset_at) > new Date();
   const blank = () => ({ id: null, name: "", category: "Other", quantity: 1, condition: "Good", purchase_date: "", purchase_price: "", estimated_value: "", notes: "" });
   const [form, setForm] = useState(blank());
 
@@ -2615,14 +2632,19 @@ function InventoryPanel({ notify }) {
         </Panel>
       )}
 
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
         <Btn tone="ghost" onClick={exportCsv}><Download size={13} /> Export CSV</Btn>
-        <Btn tone="ghost" onClick={generateSuggestions} disabled={generating}>
+        <Btn tone="ghost" onClick={generateSuggestions} disabled={generating || quotaExhausted}>
           <Sparkles size={13} /> {generating ? "Thinking..." : "AI suggestions"}
         </Btn>
-        <Btn tone="ghost" onClick={() => setShowChat(true)}><MessageCircle size={13} /> Ask AI</Btn>
+        <Btn tone="ghost" onClick={() => setShowChat(true)} disabled={quotaExhausted}><MessageCircle size={13} /> Ask AI</Btn>
         <Btn tone="amber" onClick={() => { setForm(blank()); setShowForm(true); }}><Plus size={13} /> Add item</Btn>
       </div>
+      {quotaExhausted && (
+        <div style={{ fontSize: 11, color: COLORS.amber, textAlign: "right", marginBottom: 12 }}>
+          Free AI quota used up for today — available again around {new Date(quotaStatus.next_reset_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
+        </div>
+      )}
 
       {suggestions && (
         <Panel title="Suggested requests" style={{ marginBottom: 16 }} right={

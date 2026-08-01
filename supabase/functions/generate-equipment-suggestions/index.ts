@@ -17,6 +17,13 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+function nextResetUTC(): string {
+  const now = new Date();
+  const reset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 7, 0, 0, 0));
+  if (reset.getTime() <= now.getTime()) reset.setUTCDate(reset.getUTCDate() + 1);
+  return reset.toISOString();
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: CORS_HEADERS });
@@ -89,6 +96,12 @@ Suggest up to 6 items, ranked by priority. Respond with ONLY a JSON array (no ma
     if (!geminiRes.ok) {
       const errText = await geminiRes.text();
       console.error("Gemini API error:", geminiRes.status, errText);
+      if (geminiRes.status === 429) {
+        await supabase.from("ai_quota_status").update({
+          exhausted_at: new Date().toISOString(),
+          next_reset_at: nextResetUTC(),
+        }).eq("id", 1);
+      }
       return new Response(JSON.stringify({ error: `AI request failed (${geminiRes.status}). Try again shortly.` }), { status: 502, headers: CORS_HEADERS });
     }
 

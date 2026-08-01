@@ -720,6 +720,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
   const canManageFeed = isAdmin && (myUnit === "Operations" || myUnit === "Technical");
   const canManageOnboarding = isAdmin && myUnit === "Operations";
   const isTechnical = myUnit === "Technical";
+  const canDeleteTickets = myUnit === "Technical" || myUnit === "Operations";
   const canManageRosters = isAdmin && (myUnit === "Operations" || myUnit === "Admin");
   const canSeeDues = myUnit === "Welfare" || myUnit === "Operations";
 
@@ -894,7 +895,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} />}
                 {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
-                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} isTechnical={isTechnical} reload={load} notify={notify} />}
+                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} isTechnical={isTechnical} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} />}
                 {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} reload={load} notify={notify} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
@@ -953,7 +954,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} />}
                 {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
-                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} isTechnical={isTechnical} reload={load} notify={notify} />}
+                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} isTechnical={isTechnical} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} />}
                 {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} reload={load} notify={notify} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
@@ -2768,7 +2769,7 @@ function InventoryPanel({ notify }) {
   );
 }
 
-function EquipmentTab({ data, isAdmin, myMember, isTechnical, reload, notify }) {
+function EquipmentTab({ data, isAdmin, myMember, isTechnical, canDeleteTickets, reload, notify }) {
   const [view, setView] = useState("tickets");
   const [showForm, setShowForm] = useState(false);
   const blank = () => ({ date: new Date().toISOString().slice(0, 10), systems: Object.fromEntries(SYSTEMS.map((s) => [s, "OK"])), description: "" });
@@ -2821,6 +2822,13 @@ function EquipmentTab({ data, isAdmin, myMember, isTechnical, reload, notify }) 
     const payload = { assigned_to_id: memberId || null, assigned_to: member?.name || null };
     if (memberId && t.status !== "Resolved") payload.status = "Assigned";
     await supabase.from("tickets").update(payload).eq("id", t.id);
+    reload();
+  }
+
+  async function deleteTicket(t) {
+    const { error } = await supabase.from("tickets").delete().eq("id", t.id);
+    if (error) { notify?.(error.message, "error"); return; }
+    notify?.("Ticket deleted");
     reload();
   }
 
@@ -2890,7 +2898,10 @@ function EquipmentTab({ data, isAdmin, myMember, isTechnical, reload, notify }) 
                 <div style={{ fontSize: 13, fontWeight: 500 }}>{t.reporter} <span style={{ color: COLORS.textMuted, fontWeight: 400 }}>· {t.date}</span></div>
                 {issues.length > 0 ? <div style={{ fontSize: 12, color: COLORS.red, marginTop: 2 }}>Issues: {issues.join(", ")}</div> : <div style={{ fontSize: 12, color: COLORS.green, marginTop: 2 }}>All systems OK</div>}
               </div>
-              <Badge tone={t.status === "Resolved" ? "green" : t.status === "Open" ? "red" : "amber"}>{t.status}</Badge>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                <Badge tone={t.status === "Resolved" ? "green" : t.status === "Open" ? "red" : "amber"}>{t.status}</Badge>
+                {canDeleteTickets && <Trash2 size={14} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => deleteTicket(t)} />}
+              </div>
             </div>
             {t.photoUrl && <img src={t.photoUrl} alt="" style={{ maxWidth: 200, maxHeight: 150, borderRadius: 8, marginBottom: 8, display: "block", cursor: "pointer" }} onClick={() => window.open(t.photoUrl, "_blank")} />}
             {t.description && <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 8 }}>{t.description}</div>}

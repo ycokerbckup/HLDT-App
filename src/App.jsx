@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, GraduationCap, Wrench, CalendarDays,
   Wallet, MessageSquare, Plus, X, ChevronRight, Shield, User,
   CheckCircle2, Clock, Trash2, Save, LogOut, RefreshCw, Download,
-  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil, GripVertical, Eye, EyeOff, Camera, Menu, CornerUpLeft, Check, CheckCheck, Boxes, DollarSign
+  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil, GripVertical, Eye, EyeOff, Camera, Menu, CornerUpLeft, Check, CheckCheck, Boxes, DollarSign, Sparkles
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "./supabaseClient";
@@ -2462,6 +2462,8 @@ function InventoryPanel({ notify }) {
   const [items, setItems] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [suggestions, setSuggestions] = useState(null);
+  const [generating, setGenerating] = useState(false);
   const blank = () => ({ id: null, name: "", category: "Other", quantity: 1, condition: "Good", purchase_date: "", purchase_price: "", estimated_value: "", notes: "" });
   const [form, setForm] = useState(blank());
 
@@ -2518,6 +2520,42 @@ function InventoryPanel({ notify }) {
     URL.revokeObjectURL(url);
   }
 
+  async function generateSuggestions() {
+    setGenerating(true);
+    setSuggestions(null);
+    const { data, error } = await supabase.functions.invoke("generate-equipment-suggestions");
+    if (error || data?.error) {
+      notify?.(data?.error || error?.message || "Couldn't generate suggestions", "error");
+    } else {
+      setSuggestions(data.suggestions || []);
+    }
+    setGenerating(false);
+  }
+
+  function exportRequestDoc() {
+    if (!suggestions || suggestions.length === 0) return;
+    const lines = [
+      "EQUIPMENT REQUEST DOCUMENT",
+      `Generated ${new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}`,
+      "",
+      "=".repeat(50),
+      "",
+    ];
+    suggestions.forEach((s, i) => {
+      lines.push(`${i + 1}. ${s.item} [${s.priority} priority]`);
+      lines.push(`   Reason: ${s.reason}`);
+      lines.push(`   Estimated cost: ${s.estimatedCost}`);
+      lines.push("");
+    });
+    const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `equipment-request-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   const totalPurchaseValue = items.reduce((sum, it) => sum + (Number(it.purchase_price) || 0) * (it.quantity || 1), 0);
   const totalEstimatedValue = items.reduce((sum, it) => sum + (Number(it.estimated_value) || 0) * (it.quantity || 1), 0);
   const totalItems = items.reduce((sum, it) => sum + (it.quantity || 1), 0);
@@ -2555,10 +2593,35 @@ function InventoryPanel({ notify }) {
         </Panel>
       )}
 
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
         <Btn tone="ghost" onClick={exportCsv}><Download size={13} /> Export CSV</Btn>
+        <Btn tone="ghost" onClick={generateSuggestions} disabled={generating}>
+          <Sparkles size={13} /> {generating ? "Thinking..." : "AI suggestions"}
+        </Btn>
         <Btn tone="amber" onClick={() => { setForm(blank()); setShowForm(true); }}><Plus size={13} /> Add item</Btn>
       </div>
+
+      {suggestions && (
+        <Panel title="Suggested requests" style={{ marginBottom: 16 }} right={
+          suggestions.length > 0 && <Btn small tone="ghost" onClick={exportRequestDoc}><Download size={12} /> Export request doc</Btn>
+        }>
+          {suggestions.length === 0 ? (
+            <EmptyRow text="Nothing stood out — inventory and open tickets look fine right now." />
+          ) : (
+            suggestions.map((s, i) => (
+              <div key={i} style={{ padding: "10px 0", borderTop: i > 0 ? `1px solid ${COLORS.border}` : "none" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                  <span style={{ fontSize: 13, fontWeight: 500 }}>{s.item}</span>
+                  <Badge tone={s.priority === "High" ? "red" : s.priority === "Medium" ? "amber" : "gray"}>{s.priority}</Badge>
+                </div>
+                <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 3 }}>{s.reason}</div>
+                <div style={{ fontSize: 11, color: COLORS.textMuted }}>Est. cost: {s.estimatedCost}</div>
+              </div>
+            ))
+          )}
+          <div style={{ fontSize: 10, color: COLORS.textMuted, marginTop: 8 }}>AI-generated from your current inventory and open tickets — review before acting on it.</div>
+        </Panel>
+      )}
 
       {showForm && (
         <Panel title={form.id ? "Edit item" : "New item"} style={{ marginBottom: 16 }} right={<X size={16} style={{ cursor: "pointer" }} onClick={() => setShowForm(false)} />}>

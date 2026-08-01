@@ -719,7 +719,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
   const canManageMembers = isAdmin && myUnit === "Operations";
   const canManageFeed = isAdmin && (myUnit === "Operations" || myUnit === "Technical");
   const canManageOnboarding = isAdmin && myUnit === "Operations";
-  const isTechnical = myUnit === "Technical";
+  const canAccessInventory = myUnit === "Technical" || myUnit === "Operations";
   const canDeleteTickets = myUnit === "Technical" || myUnit === "Operations";
   const canManageRosters = isAdmin && (myUnit === "Operations" || myUnit === "Admin");
   const canSeeDues = myUnit === "Welfare" || myUnit === "Operations";
@@ -895,7 +895,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} />}
                 {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
-                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} isTechnical={isTechnical} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} />}
+                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} />}
                 {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} reload={load} notify={notify} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
@@ -954,7 +954,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} />}
                 {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
-                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} isTechnical={isTechnical} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} />}
+                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} />}
                 {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} reload={load} notify={notify} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
@@ -2769,7 +2769,7 @@ function InventoryPanel({ notify }) {
   );
 }
 
-function EquipmentTab({ data, isAdmin, myMember, isTechnical, canDeleteTickets, reload, notify }) {
+function EquipmentTab({ data, isAdmin, myMember, canAccessInventory, canDeleteTickets, reload, notify }) {
   const [view, setView] = useState("tickets");
   const [showForm, setShowForm] = useState(false);
   const blank = () => ({ date: new Date().toISOString().slice(0, 10), systems: Object.fromEntries(SYSTEMS.map((s) => [s, "OK"])), description: "" });
@@ -2839,7 +2839,7 @@ function EquipmentTab({ data, isAdmin, myMember, isTechnical, canDeleteTickets, 
         subtitle={view === "tickets" ? "Pre/post-service system checks and incident tickets" : "Inventory, valuation, and requests — Technical unit"}
         right={
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {isTechnical && (
+            {canAccessInventory && (
               <div style={{ display: "flex", gap: 4, background: COLORS.surface2, borderRadius: 8, padding: 3 }}>
                 <Btn small tone={view === "tickets" ? "amber" : "ghost"} onClick={() => setView("tickets")}>Tickets</Btn>
                 <Btn small tone={view === "inventory" ? "amber" : "ghost"} onClick={() => setView("inventory")}><Boxes size={12} /> Inventory</Btn>

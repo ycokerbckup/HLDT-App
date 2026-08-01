@@ -46,8 +46,8 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
     const { data: memberRow } = await supabase.from("members").select("unit").eq("profile_id", user.id).maybeSingle();
-    if (memberRow?.unit !== "Technical") {
-      return new Response(JSON.stringify({ error: "Technical unit only." }), { status: 403, headers: CORS_HEADERS });
+    if (memberRow?.unit !== "Technical" && memberRow?.unit !== "Operations") {
+      return new Response(JSON.stringify({ error: "Technical or Operations unit only." }), { status: 403, headers: CORS_HEADERS });
     }
 
     const { data: inventory } = await supabase

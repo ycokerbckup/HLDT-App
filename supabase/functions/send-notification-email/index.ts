@@ -14,7 +14,7 @@ const GMAIL_APP_PASSWORD = Deno.env.get("GMAIL_APP_PASSWORD")!;
 const APP_URL = (Deno.env.get("APP_URL") || "").replace(/\/$/, "");
 const FROM_NAME = "Display Team Ops";
 
-const EMAILABLE_TYPES = ["roster", "assignment", "signup", "announcement"];
+const EMAILABLE_TYPES = ["roster", "assignment", "signup", "chat", "announcement"];
 
 function ctaButton(linkTab?: string, dmWith?: string): string {
   if (!APP_URL) return "";
@@ -84,6 +84,14 @@ serve(async (req) => {
     console.log("Total profiles with email on file:", allEmails.length);
 
     let to: string[] = [];
+
+    if (record.type === "chat" && !record.target_profile_id) {
+      // Team-channel broadcast (no target_profile_id) — stays silent.
+      // Only DMs (always targeted to one recipient) email.
+      console.log("Skipping — team-channel chat broadcast, DMs only");
+      await supabase.from("notifications").update({ emailed: true }).eq("id", record.id);
+      return new Response("skip-team-chat", { status: 200 });
+    }
 
     if (record.target_profile_id) {
       const email = emailById[record.target_profile_id];

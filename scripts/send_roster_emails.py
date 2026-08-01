@@ -64,7 +64,7 @@ def main():
         print("Warning: APP_URL not set — emails will send without a clickable link.")
 
     pending = api_get(
-        "/rest/v1/notifications?type=in.(roster,assignment,signup,announcement)&emailed=eq.false"
+        "/rest/v1/notifications?type=in.(roster,assignment,signup,chat,announcement)&emailed=eq.false"
         "&select=id,type,title,body,link_tab,target_profile_id,dm_with_profile_id"
     )
     if not pending:
@@ -76,6 +76,12 @@ def main():
     all_emails = [e for e in email_by_id.values() if e]
 
     for n in pending:
+        # Team-channel chat broadcasts (no target_profile_id) stay silent —
+        # only DMs (which are always targeted to one specific recipient) email.
+        if n["type"] == "chat" and not n.get("target_profile_id"):
+            api_patch(f"/rest/v1/notifications?id=eq.{n['id']}", {"emailed": True})
+            continue
+
         target = n.get("target_profile_id")
         to = [email_by_id.get(target)] if target else all_emails
         to = [t for t in to if t]

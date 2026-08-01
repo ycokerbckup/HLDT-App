@@ -2464,6 +2464,10 @@ function InventoryPanel({ notify }) {
   const [showForm, setShowForm] = useState(false);
   const [suggestions, setSuggestions] = useState(null);
   const [generating, setGenerating] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatSending, setChatSending] = useState(false);
   const blank = () => ({ id: null, name: "", category: "Other", quantity: 1, condition: "Good", purchase_date: "", purchase_price: "", estimated_value: "", notes: "" });
   const [form, setForm] = useState(blank());
 
@@ -2542,9 +2546,11 @@ function InventoryPanel({ notify }) {
       "",
     ];
     suggestions.forEach((s, i) => {
-      lines.push(`${i + 1}. ${s.item} [${s.priority} priority]`);
-      lines.push(`   Reason: ${s.reason}`);
-      lines.push(`   Estimated cost: ${s.estimatedCost}`);
+      lines.push(`${i + 1}. ${s.item} [${s.priority} priority] — ${s.recommendedAction}`);
+      lines.push(`   Issue: ${s.issue}`);
+      lines.push(`   Repair estimate: ${s.repairCostEstimate}`);
+      lines.push(`   Replacement estimate: ${s.replacementCostEstimate}`);
+      lines.push(`   Notes: ${s.notes}`);
       lines.push("");
     });
     const blob = new Blob([lines.join("\n")], { type: "text/plain" });
@@ -2554,6 +2560,22 @@ function InventoryPanel({ notify }) {
     a.download = `equipment-request-${new Date().toISOString().slice(0, 10)}.txt`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function sendChatMessage() {
+    const text = chatInput.trim();
+    if (!text) return;
+    const history = chatMessages.map((m) => ({ role: m.role, text: m.text }));
+    setChatMessages((prev) => [...prev, { role: "user", text }]);
+    setChatInput("");
+    setChatSending(true);
+    const { data, error } = await supabase.functions.invoke("equipment-ai-chat", { body: { message: text, history } });
+    if (error || data?.error) {
+      setChatMessages((prev) => [...prev, { role: "model", text: `⚠ ${data?.error || error?.message || "Something went wrong."}` }]);
+    } else {
+      setChatMessages((prev) => [...prev, { role: "model", text: data.reply }]);
+    }
+    setChatSending(false);
   }
 
   const totalPurchaseValue = items.reduce((sum, it) => sum + (Number(it.purchase_price) || 0) * (it.quantity || 1), 0);
@@ -2598,6 +2620,7 @@ function InventoryPanel({ notify }) {
         <Btn tone="ghost" onClick={generateSuggestions} disabled={generating}>
           <Sparkles size={13} /> {generating ? "Thinking..." : "AI suggestions"}
         </Btn>
+        <Btn tone="ghost" onClick={() => setShowChat(true)}><MessageCircle size={13} /> Ask AI</Btn>
         <Btn tone="amber" onClick={() => { setForm(blank()); setShowForm(true); }}><Plus size={13} /> Add item</Btn>
       </div>
 
@@ -2610,12 +2633,19 @@ function InventoryPanel({ notify }) {
           ) : (
             suggestions.map((s, i) => (
               <div key={i} style={{ padding: "10px 0", borderTop: i > 0 ? `1px solid ${COLORS.border}` : "none" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, gap: 8 }}>
                   <span style={{ fontSize: 13, fontWeight: 500 }}>{s.item}</span>
-                  <Badge tone={s.priority === "High" ? "red" : s.priority === "Medium" ? "amber" : "gray"}>{s.priority}</Badge>
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    <Badge tone="gray">{s.recommendedAction}</Badge>
+                    <Badge tone={s.priority === "High" ? "red" : s.priority === "Medium" ? "amber" : "gray"}>{s.priority}</Badge>
+                  </div>
                 </div>
-                <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 3 }}>{s.reason}</div>
-                <div style={{ fontSize: 11, color: COLORS.textMuted }}>Est. cost: {s.estimatedCost}</div>
+                <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 4 }}>{s.issue}</div>
+                <div style={{ display: "flex", gap: 16, fontSize: 11, color: COLORS.textMuted, marginBottom: 4, flexWrap: "wrap" }}>
+                  <span>Repair: {s.repairCostEstimate}</span>
+                  <span>Replace: {s.replacementCostEstimate}</span>
+                </div>
+                {s.notes && <div style={{ fontSize: 11, color: COLORS.textMuted, fontStyle: "italic" }}>{s.notes}</div>}
               </div>
             ))
           )}
@@ -2676,6 +2706,42 @@ function InventoryPanel({ notify }) {
           </div>
         )}
       </Panel>
+
+      {showChat && (
+        <Modal title="Ask AI about equipment" onClose={() => setShowChat(false)} width={480}>
+          <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 10 }}>
+            Describe what you need — an upcoming event, a requirement, a problem — and get suggestions grounded in your current inventory and open tickets.
+          </div>
+          <div style={{ height: 320, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, marginBottom: 10, padding: "4px 2px" }}>
+            {chatMessages.length === 0 ? (
+              <EmptyRow text={'e.g. "We have a baptism service next month needing extra lighting" or "ProPresenter keeps crashing during transitions, what should we do?"'} />
+            ) : (
+              chatMessages.map((m, i) => (
+                <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "85%" }}>
+                  <div style={{
+                    background: m.role === "user" ? COLORS.amberDim : COLORS.surface2,
+                    color: m.role === "user" ? COLORS.amber : COLORS.textPrimary,
+                    padding: "8px 12px", borderRadius: 10, fontSize: 13, whiteSpace: "pre-wrap",
+                  }}>
+                    {m.text}
+                  </div>
+                </div>
+              ))
+            )}
+            {chatSending && <div style={{ fontSize: 12, color: COLORS.textMuted, alignSelf: "flex-start" }}>Thinking...</div>}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              style={{ ...inputStyle, flex: 1 }}
+              placeholder="Describe what you need..."
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !chatSending && sendChatMessage()}
+            />
+            <Btn tone="amber" onClick={sendChatMessage} disabled={chatSending}>Send</Btn>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

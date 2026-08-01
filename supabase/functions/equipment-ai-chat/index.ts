@@ -1,8 +1,7 @@
-// Generates equipment purchase/replacement suggestions from current
-// inventory + recent unresolved tickets, using Google Gemini's free API
-// tier. Called on-demand by the app (not a webhook) — requires the caller
-// to be a logged-in, Technical-unit user, checked here server-side too,
-// not just hidden in the UI.
+// Multi-turn conversational assistant for equipment planning — describe
+// what you need or an upcoming event, get tailored suggestions grounded
+// in current inventory, open tickets, and live Google Search for real
+// pricing. Technical-unit only, checked server-side.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -43,6 +42,14 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Technical unit only." }), { status: 403, headers: CORS_HEADERS });
     }
 
+    const body = await req.json();
+    const userMessage: string = body?.message || "";
+    const history: { role: "user" | "model"; text: string }[] = Array.isArray(body?.history) ? body.history : [];
+
+    if (!userMessage.trim()) {
+      return new Response(JSON.stringify({ error: "Empty message." }), { status: 400, headers: CORS_HEADERS });
+    }
+
     const { data: inventory } = await supabase
       .from("equipment_inventory")
       .select("name,category,quantity,condition,purchase_date,estimated_value,notes");
@@ -54,7 +61,7 @@ serve(async (req) => {
       .order("created_at", { ascending: false })
       .limit(20);
 
-    const prompt = `You are an equipment advisor for a church AV/Display team in Nigeria. You have access to live Google Search — use it to find real, current prices and repair-shop rates in Nigeria (Naira ₦) wherever possible, rather than guessing.
+    const systemContext = `You are an equipment planning assistant for a church AV/Display team in Nigeria. You have access to live Google Search — use it to find real, current prices in Naira (₦) wherever relevant, rather than guessing.
 
 Current inventory (JSON):
 ${JSON.stringify(inventory || [], null, 2)}
@@ -62,17 +69,14 @@ ${JSON.stringify(inventory || [], null, 2)}
 Recent unresolved equipment issues/tickets (JSON):
 ${JSON.stringify(tickets || [], null, 2)}
 
-For each faulty/poor-condition inventory item and each unresolved ticket, and for any clear gaps in the inventory, produce a suggestion with:
-- "item": short name of the equipment or fix
-- "issue": what's actually wrong (diagnosis), in plain terms
-- "recommendedAction": "Repair", "Replace", or "New Purchase"
-- "repairCostEstimate": realistic Naira range to repair, using real prices where you can find them via search, or "N/A" if not repairable
-- "replacementCostEstimate": realistic Naira range to replace/buy new, using real prices where you can find them via search
-- "priority": "High", "Medium", or "Low"
-- "notes": brief reasoning for the recommendation (repair vs replace), 1-2 sentences
+The user will describe what they need — an upcoming event, a requirement, a problem — in their own words. Have a natural conversation: ask clarifying questions if genuinely useful, but default to giving concrete, actionable suggestions (what to buy, approximate cost, why) grounded in the inventory and tickets above. Keep replies concise — a few short paragraphs or a short list, not an essay.`;
 
-Suggest up to 6 items, ranked by priority. Respond with ONLY a JSON array (no markdown fences, no other text), in this exact shape:
-[{"item": "...", "issue": "...", "recommendedAction": "Repair", "repairCostEstimate": "...", "replacementCostEstimate": "...", "priority": "High", "notes": "..."}]`;
+    const contents = [
+      { role: "user", parts: [{ text: systemContext }] },
+      { role: "model", parts: [{ text: "Understood — I have the current inventory and open tickets. What do you need help with?" }] },
+      ...history.map((h) => ({ role: h.role, parts: [{ text: h.text }] })),
+      { role: "user", parts: [{ text: userMessage }] },
+    ];
 
     const geminiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY}`,
@@ -80,7 +84,7 @@ Suggest up to 6 items, ranked by priority. Respond with ONLY a JSON array (no ma
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
+          contents,
           tools: [{ google_search: {} }],
         }),
       }
@@ -93,20 +97,9 @@ Suggest up to 6 items, ranked by priority. Respond with ONLY a JSON array (no ma
     }
 
     const geminiData = await geminiRes.json();
-    const rawText = geminiData?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || "").join("") || "[]";
+    const reply = geminiData?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || "").join("") || "Sorry, I didn't get a usable response — try rephrasing.";
 
-    let suggestions;
-    try {
-      // Grounded responses aren't always pure JSON (may include stray text
-      // or markdown fences) — extract the first [...] block defensively.
-      const match = rawText.match(/\[[\s\S]*\]/);
-      suggestions = match ? JSON.parse(match[0]) : [];
-    } catch {
-      console.error("Failed to parse Gemini output as JSON:", rawText);
-      suggestions = [];
-    }
-
-    return new Response(JSON.stringify({ suggestions }), { headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ reply }), { headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   } catch (e) {
     console.error(e);
     return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: CORS_HEADERS });

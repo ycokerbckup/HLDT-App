@@ -326,9 +326,9 @@ function useToasts() {
   return { toasts, notify };
 }
 
-function RowLine({ children, onClick }) {
+function RowLine({ children, onClick, style, title }) {
   return (
-    <div className="hldt-row" data-clickable={!!onClick} onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 4px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 13, cursor: onClick ? "pointer" : "default" }}>
+    <div className="hldt-row" data-clickable={!!onClick} onClick={onClick} title={title} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 4px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 13, cursor: onClick ? "pointer" : "default", ...style }}>
       {children}
     </div>
   );
@@ -3178,12 +3178,16 @@ function RosterTab({ data, isAdmin, canManageRosters, reload, notify }) {
       <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
         <Panel title="Team A" style={{ flex: 1 }}>
           {teamA.length === 0 ? <EmptyRow text="No members assigned." /> : teamA.map((m) => (
-            <RowLine key={m.id}><span style={{ flex: 1 }}>{m.name}</span><span style={{ fontSize: 11, color: COLORS.textMuted }}>{m.unit}</span></RowLine>
+            <RowLine key={m.id} style={{ opacity: m.unavailable ? 0.45 : 1 }} title={m.unavailable ? "Temporarily unavailable" : undefined}>
+              <span style={{ flex: 1 }}>{m.name}</span><span style={{ fontSize: 11, color: COLORS.textMuted }}>{m.unit}</span>
+            </RowLine>
           ))}
         </Panel>
         <Panel title="Team B" style={{ flex: 1 }}>
           {teamB.length === 0 ? <EmptyRow text="No members assigned." /> : teamB.map((m) => (
-            <RowLine key={m.id}><span style={{ flex: 1 }}>{m.name}</span><span style={{ fontSize: 11, color: COLORS.textMuted }}>{m.unit}</span></RowLine>
+            <RowLine key={m.id} style={{ opacity: m.unavailable ? 0.45 : 1 }} title={m.unavailable ? "Temporarily unavailable" : undefined}>
+              <span style={{ flex: 1 }}>{m.name}</span><span style={{ fontSize: 11, color: COLORS.textMuted }}>{m.unit}</span>
+            </RowLine>
           ))}
         </Panel>
       </div>

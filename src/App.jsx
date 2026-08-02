@@ -2381,16 +2381,14 @@ function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify })
                   onClick={() => canManage && (setForm(m), setShowForm(true))}
                   className={canManage ? "hldt-row" : undefined}
                   data-clickable={canManage}
-                  style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 0.7fr 0.9fr 0.6fr", alignItems: "center", padding: "8px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 13, cursor: canManage ? "pointer" : "default" }}
+                  title={m.unavailable ? "Temporarily unavailable" : undefined}
+                  style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 0.7fr 0.9fr 0.6fr", alignItems: "center", padding: "8px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 13, cursor: canManage ? "pointer" : "default", opacity: m.unavailable ? 0.45 : 1 }}
                 >
                   <div>{m.name}</div>
                   <div style={{ color: COLORS.textSecondary }}>{m.unit}</div>
                   <div style={{ color: COLORS.textSecondary }}>{m.tier}</div>
                   <div style={{ color: COLORS.textSecondary }}>{m.team}</div>
-                  <div style={{ display: "flex", gap: 4 }}>
-                    {m.profileId ? <Badge tone="green">Linked</Badge> : <Badge tone="gray">No login</Badge>}
-                    {m.unavailable && <Badge tone="red">Unavailable</Badge>}
-                  </div>
+                  <div>{m.profileId ? <Badge tone="green">Linked</Badge> : <Badge tone="gray">No login</Badge>}</div>
                   <div style={{ display: "flex", justifyContent: "flex-end" }}>
                     {canManage && <ChevronRight size={14} style={{ color: COLORS.textMuted }} />}
                   </div>

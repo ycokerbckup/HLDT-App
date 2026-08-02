@@ -1961,30 +1961,43 @@ function CelebrantPopup({ type, name, onClose }) {
 /* ---------------- dashboard ---------------- */
 
 function OwingDuesModal({ data, onClose }) {
-  const [month, setMonth] = useState(currentMonthStringWAT());
-  const owing = data.members
-    .map((m) => ({ m, due: getDue(m, month) }))
-    .filter((x) => x.due.status === "owing" && !duesExempt(x.m));
+  const [month, setMonth] = useState("all");
+
+  const owing = month === "all"
+    ? data.members
+        .filter((m) => !duesExempt(m))
+        .map((m) => {
+          const owingMonths = Object.keys(m.dues || {}).filter((mo) => getDue(m, mo).status === "owing");
+          const totalOwed = owingMonths.reduce((sum, mo) => sum + Math.max(0, rate(m) - (getDue(m, mo).amount || 0)), 0);
+          return { m, owingMonths, totalOwed };
+        })
+        .filter((x) => x.owingMonths.length > 0)
+    : data.members
+        .filter((m) => !duesExempt(m))
+        .map((m) => ({ m, due: getDue(m, month) }))
+        .filter((x) => x.due.status === "owing")
+        .map((x) => ({ m: x.m, owingMonths: [month], totalOwed: Math.max(0, rate(x.m) - (x.due.amount || 0)) }));
 
   return (
     <Modal title="Members owing dues" onClose={onClose} width={520}>
       <Field label="Month">
         <select style={inputStyle} value={month} onChange={(e) => setMonth(e.target.value)}>
+          <option value="all">All months</option>
           {monthsRange(12).map((mo) => <option key={mo} value={mo}>{mo}</option>)}
         </select>
       </Field>
       {owing.length === 0 ? (
-        <EmptyRow text="No one owing for this month." />
+        <EmptyRow text={month === "all" ? "No one currently owing." : "No one owing for this month."} />
       ) : (
-        owing.map(({ m, due }) => {
-          const owed = Math.max(0, rate(m) - (due.amount || 0));
-          return (
-            <RowLine key={m.id}>
-              <span style={{ flex: 1 }}>{m.name}</span>
-              <span style={{ color: COLORS.red, fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>{currency(owed)}</span>
-            </RowLine>
-          );
-        })
+        owing.map(({ m, owingMonths, totalOwed }) => (
+          <RowLine key={m.id}>
+            <div style={{ flex: 1 }}>
+              <div>{m.name}</div>
+              {month === "all" && owingMonths.length > 1 && <div style={{ fontSize: 11, color: COLORS.textMuted }}>{owingMonths.length} months owing</div>}
+            </div>
+            <span style={{ color: COLORS.red, fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>{currency(totalOwed)}</span>
+          </RowLine>
+        ))
       )}
     </Modal>
   );
@@ -2099,7 +2112,7 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWel
   const openTickets = data.tickets.filter((t) => t.status !== "Resolved");
   const inTraining = data.onboarding.filter((o) => o.status !== "Graduated");
   const readyToGraduate = data.onboarding.filter((o) => o.status === "Independently ready" || o.status === "Ready");
-  const owingCount = data.members.filter((m) => !duesExempt(m) && getDue(m, currentMonth).status === "owing").length;
+  const owingCount = data.members.filter((m) => !duesExempt(m) && Object.keys(m.dues || {}).some((mo) => getDue(m, mo).status === "owing")).length;
 
   const todayKey = (() => {
     const d = new Date();

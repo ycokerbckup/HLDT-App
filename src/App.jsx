@@ -59,12 +59,38 @@ const TICKET_STATUSES = ["Open", "Assigned", "In progress", "Resolved"];
 const SYSTEMS = ["proPresenter", "vmix", "resolume", "monitors", "screens", "network"];
 const DUES_START_MONTH = "2026-06";
 
+// The team operates on West Africa Time (UTC+1, no daylight saving).
+// Pin all business-date calculations to this explicitly rather than
+// each device's own local timezone, so every user — regardless of
+// their phone/laptop's clock settings — sees the same "today". Always
+// read these with getUTC* methods, never local getters or
+// toDateString(), which would apply the browser's own offset on top of
+// this and reintroduce the exact bug this fixes.
+const WAT_OFFSET_MS = 60 * 60 * 1000;
+
+function nowWAT() {
+  return new Date(Date.now() + WAT_OFFSET_MS);
+}
+
+function todayStringWAT() {
+  const d = nowWAT();
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+function currentMonthStringWAT() {
+  return todayStringWAT().slice(0, 7);
+}
+
+function monthStringWAT(monthOffset) {
+  const anchor = nowWAT();
+  const dt = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + monthOffset, 1));
+  return dt.toISOString().slice(0, 7);
+}
+
 const MONTHS = () => {
   const out = [];
-  const d = new Date();
   for (let i = -2; i <= 2; i++) {
-    const dt = new Date(d.getFullYear(), d.getMonth() + i, 1);
-    const mo = dt.toISOString().slice(0, 7);
+    const mo = monthStringWAT(i);
     if (mo >= DUES_START_MONTH) out.push(mo);
   }
   return out;
@@ -72,10 +98,8 @@ const MONTHS = () => {
 
 function monthsRange(n) {
   const out = [];
-  const d = new Date();
   for (let i = n - 1; i >= 0; i--) {
-    const dt = new Date(d.getFullYear(), d.getMonth() - i, 1);
-    const mo = dt.toISOString().slice(0, 7);
+    const mo = monthStringWAT(-i);
     if (mo >= DUES_START_MONTH) out.push(mo);
   }
   return out;
@@ -104,21 +128,27 @@ function duesExempt(m) {
 }
 
 function todayDDMM() {
-  const d = new Date();
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const d = nowWAT();
+  return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 // Returns 'birthday' | 'graduation' | 'milestone' | null for a member, today.
 function getCelebrationForMember(member, onboardingList) {
   if (!member) return null;
   if (member.dob === todayDDMM()) return "birthday";
-  const gradToday = (onboardingList || []).some((o) => o.memberId === member.id && o.status === "Graduated" && o.graduatedAt && new Date(o.graduatedAt).toDateString() === new Date().toDateString());
+  const todayStr = todayStringWAT();
+  const gradToday = (onboardingList || []).some((o) => {
+    if (o.memberId !== member.id || o.status !== "Graduated" || !o.graduatedAt) return false;
+    const gradWAT = new Date(new Date(o.graduatedAt).getTime() + WAT_OFFSET_MS);
+    const gradStr = `${gradWAT.getUTCFullYear()}-${String(gradWAT.getUTCMonth() + 1).padStart(2, "0")}-${String(gradWAT.getUTCDate()).padStart(2, "0")}`;
+    return gradStr === todayStr;
+  });
   if (gradToday) return "graduation";
   if (member.joinDate) {
-    const today = new Date();
-    if (today.getDate() === 1) {
-      const jd = new Date(member.joinDate);
-      const monthsSince = (today.getFullYear() - jd.getFullYear()) * 12 + (today.getMonth() - jd.getMonth());
+    const today = nowWAT();
+    if (today.getUTCDate() === 1) {
+      const jd = new Date(member.joinDate + "T00:00:00Z");
+      const monthsSince = (today.getUTCFullYear() - jd.getUTCFullYear()) * 12 + (today.getUTCMonth() - jd.getUTCMonth());
       if (monthsSince > 0 && monthsSince % 6 === 0) return "milestone";
     }
   }
@@ -1931,7 +1961,7 @@ function CelebrantPopup({ type, name, onClose }) {
 /* ---------------- dashboard ---------------- */
 
 function OwingDuesModal({ data, onClose }) {
-  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [month, setMonth] = useState(currentMonthStringWAT());
   const owing = data.members
     .map((m) => ({ m, due: getDue(m, month) }))
     .filter((x) => x.due.status === "owing" && !duesExempt(x.m));
@@ -1961,7 +1991,7 @@ function OwingDuesModal({ data, onClose }) {
 }
 
 function WalletPanel({ data, isAdmin }) {
-  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [month, setMonth] = useState(currentMonthStringWAT());
   const [totalBalance, setTotalBalance] = useState(0);
   const [editingBalance, setEditingBalance] = useState(false);
   const [balanceInput, setBalanceInput] = useState("");
@@ -2065,7 +2095,7 @@ function WalletPanel({ data, isAdmin }) {
 
 function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWelfareInfo }) {
   const [showOwingModal, setShowOwingModal] = useState(false);
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentMonth = currentMonthStringWAT();
   const openTickets = data.tickets.filter((t) => t.status !== "Resolved");
   const inTraining = data.onboarding.filter((o) => o.status !== "Graduated");
   const readyToGraduate = data.onboarding.filter((o) => o.status === "Independently ready" || o.status === "Ready");

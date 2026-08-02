@@ -51,6 +51,12 @@ insert into easter_dates (year, easter_sunday) values
   (2034, '2034-04-09'),
   (2035, '2035-03-25');
 
+-- No policies attached deliberately — this table is only ever read by
+-- the security-definer function below (which bypasses RLS), never by
+-- the client app directly. Enabling RLS with zero policies fully locks
+-- it from the public API.
+alter table easter_dates enable row level security;
+
 create or replace function public.run_seasonal_announcements()
 returns void language plpgsql security definer set search_path = public as $$
 declare

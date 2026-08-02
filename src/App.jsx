@@ -122,9 +122,12 @@ function currency(n) {
   return `₦${Math.round(n || 0).toLocaleString()}`;
 }
 
-// Dues aren't expected from a trainee until they're promoted to full membership.
+// Dues aren't expected from a trainee until they're promoted to full
+// membership, or from a member marked temporarily unavailable — though
+// either can still choose to pay (this only excludes them from the
+// Expected/Owing totals, cells stay clickable for a voluntary payment).
 function duesExempt(m) {
-  return m.tier === "Trainee";
+  return m.tier === "Trainee" || m.unavailable === true;
 }
 
 function todayDDMM() {
@@ -699,6 +702,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
           team: m.team, joinDate: m.join_date, skills: source.skills || {}, dues: source.dues || {},
           profileId: m.profile_id,
           homeAddress: source.home_address, sex: source.sex, dob: source.dob, occupation: source.occupation, kymCompletedAt: source.kym_completed_at,
+          unavailable: m.unavailable,
         };
       }),
       onboarding: (onboardingRes.data || []).map((o) => ({
@@ -2257,7 +2261,7 @@ function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify })
 
   async function saveMember() {
     if (!form.name.trim()) return;
-    const payload = { name: form.name, email: form.email, phone: form.phone, unit: form.unit || null, tier: form.tier || null, team: form.team || null, join_date: form.joinDate, skills: form.skills, dues: form.dues };
+    const payload = { name: form.name, email: form.email, phone: form.phone, unit: form.unit || null, tier: form.tier || null, team: form.team || null, join_date: form.joinDate, skills: form.skills, dues: form.dues, unavailable: !!form.unavailable };
     const isNew = !form.id;
     const { error } = form.id
       ? await supabase.from("members").update(payload).eq("id", form.id)
@@ -2344,6 +2348,12 @@ function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify })
               </div>
               {!form.team && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>Unassigned</div>}
             </Field>
+            <Field label="Availability">
+              <Btn small tone={form.unavailable ? "danger" : "ghost"} onClick={() => setForm({ ...form, unavailable: !form.unavailable })}>
+                {form.unavailable ? "Marked unavailable" : "Available"}
+              </Btn>
+              {form.unavailable && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>Can't be assigned tickets or roster duty. Dues not expected, chat/notifications unaffected.</div>}
+            </Field>
           </div>
           <div style={{ fontSize: 12, color: COLORS.textSecondary, margin: "10px 0 6px" }}>Self-reported proficiency (1-5)</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
@@ -2377,7 +2387,10 @@ function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify })
                   <div style={{ color: COLORS.textSecondary }}>{m.unit}</div>
                   <div style={{ color: COLORS.textSecondary }}>{m.tier}</div>
                   <div style={{ color: COLORS.textSecondary }}>{m.team}</div>
-                  <div>{m.profileId ? <Badge tone="green">Linked</Badge> : <Badge tone="gray">No login</Badge>}</div>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {m.profileId ? <Badge tone="green">Linked</Badge> : <Badge tone="gray">No login</Badge>}
+                    {m.unavailable && <Badge tone="red">Unavailable</Badge>}
+                  </div>
                   <div style={{ display: "flex", justifyContent: "flex-end" }}>
                     {canManage && <ChevronRight size={14} style={{ color: COLORS.textMuted }} />}
                   </div>
@@ -2953,7 +2966,7 @@ function EquipmentTab({ data, isAdmin, myMember, canAccessInventory, canDeleteTi
                 {TICKET_STATUSES.map((s) => <Btn key={s} small tone={t.status === s ? "amber" : "ghost"} onClick={() => updateStatus(t, s)}>{s}</Btn>)}
                 <select value={t.assignedToId || ""} onChange={(e) => assign(t, e.target.value)} style={{ ...inputStyle, width: 150, fontSize: 12, padding: "5px 8px" }}>
                   <option value="">Assign to...</option>
-                  {data.members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  {data.members.filter((m) => !m.unavailable).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
               </div>
             )}
@@ -3018,7 +3031,7 @@ function TuesdayRosterEditor({ existing, members, onClose, onSaved, notify }) {
           <input type="number" style={{ ...inputStyle, width: 56 }} value={it.duration_minutes || ""} onChange={(e) => updateItem(idx, { duration_minutes: Number(e.target.value) })} />
           <select style={{ ...inputStyle, flex: 1.3 }} value={it.assigned_member_id || ""} onChange={(e) => { const mem = members.find((m) => m.id === e.target.value); updateItem(idx, { assigned_member_id: e.target.value, assigned_name: mem?.name || "" }); }}>
             <option value="">Unassigned</option>
-            {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            {members.filter((m) => !m.unavailable).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
           <Trash2 size={14} style={{ cursor: "pointer", color: COLORS.textMuted, flexShrink: 0 }} onClick={() => removeItem(idx)} />
         </div>
@@ -3078,7 +3091,7 @@ function SaturdayRosterEditor({ existing, members, onClose, onSaved, notify }) {
       </div>
       <Field label="Trainers this week">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {members.map((m) => (
+          {members.filter((m) => !m.unavailable).map((m) => (
             <Btn key={m.id} small tone={trainerIds.includes(m.id) ? "amber" : "ghost"} onClick={() => toggleTrainer(m.id)}>{m.name}</Btn>
           ))}
         </div>
@@ -3341,13 +3354,13 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify }) {
           </div>
           {data.members.length === 0 ? <EmptyRow text="No members yet." /> : data.members.map((m) => (
             <div key={m.id} style={{ display: "grid", gridTemplateColumns: `1.4fr repeat(${months.length}, 0.9fr)`, alignItems: "center", padding: "8px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 12 }}>
-              <div>{m.name} <span style={{ color: COLORS.textMuted }}>· {duesExempt(m) ? "no dues yet (trainee)" : currency(rate(m))}</span></div>
+              <div>{m.name} <span style={{ color: COLORS.textMuted }}>· {duesExempt(m) ? (m.unavailable ? "not expected (unavailable)" : "no dues yet (trainee)") : currency(rate(m))}</span></div>
               {months.map((mo) => {
                 const due = getDue(m, mo);
                 const tone = due.status === "paid" ? "green" : due.status === "owing" ? "red" : due.status === "free" ? "amber" : "gray";
                 return (
                   <div key={mo} style={{ textAlign: "center", cursor: "pointer" }} onClick={() => setEditing({ member: m, month: mo })}>
-                    <Badge tone={tone}>{due.status === "unset" ? (duesExempt(m) ? "Trainee" : "—") : due.amount ? currency(due.amount) : due.status}</Badge>
+                    <Badge tone={tone}>{due.status === "unset" ? (duesExempt(m) ? (m.unavailable ? "Unavailable" : "Trainee") : "—") : due.amount ? currency(due.amount) : due.status}</Badge>
                   </div>
                 );
               })}

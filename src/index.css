@@ -57,6 +57,68 @@ body {
 @keyframes hldt-spin {
   to { transform: rotate(360deg); }
 }
+@keyframes hldt-drift-a {
+  0%, 100% { transform: translate(-8%, -6%) scale(1); }
+  50% { transform: translate(6%, 8%) scale(1.15); }
+}
+@keyframes hldt-drift-b {
+  0%, 100% { transform: translate(10%, 6%) scale(1.1); }
+  50% { transform: translate(-6%, -10%) scale(1); }
+}
+@keyframes hldt-msg-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes hldt-bubble-in {
+  0% { opacity: 0; transform: scale(0.6); }
+  60% { opacity: 1; transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+/* ambient duotone glow — warm key light + cool fill light, drifting.
+   Signature element shared between Auth and Chat. */
+.hldt-glow-field {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.hldt-glow-orb {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(90px);
+  opacity: 0.55;
+}
+.hldt-glow-orb.hldt-glow-warm {
+  width: 46vw;
+  height: 46vw;
+  max-width: 560px;
+  max-height: 560px;
+  background: radial-gradient(circle, #E8A33D 0%, transparent 70%);
+  top: -10%;
+  left: -6%;
+  animation: hldt-drift-a 22s ease-in-out infinite;
+}
+.hldt-glow-orb.hldt-glow-cool {
+  width: 40vw;
+  height: 40vw;
+  max-width: 480px;
+  max-height: 480px;
+  background: radial-gradient(circle, #3DDC97 0%, transparent 70%);
+  bottom: -12%;
+  right: -8%;
+  animation: hldt-drift-b 26s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hldt-glow-orb { animation: none; }
+}
+
+.hldt-msg-pop {
+  animation: hldt-msg-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.hldt-reaction-pop {
+  animation: hldt-bubble-in 260ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
 
 /* interactive elements */
 .hldt-app button {
@@ -131,7 +193,33 @@ body {
 }
 
 .hldt-auth-card {
-  animation: hldt-fade-in-up 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: hldt-fade-in-up 480ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.hldt-composer-input {
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+.hldt-composer-input:focus {
+  outline: none;
+  border-color: #E8A33D !important;
+  box-shadow: 0 0 0 3px rgba(232, 163, 61, 0.15);
+}
+
+.hldt-avatar-ring {
+  transition: box-shadow 200ms ease, transform 200ms ease;
+}
+
+.hldt-msg-row .hldt-msg-actions {
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+.hldt-msg-row:hover .hldt-msg-actions {
+  opacity: 1;
+}
+@media (hover: none) {
+  .hldt-msg-row .hldt-msg-actions { opacity: 1; }
 }
 
 .hldt-modal {

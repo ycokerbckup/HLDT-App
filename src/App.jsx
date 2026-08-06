@@ -263,7 +263,7 @@ function Field({ label, children }) {
   );
 }
 
-function Btn({ children, onClick, tone = "default", small, type = "button", disabled }) {
+function Btn({ children, onClick, tone = "default", small, type = "button", disabled, style }) {
   const toneStyles = {
     default: { background: COLORS.surface2, color: COLORS.textPrimary, border: `1px solid ${COLORS.borderStrong}` },
     amber: { background: COLORS.amber, color: "#14171C", border: `1px solid ${COLORS.amber}` },
@@ -271,7 +271,7 @@ function Btn({ children, onClick, tone = "default", small, type = "button", disa
     danger: { background: "transparent", color: COLORS.red, border: `1px solid ${COLORS.redDim}` },
   };
   return (
-    <button className="hldt-btn" type={type} onClick={onClick} disabled={disabled} style={{ ...toneStyles[tone], borderRadius: 6, padding: small ? "5px 10px" : "8px 14px", fontSize: small ? 12 : 13, fontWeight: 500, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 6 }}>
+    <button className="hldt-btn" type={type} onClick={onClick} disabled={disabled} style={{ ...toneStyles[tone], borderRadius: 6, padding: small ? "5px 10px" : "8px 14px", fontSize: small ? 12 : 13, fontWeight: 500, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 6, ...style }}>
       {children}
     </button>
   );
@@ -467,51 +467,69 @@ function AuthScreen() {
   }
 
   return (
-    <div className="hldt-app" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.bg, padding: 16 }}>
-      <div className="hldt-auth-card" style={{ width: 340, maxWidth: "100%", background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 24 }}>
-        <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 20, color: COLORS.textPrimary, marginBottom: 2 }}>DISPLAY TEAM</div>
-        <div style={{ fontSize: 11, color: COLORS.textMuted, fontFamily: "'JetBrains Mono', monospace", marginBottom: 20 }}>OPS CONSOLE</div>
+    <div className="hldt-app" style={{ minHeight: "100vh", position: "relative", display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.bg, padding: 20, overflow: "hidden" }}>
+      <div className="hldt-glow-field">
+        <div className="hldt-glow-orb hldt-glow-warm" />
+        <div className="hldt-glow-orb hldt-glow-cool" />
+      </div>
 
-        <form onSubmit={submit}>
-          {mode === "signup" && (
-            <Field label="Full name">
-              <input style={inputStyle} value={fullName} onChange={(e) => setFullName(e.target.value)} required />
-            </Field>
-          )}
-          <Field label="Email">
-            <input type="email" style={inputStyle} value={email} onChange={(e) => setEmail(e.target.value)} required />
-          </Field>
-          {mode !== "forgot" && (
-            <Field label="Password">
-              <input type="password" style={inputStyle} value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
-            </Field>
-          )}
-          {error && <div style={{ fontSize: 12, color: COLORS.red, marginBottom: 10 }}>{error}</div>}
-          {notice && <div style={{ fontSize: 12, color: COLORS.green, marginBottom: 10 }}>{notice}</div>}
-          <Btn tone="amber" type="submit" disabled={busy}>
-            {busy ? (<><RefreshCw size={13} className="hldt-spin" /> Working...</>) : mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Send reset link"}
-          </Btn>
-        </form>
+      <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 64, flexWrap: "wrap", width: "100%", maxWidth: 920 }}>
+        <div style={{ flex: "1 1 320px", minWidth: 260, maxWidth: 420, textAlign: "left" }}>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, letterSpacing: "0.12em", color: COLORS.amber, marginBottom: 14, textTransform: "uppercase" }}>Ops Console</div>
+          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: "clamp(36px, 6vw, 56px)", lineHeight: 1.02, color: COLORS.textPrimary, letterSpacing: "-0.02em" }}>
+            Display<br />Team
+          </div>
+          <div style={{ fontSize: 15, color: COLORS.textSecondary, marginTop: 16, lineHeight: 1.5, maxWidth: 360 }}>
+            Roster, equipment, dues, and the crew chat — everything backstage, in one place.
+          </div>
+        </div>
 
-        <div style={{ marginTop: 16, fontSize: 12, color: COLORS.textMuted, display: "flex", flexDirection: "column", gap: 6 }}>
-          {mode === "signin" && (
-            <>
-              <div>New here? <span style={{ color: COLORS.amber, cursor: "pointer" }} onClick={() => { setMode("signup"); setError(""); setNotice(""); }}>Create an account</span></div>
-              <div>Forgot your password? <span style={{ color: COLORS.amber, cursor: "pointer" }} onClick={() => { setMode("forgot"); setError(""); setNotice(""); }}>Reset it</span></div>
-            </>
-          )}
+        <div className="hldt-auth-card" style={{ width: 360, maxWidth: "100%", background: "rgba(28, 32, 39, 0.72)", border: `1px solid ${COLORS.border}`, borderRadius: 20, padding: 28, boxShadow: "0 24px 60px rgba(0,0,0,0.35)" }}>
+          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 19, color: COLORS.textPrimary, marginBottom: 20 }}>
+            {mode === "signin" ? "Welcome back" : mode === "signup" ? "Create your account" : "Reset password"}
+          </div>
+
+          <form onSubmit={submit}>
+            {mode === "signup" && (
+              <Field label="Full name">
+                <input style={inputStyle} value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+              </Field>
+            )}
+            <Field label="Email">
+              <input type="email" style={inputStyle} value={email} onChange={(e) => setEmail(e.target.value)} required />
+            </Field>
+            {mode !== "forgot" && (
+              <Field label="Password">
+                <input type="password" style={inputStyle} value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
+              </Field>
+            )}
+            {error && <div style={{ fontSize: 12, color: COLORS.red, marginBottom: 10 }}>{error}</div>}
+            {notice && <div style={{ fontSize: 12, color: COLORS.green, marginBottom: 10 }}>{notice}</div>}
+            <Btn tone="amber" type="submit" disabled={busy}>
+              {busy ? (<><RefreshCw size={13} className="hldt-spin" /> Working...</>) : mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Send reset link"}
+            </Btn>
+          </form>
+
+          <div style={{ marginTop: 18, fontSize: 12, color: COLORS.textMuted, display: "flex", flexDirection: "column", gap: 6 }}>
+            {mode === "signin" && (
+              <>
+                <div>New here? <span style={{ color: COLORS.amber, cursor: "pointer" }} onClick={() => { setMode("signup"); setError(""); setNotice(""); }}>Create an account</span></div>
+                <div>Forgot your password? <span style={{ color: COLORS.amber, cursor: "pointer" }} onClick={() => { setMode("forgot"); setError(""); setNotice(""); }}>Reset it</span></div>
+              </>
+            )}
+            {mode === "signup" && (
+              <div>Already have an account? <span style={{ color: COLORS.amber, cursor: "pointer" }} onClick={() => { setMode("signin"); setError(""); setNotice(""); }}>Sign in</span></div>
+            )}
+            {mode === "forgot" && (
+              <div>Remembered it? <span style={{ color: COLORS.amber, cursor: "pointer" }} onClick={() => { setMode("signin"); setError(""); setNotice(""); }}>Back to sign in</span></div>
+            )}
+          </div>
           {mode === "signup" && (
-            <div>Already have an account? <span style={{ color: COLORS.amber, cursor: "pointer" }} onClick={() => { setMode("signin"); setError(""); setNotice(""); }}>Sign in</span></div>
-          )}
-          {mode === "forgot" && (
-            <div>Remembered it? <span style={{ color: COLORS.amber, cursor: "pointer" }} onClick={() => { setMode("signin"); setError(""); setNotice(""); }}>Back to sign in</span></div>
+            <div style={{ marginTop: 10, fontSize: 11, color: COLORS.textMuted }}>
+              New accounts start as members. An existing admin has to promote you from the Members tab.
+            </div>
           )}
         </div>
-        {mode === "signup" && (
-          <div style={{ marginTop: 10, fontSize: 11, color: COLORS.textMuted }}>
-            New accounts start as members. An existing admin has to promote you from the Members tab.
-          </div>
-        )}
       </div>
     </div>
   );
@@ -539,9 +557,13 @@ function ResetPasswordScreen() {
   }
 
   return (
-    <div className="hldt-app" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.bg, padding: 16 }}>
-      <div className="hldt-auth-card" style={{ width: 340, maxWidth: "100%", background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 24 }}>
-        <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 20, color: COLORS.textPrimary, marginBottom: 20 }}>Set a new password</div>
+    <div className="hldt-app" style={{ minHeight: "100vh", position: "relative", display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.bg, padding: 20, overflow: "hidden" }}>
+      <div className="hldt-glow-field">
+        <div className="hldt-glow-orb hldt-glow-warm" />
+        <div className="hldt-glow-orb hldt-glow-cool" />
+      </div>
+      <div className="hldt-auth-card" style={{ position: "relative", zIndex: 1, width: 360, maxWidth: "100%", background: "rgba(28, 32, 39, 0.72)", border: `1px solid ${COLORS.border}`, borderRadius: 20, padding: 28, boxShadow: "0 24px 60px rgba(0,0,0,0.35)" }}>
+        <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 19, color: COLORS.textPrimary, marginBottom: 20 }}>Set a new password</div>
         {done ? (
           <>
             <div style={{ fontSize: 12, color: COLORS.green, marginBottom: 14 }}>Password updated. You can sign in with it now.</div>
@@ -1503,12 +1525,12 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
             <div
               className="hldt-row" data-clickable="true"
               onClick={() => { setThread({ type: "team" }); setMobileShowThread(true); }}
-              style={{ padding: "8px 10px", borderRadius: 6, cursor: "pointer", background: thread.type === "team" ? COLORS.surface2 : "transparent", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}
+              style={{ padding: "9px 12px", borderRadius: 12, cursor: "pointer", background: thread.type === "team" ? COLORS.amberDim : "transparent", fontSize: 13, fontWeight: thread.type === "team" ? 600 : 400, display: "flex", alignItems: "center", gap: 6 }}
             >
-              <span style={{ flex: 1 }}># Team channel</span>
-              {unreadByThread.team && <span style={{ width: 7, height: 7, borderRadius: 999, background: COLORS.red, flexShrink: 0 }} />}
+              <span style={{ flex: 1, color: thread.type === "team" ? COLORS.amber : COLORS.textPrimary }}># Team channel</span>
+              {unreadByThread.team && <span className="hldt-pulse" style={{ width: 8, height: 8, borderRadius: 999, background: COLORS.red, flexShrink: 0 }} />}
             </div>
-            <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", padding: "10px 10px 4px" }}>Direct messages</div>
+            <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.04em", padding: "12px 12px 4px" }}>Direct messages</div>
             {dmCandidates.length === 0 ? (
               <div style={{ fontSize: 11, color: COLORS.textMuted, padding: "4px 10px" }}>No other members with accounts yet.</div>
             ) : (
@@ -1521,11 +1543,11 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                     key={m.id}
                     className="hldt-row" data-clickable="true"
                     onClick={() => { startDm(m); setMobileShowThread(true); }}
-                    style={{ padding: "8px 10px", borderRadius: 6, cursor: "pointer", background: active ? COLORS.surface2 : "transparent", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}
+                    style={{ padding: "8px 12px", borderRadius: 12, cursor: "pointer", background: active ? COLORS.amberDim : "transparent", fontSize: 13, fontWeight: active ? 600 : 400, display: "flex", alignItems: "center", gap: 10 }}
                   >
-                    <Avatar label={avatarLabels[m.profileId] || "?"} color={hashColor(m.profileId)} size={22} celebration={celebrationForProfile(m.profileId)} />
-                    <span style={{ flex: 1 }}>{m.name}</span>
-                    {hasUnread && <span style={{ width: 7, height: 7, borderRadius: 999, background: COLORS.red, flexShrink: 0 }} />}
+                    <Avatar label={avatarLabels[m.profileId] || "?"} color={hashColor(m.profileId)} size={30} celebration={celebrationForProfile(m.profileId)} />
+                    <span style={{ flex: 1, color: active ? COLORS.amber : COLORS.textPrimary }}>{m.name}</span>
+                    {hasUnread && <span className="hldt-pulse" style={{ width: 8, height: 8, borderRadius: 999, background: COLORS.red, flexShrink: 0 }} />}
                   </div>
                 );
               })
@@ -1534,8 +1556,8 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
         )}
 
         {(!isMobile || mobileShowThread) && (
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", border: `1px solid ${COLORS.border}`, borderRadius: 8, background: COLORS.surface1, minWidth: 0 }}>
-          <div style={{ padding: "10px 16px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 13, fontWeight: 500, display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", border: `1px solid ${COLORS.border}`, borderRadius: 18, background: COLORS.surface1, minWidth: 0, overflow: "hidden" }}>
+          <div style={{ padding: "12px 18px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
             {isMobile && (
               <button onClick={() => setMobileShowThread(false)} aria-label="Back" style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 0, display: "flex" }}>
                 <ChevronRight size={16} style={{ transform: "rotate(180deg)" }} />
@@ -1577,16 +1599,17 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                     {showDateDivider && <DateDivider date={m.created_at} />}
                     <div
                       id={`msg-${m.id}`}
+                      className="hldt-msg-row hldt-msg-pop"
                       style={{
-                        display: "flex", gap: 8, flexDirection: mine ? "row-reverse" : "row",
-                        borderRadius: 8, transition: "background-color 400ms ease",
+                        display: "flex", gap: 9, flexDirection: mine ? "row-reverse" : "row",
+                        borderRadius: 12, transition: "background-color 400ms ease",
                         background: highlightedId === m.id ? COLORS.amberDim : "transparent",
                         padding: highlightedId === m.id ? 6 : 0, margin: highlightedId === m.id ? -6 : 0,
                       }}
                     >
-                    <Avatar label={avatarLabels[m.sender_id] || m.sender_name?.[0] || "?"} color={hashColor(m.sender_id)} size={26} celebration={celebrationForProfile(m.sender_id)} />
+                    <Avatar label={avatarLabels[m.sender_id] || m.sender_name?.[0] || "?"} color={hashColor(m.sender_id)} size={30} celebration={celebrationForProfile(m.sender_id)} />
                     <div style={{ maxWidth: "70%" }}>
-                      {!mine && <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 2 }}>{m.sender_name}</div>}
+                      {!mine && <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 2, fontWeight: 500 }}>{m.sender_name}</div>}
                       {editingId === m.id ? (
                         <div style={{ display: "flex", gap: 6 }}>
                           <input style={{ ...inputStyle, fontSize: 12 }} value={editText} onChange={(e) => setEditText(e.target.value)} />
@@ -1597,8 +1620,11 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                         <div style={{ display: "flex", alignItems: "flex-end", gap: 4, flexDirection: mine ? "row-reverse" : "row" }}>
                           <div
                             style={{
-                              background: mine ? COLORS.amberDim : COLORS.surface2, color: mine ? COLORS.amber : COLORS.textPrimary,
-                              padding: "8px 12px", borderRadius: 10, fontSize: 13,
+                              background: mine ? `linear-gradient(135deg, ${COLORS.amberDim}, rgba(232,163,61,0.14))` : COLORS.surface2,
+                              color: mine ? COLORS.amber : COLORS.textPrimary,
+                              padding: "9px 14px", borderRadius: 18,
+                              borderBottomRightRadius: mine ? 6 : 18, borderBottomLeftRadius: mine ? 18 : 6,
+                              fontSize: 13.5, lineHeight: 1.4,
                             }}
                           >
                             {quoted && (
@@ -1613,7 +1639,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                             {m.body}
                             {m.edited_at && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 6 }}>(edited)</span>}
                           </div>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 2, position: "relative" }}>
+                          <div className="hldt-msg-actions" style={{ display: "flex", flexDirection: "column", gap: 2, position: "relative" }}>
                             {mine && withinEditWindow(m) && (
                               <button onClick={() => startEdit(m)} aria-label="Edit message" style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex" }}>
                                 <Pencil size={12} />
@@ -1658,9 +1684,10 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                             return (
                               <span
                                 key={emoji}
+                                className="hldt-reaction-pop"
                                 onClick={() => toggleReaction(m.id, emoji)}
                                 style={{
-                                  fontSize: 11, padding: "1px 6px", borderRadius: 999, cursor: "pointer",
+                                  fontSize: 11, padding: "2px 8px", borderRadius: 999, cursor: "pointer",
                                   background: reactedByMe ? COLORS.amberDim : COLORS.surface2,
                                   border: `1px solid ${reactedByMe ? COLORS.amber : COLORS.border}`,
                                 }}
@@ -1705,8 +1732,15 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
             </div>
           )}
           <div style={{ padding: 12, borderTop: `1px solid ${COLORS.border}`, display: "flex", gap: 8 }}>
-            <input style={{ ...inputStyle, flex: 1 }} placeholder="Type a message..." value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} />
-            <Btn tone="amber" onClick={send}>Send</Btn>
+            <input
+              className="hldt-composer-input"
+              style={{ ...inputStyle, flex: 1, borderRadius: 999, padding: "10px 16px" }}
+              placeholder="Type a message..."
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && send()}
+            />
+            <Btn tone="amber" onClick={send} style={{ borderRadius: 999 }}>Send</Btn>
           </div>
         </div>
         )}

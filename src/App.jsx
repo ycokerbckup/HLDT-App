@@ -3281,7 +3281,7 @@ function DueEditModal({ member, month, onClose, onSaved, notify }) {
 
   async function save() {
     const dues = { ...(member.dues || {}), [month]: { status, amount: Number(amount) || 0 } };
-    const { error } = await supabase.from("members").update({ dues }).eq("id", member.id);
+    const { error } = await supabase.rpc("update_member_dues", { p_member_id: member.id, p_dues: dues });
     if (error) { notify?.(error.message, "error"); return; }
     notify?.(`${member.name}'s ${month} dues updated`);
     onSaved();

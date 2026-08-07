@@ -1267,6 +1267,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState("");
   const [unreadByThread, setUnreadByThread] = useState({});
+  const [latestActivityByThread, setLatestActivityByThread] = useState({});
   const [highlightedId, setHighlightedId] = useState(null);
   const [showReactionPickerFor, setShowReactionPickerFor] = useState(null);
   const [showPinPickerFor, setShowPinPickerFor] = useState(null);
@@ -1274,6 +1275,20 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
   const bottomRef = useRef(null);
 
   const dmCandidates = members.filter((m) => m.profileId && m.profileId !== session.user.id);
+
+  const sortedDmCandidates = useMemo(() => {
+    return [...dmCandidates].sort((a, b) => {
+      const convA = conversations.find((c) => (c.user_a === session.user.id ? c.user_b : c.user_a) === a.profileId);
+      const convB = conversations.find((c) => (c.user_a === session.user.id ? c.user_b : c.user_a) === b.profileId);
+      const tA = convA ? latestActivityByThread[convA.id] : null;
+      const tB = convB ? latestActivityByThread[convB.id] : null;
+      if (tA && tB) return tB.localeCompare(tA);
+      if (tA) return -1;
+      if (tB) return 1;
+      return a.name.localeCompare(b.name);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dmCandidates.length, conversations, latestActivityByThread]);
 
   const avatarLabels = useMemo(() => {
     const people = [{ id: session.user.id, name: "You" }, ...dmCandidates.map((m) => ({ id: m.profileId, name: m.name }))];
@@ -1294,7 +1309,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
 
   const loadUnreadStatus = useCallback(async (convList) => {
     const convIds = (convList || conversations).map((c) => c.id);
-    let query = supabase.from("messages").select("id, conversation_id, sender_id");
+    let query = supabase.from("messages").select("id, conversation_id, sender_id, created_at");
     query = convIds.length > 0
       ? query.or(`conversation_id.is.null,conversation_id.in.(${convIds.join(",")})`)
       : query.is("conversation_id", null);
@@ -1315,6 +1330,13 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
       map[m.conversation_id || "team"] = true;
     });
     setUnreadByThread(map);
+
+    const latest = {};
+    (allMsgs || []).forEach((m) => {
+      const key = m.conversation_id || "team";
+      if (!latest[key] || m.created_at > latest[key]) latest[key] = m.created_at;
+    });
+    setLatestActivityByThread(latest);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversations, session.user.id]);
 
@@ -1459,7 +1481,9 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
   }
 
   function withinDeleteWindow(m) {
-    return m.seen_at && Date.now() - new Date(m.seen_at).getTime() < 5 * 60 * 1000;
+    const withinSendWindow = Date.now() - new Date(m.created_at).getTime() < 5 * 60 * 1000;
+    const withinSeenWindow = m.seen_at && Date.now() - new Date(m.seen_at).getTime() < 5 * 60 * 1000;
+    return withinSendWindow || withinSeenWindow;
   }
 
   async function deleteMessage(m) {
@@ -1534,7 +1558,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
             {dmCandidates.length === 0 ? (
               <div style={{ fontSize: 11, color: COLORS.textMuted, padding: "4px 10px" }}>No other members with accounts yet.</div>
             ) : (
-              dmCandidates.map((m) => {
+              sortedDmCandidates.map((m) => {
                 const conv = conversations.find((c) => (c.user_a === session.user.id ? c.user_b : c.user_a) === m.profileId);
                 const active = thread.type === "dm" && conv && thread.conversationId === conv.id;
                 const hasUnread = conv && unreadByThread[conv.id];
@@ -1639,33 +1663,10 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                             {m.body}
                             {m.edited_at && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 6 }}>(edited)</span>}
                           </div>
-                          <div className="hldt-msg-actions" style={{ display: "flex", flexDirection: "column", gap: 2, position: "relative" }}>
-                            {mine && withinEditWindow(m) && (
-                              <button onClick={() => startEdit(m)} aria-label="Edit message" style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex" }}>
-                                <Pencil size={12} />
-                              </button>
-                            )}
-                            {mine && withinDeleteWindow(m) && (
-                              <button onClick={() => deleteMessage(m)} aria-label="Delete message" style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex" }}>
-                                <Trash2 size={12} />
-                              </button>
-                            )}
-                            <button onClick={() => setReplyingTo(m)} aria-label="Reply" style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex" }}>
-                              <CornerUpLeft size={12} />
-                            </button>
-                            <button onClick={() => setShowReactionPickerFor(showReactionPickerFor === m.id ? null : m.id)} aria-label="React" style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex", fontSize: 12 }}>
-                              🙂
-                            </button>
+                          <div className="hldt-msg-actions" style={{ display: "flex", position: "relative" }}>
                             <button onClick={() => setShowPinPickerFor(showPinPickerFor === m.id ? null : m.id)} aria-label="Pin" style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex", fontSize: 12 }}>
                               📌
                             </button>
-                            {showReactionPickerFor === m.id && (
-                              <div className="hldt-modal" style={{ position: "absolute", top: 0, [mine ? "right" : "left"]: "100%", background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 6, display: "flex", gap: 4, zIndex: 60 }}>
-                                {REACTION_EMOJIS.map((e) => (
-                                  <span key={e} onClick={() => toggleReaction(m.id, e)} style={{ cursor: "pointer", fontSize: 16, padding: 2 }}>{e}</span>
-                                ))}
-                              </div>
-                            )}
                             {showPinPickerFor === m.id && (
                               <div className="hldt-modal" style={{ position: "absolute", top: 0, [mine ? "right" : "left"]: "100%", background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 6, display: "flex", flexDirection: "column", gap: 4, zIndex: 60, minWidth: 90 }}>
                                 <div style={{ fontSize: 10, color: COLORS.textMuted, padding: "0 4px" }}>Pin for...</div>
@@ -1675,6 +1676,33 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                               </div>
                             )}
                           </div>
+                        </div>
+                      )}
+                      {!editingId && (
+                        <div className="hldt-msg-actions" style={{ display: "flex", gap: 2, marginTop: 2, justifyContent: mine ? "flex-end" : "flex-start", position: "relative" }}>
+                          {mine && withinEditWindow(m) && (
+                            <button onClick={() => startEdit(m)} aria-label="Edit message" style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex" }}>
+                              <Pencil size={12} />
+                            </button>
+                          )}
+                          {mine && withinDeleteWindow(m) && (
+                            <button onClick={() => deleteMessage(m)} aria-label="Delete message" style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex" }}>
+                              <Trash2 size={12} />
+                            </button>
+                          )}
+                          <button onClick={() => setReplyingTo(m)} aria-label="Reply" style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex" }}>
+                            <CornerUpLeft size={12} />
+                          </button>
+                          <button onClick={() => setShowReactionPickerFor(showReactionPickerFor === m.id ? null : m.id)} aria-label="React" style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex", fontSize: 12 }}>
+                            🙂
+                          </button>
+                          {showReactionPickerFor === m.id && (
+                            <div className="hldt-modal" style={{ position: "absolute", bottom: "100%", [mine ? "right" : "left"]: 0, background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 6, display: "flex", gap: 4, zIndex: 60, marginBottom: 4 }}>
+                              {REACTION_EMOJIS.map((e) => (
+                                <span key={e} onClick={() => toggleReaction(m.id, e)} style={{ cursor: "pointer", fontSize: 16, padding: 2 }}>{e}</span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
                       {Object.keys(msgReactions).length > 0 && (

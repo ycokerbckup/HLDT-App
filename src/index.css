@@ -192,6 +192,15 @@ body {
   animation: hldt-toast-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
+.hldt-glow-orb.hldt-glow-subtle {
+  opacity: 0.16;
+}
+
+.hldt-glass {
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+}
+
 .hldt-auth-card {
   animation: hldt-fade-in-up 480ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   backdrop-filter: blur(20px);

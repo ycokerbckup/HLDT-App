@@ -12,6 +12,9 @@ const DARK_COLORS = {
   bg: "#14171C",
   surface1: "#1C2027",
   surface2: "#242933",
+  glass1: "rgba(28, 32, 39, 0.66)",
+  glass2: "rgba(36, 41, 51, 0.55)",
+  glassBorder: "rgba(255, 255, 255, 0.09)",
   border: "#2E3440",
   borderStrong: "#3A4150",
   textPrimary: "#EDEEF2",
@@ -29,6 +32,9 @@ const LIGHT_COLORS = {
   bg: "#F7F7F5",
   surface1: "#FFFFFF",
   surface2: "#F1F1EE",
+  glass1: "rgba(255, 255, 255, 0.6)",
+  glass2: "rgba(241, 241, 238, 0.55)",
+  glassBorder: "rgba(255, 255, 255, 0.7)",
   border: "#E3E3DE",
   borderStrong: "#CFCFC8",
   textPrimary: "#191A1C",
@@ -255,9 +261,9 @@ function Badge({ children, tone = "gray" }) {
 
 function Panel({ title, right, children, style }) {
   return (
-    <div className="hldt-panel hldt-panel-hover" style={{ background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 14, overflow: "hidden", ...style }}>
+    <div className="hldt-panel hldt-panel-hover hldt-glass" style={{ background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 14, overflow: "hidden", ...style }}>
       {title && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderBottom: `1px solid ${COLORS.border}`, background: COLORS.surface2 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderBottom: `1px solid ${COLORS.border}`, background: COLORS.glass2 }}>
           <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 15, letterSpacing: "0.02em", textTransform: "uppercase", color: COLORS.textPrimary }}>{title}</h3>
           {right}
         </div>
@@ -414,8 +420,8 @@ function Modal({ title, onClose, children, width = 480, footer, dismissable = tr
       onClick={dismissable ? onClose : undefined}
     >
       <div
-        className="hldt-modal"
-        style={{ width, maxWidth: "100%", maxHeight: "85vh", overflowY: "auto", background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 20 }}
+        className="hldt-modal hldt-glass"
+        style={{ width, maxWidth: "100%", maxHeight: "85vh", overflowY: "auto", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 16, padding: 20 }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -902,6 +908,10 @@ function Dashboard_Shell({ session, profile, setProfile }) {
 
   return (
     <div className="hldt-app" style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.textPrimary, fontFamily: "'Inter', sans-serif", display: "flex", flexDirection: isMobile ? "column" : "row" }}>
+      <div style={{ position: "fixed", inset: 0, overflow: "hidden", pointerEvents: "none", zIndex: 0 }}>
+        <div className="hldt-glow-orb hldt-glow-warm hldt-glow-subtle" style={{ position: "fixed" }} />
+        <div className="hldt-glow-orb hldt-glow-cool hldt-glow-subtle" style={{ position: "fixed" }} />
+      </div>
       <ToastStack toasts={toasts} />
       <GlobalSearch data={data} goToTab={goToTab} isOperationsUser={myUnit === "Operations"} />
       <NotificationBell
@@ -930,9 +940,9 @@ function Dashboard_Shell({ session, profile, setProfile }) {
           {showAccountMenu && (
             <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 1600 }} onClick={() => setShowAccountMenu(false)}>
               <div
-                className="hldt-modal"
+                className="hldt-modal hldt-glass"
                 onClick={(e) => e.stopPropagation()}
-                style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 250, background: COLORS.surface1, borderRight: `1px solid ${COLORS.border}`, display: "flex", flexDirection: "column", overflowY: "auto" }}
+                style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 250, background: COLORS.glass1, borderRight: `1px solid ${COLORS.glassBorder}`, display: "flex", flexDirection: "column", overflowY: "auto" }}
               >
                 <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${COLORS.border}` }}>
                   <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 17 }}>DISPLAY TEAM</div>
@@ -994,7 +1004,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
         </>
       ) : (
         <>
-          <div style={{ width: 190, flexShrink: 0, background: COLORS.surface1, borderRight: `1px solid ${COLORS.border}`, display: "flex", flexDirection: "column" }}>
+          <div className="hldt-glass" style={{ width: 190, flexShrink: 0, background: COLORS.glass1, borderRight: `1px solid ${COLORS.glassBorder}`, display: "flex", flexDirection: "column" }}>
             <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${COLORS.border}` }}>
               <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 19, letterSpacing: "0.02em", lineHeight: 1.1 }}>DISPLAY TEAM</div>
               <div style={{ fontSize: 11, color: COLORS.textMuted, fontFamily: "'JetBrains Mono', monospace", marginTop: 4 }}>OPS CONSOLE</div>
@@ -1208,9 +1218,9 @@ function GlobalSearch({ data, goToTab, isOperationsUser }) {
       {open && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 2100 }} onClick={closeSearch}>
           <div
-            className="hldt-modal"
+            className="hldt-modal hldt-glass"
             onClick={(e) => e.stopPropagation()}
-            style={{ position: "absolute", top: isMobile ? 50 : 60, left: "50%", transform: "translateX(-50%)", width: 480, maxWidth: "92vw", maxHeight: "70vh", overflowY: "auto", background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: 16, boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}
+            style={{ position: "absolute", top: isMobile ? 50 : 60, left: "50%", transform: "translateX(-50%)", width: 480, maxWidth: "92vw", maxHeight: "70vh", overflowY: "auto", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 16, padding: 16, boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}
           >
             <input
               ref={inputRef}
@@ -1313,8 +1323,8 @@ function NotificationBell({ notifications, readIds, onRead, onNavigate }) {
       </button>
       {open && (
         <div
-          className="hldt-modal"
-          style={{ position: "absolute", top: 40, right: 0, width: isMobile ? "calc(100vw - 32px)" : 320, maxWidth: 320, maxHeight: 400, overflowY: "auto", background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 8 }}
+          className="hldt-modal hldt-glass"
+          style={{ position: "absolute", top: 40, right: 0, width: isMobile ? "calc(100vw - 32px)" : 320, maxWidth: 320, maxHeight: 400, overflowY: "auto", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 14, padding: 8 }}
         >
           <div style={{ fontSize: 12, fontWeight: 500, color: COLORS.textSecondary, padding: "6px 8px" }}>Notifications</div>
           {notifications.length === 0 ? (
@@ -1898,7 +1908,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                               📌
                             </button>
                             {showPinPickerFor === m.id && (
-                              <div className="hldt-modal" style={{ position: "absolute", top: 0, [mine ? "right" : "left"]: "100%", background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 6, display: "flex", flexDirection: "column", gap: 4, zIndex: 60, minWidth: 90 }}>
+                              <div className="hldt-modal hldt-glass" style={{ position: "absolute", top: 0, [mine ? "right" : "left"]: "100%", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 6, display: "flex", flexDirection: "column", gap: 4, zIndex: 60, minWidth: 90 }}>
                                 <div style={{ fontSize: 10, color: COLORS.textMuted, padding: "0 4px" }}>Pin for...</div>
                                 {PIN_DURATIONS.map((d) => (
                                   <Btn key={d.label} small tone="ghost" onClick={() => pinMessage(m.id, d.hours)}>{d.label}</Btn>
@@ -1927,7 +1937,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                             🙂
                           </button>
                           {showReactionPickerFor === m.id && (
-                            <div className="hldt-modal" style={{ position: "absolute", bottom: "100%", [mine ? "right" : "left"]: 0, background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 6, display: "flex", gap: 4, zIndex: 60, marginBottom: 4 }}>
+                            <div className="hldt-modal hldt-glass" style={{ position: "absolute", bottom: "100%", [mine ? "right" : "left"]: 0, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 6, display: "flex", gap: 4, zIndex: 60, marginBottom: 4 }}>
                               {REACTION_EMOJIS.map((e) => (
                                 <span key={e} onClick={() => toggleReaction(m.id, e)} style={{ cursor: "pointer", fontSize: 16, padding: 2 }}>{e}</span>
                               ))}
@@ -1964,7 +1974,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                           </span>
                         )}
                         {showReceiptsFor === m.id && readerNames.length > 0 && (
-                          <div className="hldt-modal" style={{ position: "absolute", bottom: 18, [mine ? "right" : "left"]: 0, background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 8, minWidth: 120, zIndex: 50 }}>
+                          <div className="hldt-modal hldt-glass" style={{ position: "absolute", bottom: 18, [mine ? "right" : "left"]: 0, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 8, minWidth: 120, zIndex: 50 }}>
                             {readerNames.map((n, i) => (
                               <div key={i} style={{ fontSize: 11, color: COLORS.textSecondary, padding: "2px 4px", whiteSpace: "nowrap" }}>{n}</div>
                             ))}

@@ -14,7 +14,7 @@ const GMAIL_APP_PASSWORD = Deno.env.get("GMAIL_APP_PASSWORD")!;
 const APP_URL = (Deno.env.get("APP_URL") || "").replace(/\/$/, "");
 const FROM_NAME = "Display Team Ops";
 
-const EMAILABLE_TYPES = ["roster", "assignment", "signup", "chat", "announcement", "birthday", "milestone", "graduation"];
+const EMAILABLE_TYPES = ["roster", "assignment", "signup", "chat", "announcement", "birthday", "milestone", "graduation", "cover_request"];
 
 function ctaButton(linkTab?: string, dmWith?: string): string {
   if (!APP_URL) return "";

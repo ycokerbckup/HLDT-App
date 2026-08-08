@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, GraduationCap, Wrench, CalendarDays,
   Wallet, MessageSquare, Plus, X, ChevronRight, Shield, User,
   CheckCircle2, Clock, Trash2, Save, LogOut, RefreshCw, Download,
-  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil, GripVertical, Eye, EyeOff, Camera, Menu, CornerUpLeft, Check, CheckCheck, Boxes, DollarSign, Sparkles
+  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil, GripVertical, Eye, EyeOff, Camera, Menu, CornerUpLeft, Check, CheckCheck, Boxes, DollarSign, Sparkles, ClipboardCheck, Search as SearchIcon
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "./supabaseClient";
@@ -128,6 +128,11 @@ function currency(n) {
 // Expected/Owing totals, cells stay clickable for a voluntary payment).
 function duesExempt(m) {
   return m.tier === "Trainee" || m.unavailable === true;
+}
+
+function skillSummary(m) {
+  const s = m.skills || {};
+  return `PP${s.proPresenter ?? 3} VM${s.vmix ?? 3} RS${s.resolume ?? 3} TC${s.technical ?? 3}`;
 }
 
 function todayDDMM() {
@@ -883,6 +888,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
     { id: "onboarding", label: "Onboarding", icon: GraduationCap },
     { id: "equipment", label: "Equipment", icon: Wrench },
     { id: "roster", label: "Roster", icon: CalendarDays },
+    { id: "attendance", label: "Attendance", icon: ClipboardCheck },
     ...(canSeeDues ? [{ id: "dues", label: "Dues", icon: Wallet }] : []),
     { id: "feedback", label: "Feedback", icon: MessageSquare },
   ];
@@ -893,6 +899,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
   return (
     <div className="hldt-app" style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.textPrimary, fontFamily: "'Inter', sans-serif", display: "flex", flexDirection: isMobile ? "column" : "row" }}>
       <ToastStack toasts={toasts} />
+      <GlobalSearch data={data} goToTab={goToTab} />
       <NotificationBell
         notifications={data.notifications}
         readIds={data.readIds}
@@ -970,7 +977,8 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
                 {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} />}
-                {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} reload={load} notify={notify} />}
+                {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} myMember={myMember} reload={load} notify={notify} />}
+                {tab === "attendance" && <AttendanceTab data={data} canManageRosters={canManageRosters} myMember={myMember} notify={notify} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
                 {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
@@ -1029,7 +1037,8 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
                 {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} />}
-                {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} reload={load} notify={notify} />}
+                {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} myMember={myMember} reload={load} notify={notify} />}
+                {tab === "attendance" && <AttendanceTab data={data} canManageRosters={canManageRosters} myMember={myMember} notify={notify} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
                 {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
@@ -1119,6 +1128,104 @@ function SkeletonLoader() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function GlobalSearch({ data, goToTab }) {
+  const isMobile = useIsMobile();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (open) setTimeout(() => inputRef.current?.focus(), 50);
+  }, [open]);
+
+  const q = query.trim().toLowerCase();
+  const results = useMemo(() => {
+    if (q.length < 2) return { members: [], announcements: [], tickets: [] };
+    return {
+      members: data.members.filter((m) => m.name?.toLowerCase().includes(q)).slice(0, 6),
+      announcements: data.announcements.filter((a) => a.title?.toLowerCase().includes(q) || a.body?.toLowerCase().includes(q)).slice(0, 6),
+      tickets: data.tickets.filter((t) => t.description?.toLowerCase().includes(q) || t.reporter?.toLowerCase().includes(q)).slice(0, 6),
+    };
+  }, [q, data.members, data.announcements, data.tickets]);
+
+  const totalResults = results.members.length + results.announcements.length + results.tickets.length;
+
+  function go(tabId) {
+    goToTab(tabId);
+    setOpen(false);
+    setQuery("");
+  }
+
+  return (
+    <div style={{ position: "fixed", top: isMobile ? 8 : 16, right: isMobile ? 84 : 112, zIndex: 1500 }}>
+      <button
+        onClick={() => setOpen(true)}
+        aria-label="Search"
+        style={{ width: isMobile ? 32 : 36, height: isMobile ? 32 : 36, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.surface2, border: `1px solid ${COLORS.border}`, color: COLORS.textPrimary, cursor: "pointer" }}
+      >
+        <SearchIcon size={14} />
+      </button>
+      {open && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 2100 }} onClick={() => setOpen(false)}>
+          <div
+            className="hldt-modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ position: "absolute", top: isMobile ? 50 : 60, left: "50%", transform: "translateX(-50%)", width: 480, maxWidth: "92vw", maxHeight: "70vh", overflowY: "auto", background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: 16, boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}
+          >
+            <input
+              ref={inputRef}
+              className="hldt-composer-input"
+              style={{ ...inputStyle, borderRadius: 10, marginBottom: 10 }}
+              placeholder="Search members, announcements, tickets..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            {q.length < 2 ? (
+              <div style={{ fontSize: 12, color: COLORS.textMuted, padding: "8px 4px" }}>Keep typing — at least 2 characters.</div>
+            ) : totalResults === 0 ? (
+              <div style={{ fontSize: 12, color: COLORS.textMuted, padding: "8px 4px" }}>Nothing found for "{query}".</div>
+            ) : (
+              <>
+                {results.members.length > 0 && (
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 10, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", padding: "0 4px 4px" }}>Members</div>
+                    {results.members.map((m) => (
+                      <div key={m.id} className="hldt-row" data-clickable="true" onClick={() => go("members")} style={{ padding: "8px 6px", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                        <Avatar label={m.name?.[0] || "?"} color={hashColor(m.id)} size={22} />
+                        {m.name}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {results.announcements.length > 0 && (
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 10, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", padding: "0 4px 4px" }}>Announcements</div>
+                    {results.announcements.map((a) => (
+                      <div key={a.id} className="hldt-row" data-clickable="true" onClick={() => go("announcements")} style={{ padding: "8px 6px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>
+                        {a.title}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {results.tickets.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 10, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", padding: "0 4px 4px" }}>Equipment tickets</div>
+                    {results.tickets.map((t) => (
+                      <div key={t.id} className="hldt-row" data-clickable="true" onClick={() => go("equipment")} style={{ padding: "8px 6px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>
+                        {t.reporter} · {t.date} {t.description ? `— ${t.description.slice(0, 40)}` : ""}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2554,7 +2661,10 @@ function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify })
                   title={m.unavailable ? "Temporarily unavailable" : undefined}
                   style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 0.7fr 0.9fr 0.6fr", alignItems: "center", padding: "8px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 13, cursor: canManage ? "pointer" : "default", opacity: m.unavailable ? 0.45 : 1 }}
                 >
-                  <div>{m.name}</div>
+                  <div>
+                    <div>{m.name}</div>
+                    <div style={{ fontSize: 10, color: COLORS.textMuted, fontFamily: "'JetBrains Mono', monospace" }}>{skillSummary(m)}</div>
+                  </div>
                   <div style={{ color: COLORS.textSecondary }}>{m.unit}</div>
                   <div style={{ color: COLORS.textSecondary }}>{m.tier}</div>
                   <div style={{ color: COLORS.textSecondary }}>{m.team}</div>
@@ -3134,7 +3244,7 @@ function EquipmentTab({ data, isAdmin, myMember, canAccessInventory, canDeleteTi
                 {TICKET_STATUSES.map((s) => <Btn key={s} small tone={t.status === s ? "amber" : "ghost"} onClick={() => updateStatus(t, s)}>{s}</Btn>)}
                 <select value={t.assignedToId || ""} onChange={(e) => assign(t, e.target.value)} style={{ ...inputStyle, width: 150, fontSize: 12, padding: "5px 8px" }}>
                   <option value="">Assign to...</option>
-                  {data.members.filter((m) => !m.unavailable).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  {data.members.filter((m) => !m.unavailable).map((m) => <option key={m.id} value={m.id}>{m.name} (Tech {m.skills?.technical ?? 3})</option>)}
                 </select>
               </div>
             )}
@@ -3260,7 +3370,9 @@ function SaturdayRosterEditor({ existing, members, onClose, onSaved, notify }) {
       <Field label="Trainers this week">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {members.filter((m) => !m.unavailable).map((m) => (
-            <Btn key={m.id} small tone={trainerIds.includes(m.id) ? "amber" : "ghost"} onClick={() => toggleTrainer(m.id)}>{m.name}</Btn>
+            <Btn key={m.id} small tone={trainerIds.includes(m.id) ? "amber" : "ghost"} onClick={() => toggleTrainer(m.id)}>
+              {m.name} · {(((m.skills?.proPresenter ?? 3) + (m.skills?.vmix ?? 3) + (m.skills?.resolume ?? 3) + (m.skills?.technical ?? 3)) / 4).toFixed(1)}
+            </Btn>
           ))}
         </div>
       </Field>
@@ -3277,10 +3389,198 @@ function SaturdayRosterEditor({ existing, members, onClose, onSaved, notify }) {
   );
 }
 
-function RosterTab({ data, isAdmin, canManageRosters, reload, notify }) {
+const EVENT_TYPE_LABELS = { sunday: "Sunday service", tuesday: "Tuesday meeting", saturday: "Saturday training" };
+
+function AttendanceTab({ data, canManageRosters, myMember, notify }) {
+  const [records, setRecords] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+  const [eventType, setEventType] = useState("sunday");
+  const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
+  const [showMark, setShowMark] = useState(false);
+  const [draft, setDraft] = useState({});
+
+  async function load() {
+    const { data: rows } = await supabase.from("attendance_records").select("*").order("event_date", { ascending: false });
+    setRecords(rows || []);
+    setLoaded(true);
+  }
+
+  useEffect(() => {
+    load();
+    const channel = supabase
+      .channel("attendance-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "attendance_records" }, load)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  function openMarking() {
+    const existing = {};
+    records
+      .filter((r) => r.event_type === eventType && r.event_date === eventDate)
+      .forEach((r) => { existing[r.member_id] = r.status; });
+    setDraft(existing);
+    setShowMark(true);
+  }
+
+  async function saveMarking() {
+    const rows = Object.entries(draft).map(([member_id, status]) => ({
+      event_type: eventType, event_date: eventDate, member_id, status,
+    }));
+    if (rows.length === 0) { setShowMark(false); return; }
+    const { error } = await supabase.from("attendance_records").upsert(rows, { onConflict: "event_type,event_date,member_id" });
+    if (error) { notify?.(error.message, "error"); return; }
+    notify?.("Attendance saved");
+    setShowMark(false);
+    load();
+  }
+
+  const summary = useMemo(() => {
+    const byMember = {};
+    records.forEach((r) => {
+      if (!byMember[r.member_id]) byMember[r.member_id] = { present: 0, absent: 0, excused: 0 };
+      byMember[r.member_id][r.status]++;
+    });
+    return data.members
+      .map((m) => ({ m, counts: byMember[m.id] || { present: 0, absent: 0, excused: 0 } }))
+      .filter((x) => x.counts.present + x.counts.absent + x.counts.excused > 0)
+      .sort((a, b) => (b.counts.present + b.counts.excused) - (b.counts.present + b.counts.excused) || a.m.name.localeCompare(b.m.name));
+  }, [records, data.members]);
+
+  const recentDates = useMemo(() => {
+    const seen = new Map();
+    records.forEach((r) => {
+      const key = `${r.event_type}|${r.event_date}`;
+      if (!seen.has(key)) seen.set(key, { eventType: r.event_type, eventDate: r.event_date, count: 0 });
+      seen.get(key).count++;
+    });
+    return Array.from(seen.values()).sort((a, b) => b.eventDate.localeCompare(a.eventDate)).slice(0, 10);
+  }, [records]);
+
+  if (!loaded) return <SkeletonLoader />;
+
+  return (
+    <div>
+      <SectionHeader
+        title="Attendance"
+        subtitle="Who actually showed up, separate from who was scheduled."
+        right={canManageRosters && <Btn tone="amber" onClick={() => setShowMark(true)}><Plus size={14} /> Mark attendance</Btn>}
+      />
+
+      {showMark && (
+        <Panel title="Mark attendance" style={{ marginBottom: 16 }} right={<X size={16} style={{ cursor: "pointer" }} onClick={() => setShowMark(false)} />}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <Field label="Event">
+              <select style={inputStyle} value={eventType} onChange={(e) => setEventType(e.target.value)}>
+                {Object.entries(EVENT_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </Field>
+            <Field label="Date"><input type="date" style={inputStyle} value={eventDate} onChange={(e) => setEventDate(e.target.value)} /></Field>
+          </div>
+          <Btn small tone="ghost" onClick={openMarking}><RefreshCw size={12} /> Load existing marks for this date</Btn>
+          <div style={{ marginTop: 14, maxHeight: 340, overflowY: "auto" }}>
+            {data.members.filter((m) => !m.unavailable).map((m) => (
+              <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: `1px solid ${COLORS.border}` }}>
+                <span style={{ flex: 1, fontSize: 13 }}>{m.name}</span>
+                {["present", "absent", "excused"].map((s) => (
+                  <Btn key={s} small tone={draft[m.id] === s ? (s === "present" ? "amber" : s === "absent" ? "danger" : "ghost") : "ghost"} onClick={() => setDraft({ ...draft, [m.id]: s })}>
+                    {s === "present" ? "Present" : s === "absent" ? "Absent" : "Excused"}
+                  </Btn>
+                ))}
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <Btn tone="amber" onClick={saveMarking}><Save size={13} /> Save attendance</Btn>
+          </div>
+        </Panel>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 16, alignItems: "start" }}>
+        <Panel title="Attendance summary">
+          {summary.length === 0 ? (
+            <EmptyRow text="No attendance recorded yet." />
+          ) : (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "1.6fr 0.7fr 0.7fr 0.7fr", fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", padding: "0 4px 8px" }}>
+                <div>Name</div><div>Present</div><div>Absent</div><div>Excused</div>
+              </div>
+              {summary.map(({ m, counts }) => (
+                <div key={m.id} style={{ display: "grid", gridTemplateColumns: "1.6fr 0.7fr 0.7fr 0.7fr", alignItems: "center", padding: "6px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 13 }}>
+                  <div>{m.name}</div>
+                  <div style={{ color: COLORS.green }}>{counts.present}</div>
+                  <div style={{ color: COLORS.red }}>{counts.absent}</div>
+                  <div style={{ color: COLORS.textMuted }}>{counts.excused}</div>
+                </div>
+              ))}
+            </>
+          )}
+        </Panel>
+        <Panel title="Recently marked">
+          {recentDates.length === 0 ? (
+            <EmptyRow text="Nothing marked yet." />
+          ) : (
+            recentDates.map((d, i) => (
+              <RowLine key={i}>
+                <span style={{ flex: 1 }}>{EVENT_TYPE_LABELS[d.eventType]}</span>
+                <span style={{ fontSize: 11, color: COLORS.textMuted }}>{d.eventDate} · {d.count} marked</span>
+              </RowLine>
+            ))
+          )}
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+function RosterTab({ data, isAdmin, canManageRosters, myMember, reload, notify }) {
   const teamA = data.members.filter((m) => m.team === "A");
   const teamB = data.members.filter((m) => m.team === "B");
   const services = ["Sunday services (x4)", "Wednesday midweek", "Saturday training", "Tuesday 8PM meeting (mandatory)"];
+
+  const [coverRequests, setCoverRequests] = useState([]);
+  const [showCoverForm, setShowCoverForm] = useState(false);
+  const [coverForm, setCoverForm] = useState({ eventType: "sunday", eventDate: new Date().toISOString().slice(0, 10), reason: "" });
+
+  async function loadCoverRequests() {
+    const { data: rows } = await supabase.from("cover_requests").select("*").eq("status", "open").order("event_date");
+    setCoverRequests(rows || []);
+  }
+
+  useEffect(() => {
+    loadCoverRequests();
+    const channel = supabase
+      .channel("cover-requests-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "cover_requests" }, loadCoverRequests)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  async function postCoverRequest() {
+    if (!myMember) { notify?.("No member record linked to your account", "error"); return; }
+    const { error } = await supabase.from("cover_requests").insert({
+      requester_id: myMember.id, event_type: coverForm.eventType, event_date: coverForm.eventDate, reason: coverForm.reason,
+    });
+    if (error) { notify?.(error.message, "error"); return; }
+    notify?.("Cover request posted");
+    setShowCoverForm(false);
+    setCoverForm({ eventType: "sunday", eventDate: new Date().toISOString().slice(0, 10), reason: "" });
+    loadCoverRequests();
+  }
+
+  async function claimCoverRequest(req) {
+    if (!myMember) { notify?.("No member record linked to your account", "error"); return; }
+    if (req.requester_id === myMember.id) { notify?.("You can't cover your own request", "error"); return; }
+    const { error } = await supabase.from("cover_requests").update({ status: "claimed", claimed_by: myMember.id }).eq("id", req.id).eq("status", "open");
+    if (error) { notify?.(error.message, "error"); return; }
+    notify?.("You've got it covered");
+    loadCoverRequests();
+  }
+
+  async function cancelCoverRequest(id) {
+    await supabase.from("cover_requests").delete().eq("id", id);
+    loadCoverRequests();
+  }
 
   const [tuesdayRosters, setTuesdayRosters] = useState([]);
   const [saturdayRosters, setSaturdayRosters] = useState([]);
@@ -3341,10 +3641,48 @@ function RosterTab({ data, isAdmin, canManageRosters, reload, notify }) {
 
   return (
     <div>
-      <SectionHeader title="Roster" subtitle="Team A / Team B rotation. Reporting time: 1 hour before service." />
+      <SectionHeader title="Roster" subtitle="Team A / Team B rotation. Reporting time: 1 hour before service." right={<Btn tone="ghost" onClick={() => setShowCoverForm(true)}><RefreshCw size={13} /> Need cover?</Btn>} />
       <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 12 }}>
         To move someone between teams, edit their record from the Members tab — this view is read-only.
       </div>
+
+      {showCoverForm && (
+        <Panel title="Post a cover request" style={{ marginBottom: 16 }} right={<X size={16} style={{ cursor: "pointer" }} onClick={() => setShowCoverForm(false)} />}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label="Event">
+              <select style={inputStyle} value={coverForm.eventType} onChange={(e) => setCoverForm({ ...coverForm, eventType: e.target.value })}>
+                {Object.entries(EVENT_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </Field>
+            <Field label="Date"><input type="date" style={inputStyle} value={coverForm.eventDate} onChange={(e) => setCoverForm({ ...coverForm, eventDate: e.target.value })} /></Field>
+          </div>
+          <Field label="Reason (optional)"><textarea style={{ ...inputStyle, minHeight: 50 }} value={coverForm.reason} onChange={(e) => setCoverForm({ ...coverForm, reason: e.target.value })} /></Field>
+          <Btn tone="amber" onClick={postCoverRequest}><Save size={13} /> Post request</Btn>
+        </Panel>
+      )}
+
+      {coverRequests.length > 0 && (
+        <Panel title="Open cover requests" style={{ marginBottom: 20 }}>
+          {coverRequests.map((r) => {
+            const requester = data.members.find((m) => m.id === r.requester_id);
+            const mine = myMember && r.requester_id === myMember.id;
+            return (
+              <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: `1px solid ${COLORS.border}` }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13 }}>{requester?.name || "Someone"} needs cover — {EVENT_TYPE_LABELS[r.event_type]}, {r.event_date}</div>
+                  {r.reason && <div style={{ fontSize: 11, color: COLORS.textMuted }}>{r.reason}</div>}
+                </div>
+                {mine ? (
+                  <Btn small tone="ghost" onClick={() => cancelCoverRequest(r.id)}>Cancel</Btn>
+                ) : (
+                  <Btn small tone="amber" onClick={() => claimCoverRequest(r)}>I've got it</Btn>
+                )}
+              </div>
+            );
+          })}
+        </Panel>
+      )}
+
       <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
         <Panel title="Team A" style={{ flex: 1 }}>
           {teamA.length === 0 ? <EmptyRow text="No members assigned." /> : teamA.map((m) => (

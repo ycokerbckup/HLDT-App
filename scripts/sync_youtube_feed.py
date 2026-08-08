@@ -85,6 +85,8 @@ def main():
                 "url": f"https://www.youtube.com/watch?v={vid}",
                 "thumbnail_url": thumb,
                 "description": name,
+                "channel_id": cid,
+                "channel_name": name,
             }
             api_insert_ignore_duplicates("/rest/v1/feed_posts?on_conflict=source,external_id", payload)
 

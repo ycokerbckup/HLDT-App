@@ -1048,9 +1048,10 @@ function SkeletonBar({ width = "100%", height = 14 }) {
   return <div className="hldt-skeleton" style={{ width, height, marginBottom: 8 }} />;
 }
 
-function Carousel({ children, itemWidth = 220 }) {
+function Carousel({ children, itemWidth = 220, autoAdvanceMs = 3200 }) {
   const scrollerRef = useRef(null);
   const [activeIdx, setActiveIdx] = useState(0);
+  const [paused, setPaused] = useState(false);
   const count = React.Children.count(children);
 
   function handleScroll() {
@@ -1060,8 +1061,25 @@ function Carousel({ children, itemWidth = 220 }) {
     setActiveIdx(Math.min(count - 1, Math.max(0, idx)));
   }
 
+  useEffect(() => {
+    if (paused || count <= 1) return;
+    const timer = setInterval(() => {
+      const el = scrollerRef.current;
+      if (!el) return;
+      const nextIdx = (Math.round(el.scrollLeft / (itemWidth + 12)) + 1) % count;
+      el.scrollTo({ left: nextIdx * (itemWidth + 12), behavior: "smooth" });
+      setActiveIdx(nextIdx);
+    }, autoAdvanceMs);
+    return () => clearInterval(timer);
+  }, [paused, count, itemWidth, autoAdvanceMs]);
+
   return (
-    <div>
+    <div
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onTouchStart={() => setPaused(true)}
+      onTouchEnd={() => setTimeout(() => setPaused(false), 2500)}
+    >
       <div ref={scrollerRef} className="hldt-carousel" onScroll={handleScroll}>
         {React.Children.map(children, (child) => (
           <div className="hldt-carousel-item" style={{ width: itemWidth }}>{child}</div>
@@ -1882,6 +1900,7 @@ function FeedTab({ session, profile, isAdmin, canManage, notify }) {
   const [showAddLink, setShowAddLink] = useState(false);
   const [showSources, setShowSources] = useState(false);
   const blankLink = () => ({ title: "", url: "", description: "" });
+  const [channelFilter, setChannelFilter] = useState("all");
   const [linkForm, setLinkForm] = useState(blankLink());
 
   async function loadPosts() {
@@ -1889,6 +1908,7 @@ function FeedTab({ session, profile, isAdmin, canManage, notify }) {
     setPosts((data || []).map((p) => ({
       id: p.id, source: p.source, title: p.title, url: p.url, thumbnailUrl: p.thumbnail_url,
       description: p.description, postedByName: p.posted_by_name, createdAt: p.created_at,
+      channelId: p.channel_id, channelName: p.channel_name,
     })));
     setLoaded(true);
   }
@@ -1959,17 +1979,31 @@ function FeedTab({ session, profile, isAdmin, canManage, notify }) {
         </Panel>
       )}
 
+      {sources.length > 0 && (
+        <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 12, color: COLORS.textMuted }}>Channel</span>
+          <select style={{ ...inputStyle, width: "auto", minWidth: 160 }} value={channelFilter} onChange={(e) => setChannelFilter(e.target.value)}>
+            <option value="all">All channels</option>
+            {sources.map((s) => <option key={s.channelId} value={s.channelId}>{s.channelName}</option>)}
+          </select>
+        </div>
+      )}
+
       {!loaded ? (
         <SkeletonLoader />
       ) : posts.length === 0 ? (
         <Panel><EmptyRow text="Nothing in the feed yet — quiet in here. 🦗" /></Panel>
-      ) : (
+      ) : (() => {
+        const filteredPosts = channelFilter === "all" ? posts : posts.filter((p) => p.channelId === channelFilter);
+        return filteredPosts.length === 0 ? (
+          <Panel><EmptyRow text="No posts from this channel yet." /></Panel>
+        ) : (
         <>
-        {posts.length > 2 && (
+        {filteredPosts.length > 2 && (
           <div style={{ marginBottom: 22 }}>
             <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Recently added</div>
             <Carousel itemWidth={200}>
-              {posts.slice(0, 8).map((p) => (
+              {filteredPosts.slice(0, 8).map((p) => (
                 <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "block" }}>
                   <div className="hldt-panel-hover" style={{ background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 12, overflow: "hidden" }}>
                     {p.thumbnailUrl ? (
@@ -1989,7 +2023,7 @@ function FeedTab({ session, profile, isAdmin, canManage, notify }) {
           </div>
         )}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
-          {posts.map((p) => (
+          {filteredPosts.map((p) => (
             <div key={p.id} className="hldt-panel hldt-panel-hover" style={{ background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 12, overflow: "hidden" }}>
               <a href={p.url} target="_blank" rel="noopener noreferrer">
                 {p.thumbnailUrl ? (
@@ -2019,7 +2053,8 @@ function FeedTab({ session, profile, isAdmin, canManage, notify }) {
           ))}
         </div>
         </>
-      )}
+        );
+      })()}
 
       {showSources && <ManageSourcesModal sources={sources} onClose={() => setShowSources(false)} reload={loadSources} notify={notify} />}
     </div>

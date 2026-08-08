@@ -813,6 +813,8 @@ function Dashboard_Shell({ session, profile, setProfile }) {
     if (typeof window === "undefined") return null;
     return new URLSearchParams(window.location.search).get("dm") || null;
   });
+  const [pendingHighlight, setPendingHighlight] = useState(null);
+  const [pendingMemberDetailId, setPendingMemberDetailId] = useState(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -846,9 +848,11 @@ function Dashboard_Shell({ session, profile, setProfile }) {
     await supabase.from("notification_reads").insert({ notification_id: id, profile_id: session.user.id });
   }
 
-  async function goToTab(tabId, dmProfileId) {
+  async function goToTab(tabId, dmProfileId, highlightId, memberDetailId) {
     setTab(tabId);
     if (dmProfileId) setPendingDm(dmProfileId);
+    if (highlightId) setPendingHighlight({ tab: tabId, id: highlightId });
+    if (memberDetailId) setPendingMemberDetailId(memberDetailId);
     const toMark = data.notifications.filter((n) => n.linkTab === tabId && !data.readIds.includes(n.id));
     if (toMark.length > 0) {
       await supabase.from("notification_reads").upsert(
@@ -899,7 +903,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
   return (
     <div className="hldt-app" style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.textPrimary, fontFamily: "'Inter', sans-serif", display: "flex", flexDirection: isMobile ? "column" : "row" }}>
       <ToastStack toasts={toasts} />
-      <GlobalSearch data={data} goToTab={goToTab} />
+      <GlobalSearch data={data} goToTab={goToTab} isOperationsUser={myUnit === "Operations"} />
       <NotificationBell
         notifications={data.notifications}
         readIds={data.readIds}
@@ -974,13 +978,13 @@ function Dashboard_Shell({ session, profile, setProfile }) {
             ) : (
               <div key={tab} className="hldt-tab-content">
                 {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} />}
-                {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} />}
+                {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} pendingMemberDetailId={pendingMemberDetailId} onPendingMemberDetailConsumed={() => setPendingMemberDetailId(null)} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
-                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} />}
+                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} myMember={myMember} reload={load} notify={notify} />}
                 {tab === "attendance" && <AttendanceTab data={data} canManageRosters={canManageRosters} myMember={myMember} notify={notify} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
-                {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
+                {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
                 {tab === "chat" && <ChatTab session={session} profile={profile} members={data.members} onboarding={data.onboarding} notify={notify} pendingDmProfileId={pendingDm} onPendingDmConsumed={() => setPendingDm(null)} />}
                 {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} canReadFeedback={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} />}
@@ -1034,13 +1038,13 @@ function Dashboard_Shell({ session, profile, setProfile }) {
             ) : (
               <div key={tab} className="hldt-tab-content">
                 {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} />}
-                {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} />}
+                {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} pendingMemberDetailId={pendingMemberDetailId} onPendingMemberDetailConsumed={() => setPendingMemberDetailId(null)} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
-                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} />}
+                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} myMember={myMember} reload={load} notify={notify} />}
                 {tab === "attendance" && <AttendanceTab data={data} canManageRosters={canManageRosters} myMember={myMember} notify={notify} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
-                {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} />}
+                {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
                 {tab === "chat" && <ChatTab session={session} profile={profile} members={data.members} onboarding={data.onboarding} notify={notify} pendingDmProfileId={pendingDm} onPendingDmConsumed={() => setPendingDm(null)} />}
                 {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} canReadFeedback={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} />}
@@ -1132,10 +1136,11 @@ function SkeletonLoader() {
   );
 }
 
-function GlobalSearch({ data, goToTab }) {
+function GlobalSearch({ data, goToTab, isOperationsUser }) {
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [memberChoiceId, setMemberChoiceId] = useState(null);
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -1154,10 +1159,41 @@ function GlobalSearch({ data, goToTab }) {
 
   const totalResults = results.members.length + results.announcements.length + results.tickets.length;
 
-  function go(tabId) {
-    goToTab(tabId);
+  function closeSearch() {
     setOpen(false);
     setQuery("");
+    setMemberChoiceId(null);
+  }
+
+  function clickMember(m) {
+    if (isOperationsUser) {
+      setMemberChoiceId(memberChoiceId === m.id ? null : m.id);
+      return;
+    }
+    if (!m.profileId) return;
+    goToTab("chat", m.profileId);
+    closeSearch();
+  }
+
+  function messageMember(m) {
+    if (!m.profileId) return;
+    goToTab("chat", m.profileId);
+    closeSearch();
+  }
+
+  function viewMemberDetails(m) {
+    goToTab("members", null, null, m.id);
+    closeSearch();
+  }
+
+  function clickAnnouncement(a) {
+    goToTab("announcements", null, a.id);
+    closeSearch();
+  }
+
+  function clickTicket(t) {
+    goToTab("equipment", null, t.id);
+    closeSearch();
   }
 
   return (
@@ -1170,7 +1206,7 @@ function GlobalSearch({ data, goToTab }) {
         <SearchIcon size={14} />
       </button>
       {open && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 2100 }} onClick={() => setOpen(false)}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 2100 }} onClick={closeSearch}>
           <div
             className="hldt-modal"
             onClick={(e) => e.stopPropagation()}
@@ -1182,7 +1218,7 @@ function GlobalSearch({ data, goToTab }) {
               style={{ ...inputStyle, borderRadius: 10, marginBottom: 10 }}
               placeholder="Search members, announcements, tickets..."
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => { setQuery(e.target.value); setMemberChoiceId(null); }}
             />
             {q.length < 2 ? (
               <div style={{ fontSize: 12, color: COLORS.textMuted, padding: "8px 4px" }}>Keep typing — at least 2 characters.</div>
@@ -1194,9 +1230,17 @@ function GlobalSearch({ data, goToTab }) {
                   <div style={{ marginBottom: 10 }}>
                     <div style={{ fontSize: 10, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", padding: "0 4px 4px" }}>Members</div>
                     {results.members.map((m) => (
-                      <div key={m.id} className="hldt-row" data-clickable="true" onClick={() => go("members")} style={{ padding: "8px 6px", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
-                        <Avatar label={m.name?.[0] || "?"} color={hashColor(m.id)} size={22} />
-                        {m.name}
+                      <div key={m.id}>
+                        <div className="hldt-row" data-clickable="true" onClick={() => clickMember(m)} style={{ padding: "8px 6px", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                          <Avatar label={m.name?.[0] || "?"} color={hashColor(m.id)} size={22} />
+                          {m.name}
+                        </div>
+                        {memberChoiceId === m.id && (
+                          <div style={{ display: "flex", gap: 6, padding: "2px 6px 8px 36px" }}>
+                            <Btn small tone="amber" onClick={() => messageMember(m)}><MessageCircle size={11} /> Message</Btn>
+                            <Btn small tone="ghost" onClick={() => viewMemberDetails(m)}><Users size={11} /> View details</Btn>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1205,7 +1249,7 @@ function GlobalSearch({ data, goToTab }) {
                   <div style={{ marginBottom: 10 }}>
                     <div style={{ fontSize: 10, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", padding: "0 4px 4px" }}>Announcements</div>
                     {results.announcements.map((a) => (
-                      <div key={a.id} className="hldt-row" data-clickable="true" onClick={() => go("announcements")} style={{ padding: "8px 6px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>
+                      <div key={a.id} className="hldt-row" data-clickable="true" onClick={() => clickAnnouncement(a)} style={{ padding: "8px 6px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>
                         {a.title}
                       </div>
                     ))}
@@ -1215,7 +1259,7 @@ function GlobalSearch({ data, goToTab }) {
                   <div>
                     <div style={{ fontSize: 10, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", padding: "0 4px 4px" }}>Equipment tickets</div>
                     {results.tickets.map((t) => (
-                      <div key={t.id} className="hldt-row" data-clickable="true" onClick={() => go("equipment")} style={{ padding: "8px 6px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>
+                      <div key={t.id} className="hldt-row" data-clickable="true" onClick={() => clickTicket(t)} style={{ padding: "8px 6px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>
                         {t.reporter} · {t.date} {t.description ? `— ${t.description.slice(0, 40)}` : ""}
                       </div>
                     ))}
@@ -1307,11 +1351,24 @@ function NotificationBell({ notifications, readIds, onRead, onNavigate }) {
 
 /* ---------------- announcements ---------------- */
 
-function AnnouncementsTab({ data, isAdmin, canPost, reload, notify, adminId, adminName }) {
+function AnnouncementsTab({ data, isAdmin, canPost, reload, notify, adminId, adminName, pendingHighlight, onPendingHighlightConsumed }) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const blank = () => ({ title: "", body: "" });
   const [form, setForm] = useState(blank());
+  const [highlightedId, setHighlightedId] = useState(null);
+
+  useEffect(() => {
+    if (!pendingHighlight || pendingHighlight.tab !== "announcements") return;
+    const el = document.getElementById(`announcement-${pendingHighlight.id}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlightedId(pendingHighlight.id);
+      setTimeout(() => setHighlightedId((cur) => (cur === pendingHighlight.id ? null : cur)), 2200);
+    }
+    onPendingHighlightConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingHighlight]);
 
   function withinEditWindow(a) {
     return Date.now() - new Date(a.createdAt).getTime() < 30 * 60 * 1000;
@@ -1377,8 +1434,8 @@ function AnnouncementsTab({ data, isAdmin, canPost, reload, notify, adminId, adm
         <Panel><EmptyRow text="No announcements yet." /></Panel>
       ) : (
         data.announcements.map((a) => (
-          <Panel key={a.id} style={{ marginBottom: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+          <Panel key={a.id} style={{ marginBottom: 12, transition: "box-shadow 400ms ease", boxShadow: highlightedId === a.id ? `0 0 0 2px ${COLORS.amber}` : "none" }}>
+            <div id={`announcement-${a.id}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
               <div style={{ fontSize: 15, fontWeight: 500, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{a.title}</div>
               {(canPost || isAdmin) && (
                 <div style={{ display: "flex", gap: 10, flexShrink: 0, marginLeft: 10 }}>
@@ -2524,12 +2581,23 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWel
 
 /* ---------------- members ---------------- */
 
-function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify }) {
+function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify, pendingMemberDetailId, onPendingMemberDetailConsumed }) {
   const [showForm, setShowForm] = useState(false);
   const [showRoles, setShowRoles] = useState(false);
   const [profiles, setProfiles] = useState([]);
   const blank = () => ({ id: null, name: "", email: "", phone: "", unit: "", tier: "", team: "", joinDate: new Date().toISOString().slice(0, 10), skills: { proPresenter: 3, vmix: 3, resolume: 3, technical: 3 }, dues: {} });
   const [form, setForm] = useState(blank());
+
+  useEffect(() => {
+    if (!pendingMemberDetailId) return;
+    const member = data.members.find((m) => m.id === pendingMemberDetailId);
+    if (member && canManage) {
+      setForm(member);
+      setShowForm(true);
+    }
+    onPendingMemberDetailConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingMemberDetailId, data.members.length]);
 
   async function loadProfiles() {
     const { data } = await supabase.from("profiles").select("*").order("email");
@@ -3103,9 +3171,26 @@ function InventoryPanel({ notify }) {
   );
 }
 
-function EquipmentTab({ data, isAdmin, myMember, canAccessInventory, canDeleteTickets, reload, notify }) {
+function EquipmentTab({ data, isAdmin, myMember, canAccessInventory, canDeleteTickets, reload, notify, pendingHighlight, onPendingHighlightConsumed }) {
   const [view, setView] = useState("tickets");
   const [showForm, setShowForm] = useState(false);
+  const [highlightedTicketId, setHighlightedTicketId] = useState(null);
+
+  useEffect(() => {
+    if (!pendingHighlight || pendingHighlight.tab !== "equipment") return;
+    setView("tickets");
+    const t = setTimeout(() => {
+      const el = document.getElementById(`ticket-${pendingHighlight.id}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        setHighlightedTicketId(pendingHighlight.id);
+        setTimeout(() => setHighlightedTicketId((cur) => (cur === pendingHighlight.id ? null : cur)), 2200);
+      }
+    }, 50);
+    onPendingHighlightConsumed?.();
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingHighlight]);
   const blank = () => ({ date: new Date().toISOString().slice(0, 10), systems: Object.fromEntries(SYSTEMS.map((s) => [s, "OK"])), description: "" });
   const [form, setForm] = useState(blank());
   const [photoFile, setPhotoFile] = useState(null);
@@ -3226,8 +3311,8 @@ function EquipmentTab({ data, isAdmin, myMember, canAccessInventory, canDeleteTi
       {data.tickets.length === 0 ? <Panel><EmptyRow text="All quiet — no checks logged yet. Equipment's either perfect or nobody's looked. 👀" /></Panel> : data.tickets.map((t) => {
         const issues = SYSTEMS.filter((s) => t.systems[s] === "Issue");
         return (
-          <Panel key={t.id} style={{ marginBottom: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8, gap: 10 }}>
+          <Panel key={t.id} style={{ marginBottom: 12, transition: "box-shadow 400ms ease", boxShadow: highlightedTicketId === t.id ? `0 0 0 2px ${COLORS.amber}` : "none" }}>
+            <div id={`ticket-${t.id}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8, gap: 10 }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 500 }}>{t.reporter} <span style={{ color: COLORS.textMuted, fontWeight: 400 }}>· {t.date}</span></div>
                 {issues.length > 0 ? <div style={{ fontSize: 12, color: COLORS.red, marginTop: 2 }}>Issues: {issues.join(", ")}</div> : <div style={{ fontSize: 12, color: COLORS.green, marginTop: 2 }}>All systems OK</div>}
@@ -3571,8 +3656,9 @@ function RosterTab({ data, isAdmin, canManageRosters, myMember, reload, notify }
   async function claimCoverRequest(req) {
     if (!myMember) { notify?.("No member record linked to your account", "error"); return; }
     if (req.requester_id === myMember.id) { notify?.("You can't cover your own request", "error"); return; }
-    const { error } = await supabase.from("cover_requests").update({ status: "claimed", claimed_by: myMember.id }).eq("id", req.id).eq("status", "open");
+    const { data: updated, error } = await supabase.from("cover_requests").update({ status: "claimed", claimed_by: myMember.id }).eq("id", req.id).eq("status", "open").select();
     if (error) { notify?.(error.message, "error"); return; }
+    if (!updated || updated.length === 0) { notify?.("Someone beat you to it — already covered.", "error"); loadCoverRequests(); return; }
     notify?.("You've got it covered");
     loadCoverRequests();
   }

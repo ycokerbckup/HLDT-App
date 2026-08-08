@@ -2587,6 +2587,10 @@ function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify, p
   const [profiles, setProfiles] = useState([]);
   const blank = () => ({ id: null, name: "", email: "", phone: "", unit: "", tier: "", team: "", joinDate: new Date().toISOString().slice(0, 10), skills: { proPresenter: 3, vmix: 3, resolume: 3, technical: 3 }, dues: {} });
   const [form, setForm] = useState(blank());
+  const [filterTeam, setFilterTeam] = useState("all");
+  const [filterUnit, setFilterUnit] = useState("all");
+  const [filterSkill, setFilterSkill] = useState("any");
+  const [filterSkillMin, setFilterSkillMin] = useState(3);
 
   useEffect(() => {
     if (!pendingMemberDetailId) return;
@@ -2713,14 +2717,53 @@ function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify, p
         </Panel>
       )}
 
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+        <select style={{ ...inputStyle, width: "auto" }} value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)}>
+          <option value="all">All teams</option>
+          <option value="A">Team A</option>
+          <option value="B">Team B</option>
+          <option value="none">Unassigned</option>
+        </select>
+        <select style={{ ...inputStyle, width: "auto" }} value={filterUnit} onChange={(e) => setFilterUnit(e.target.value)}>
+          <option value="all">All units</option>
+          {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+          <option value="none">Unassigned</option>
+        </select>
+        <select style={{ ...inputStyle, width: "auto" }} value={filterSkill} onChange={(e) => setFilterSkill(e.target.value)}>
+          <option value="any">Any skill</option>
+          <option value="proPresenter">ProPresenter</option>
+          <option value="vmix">VMix</option>
+          <option value="resolume">Resolume</option>
+          <option value="technical">Technical</option>
+        </select>
+        {filterSkill !== "any" && (
+          <select style={{ ...inputStyle, width: "auto" }} value={filterSkillMin} onChange={(e) => setFilterSkillMin(Number(e.target.value))}>
+            {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}+</option>)}
+          </select>
+        )}
+        {(filterTeam !== "all" || filterUnit !== "all" || filterSkill !== "any") && (
+          <Btn small tone="ghost" onClick={() => { setFilterTeam("all"); setFilterUnit("all"); setFilterSkill("any"); }}>Clear filters</Btn>
+        )}
+      </div>
+
       <Panel>
-        {data.members.length === 0 ? <EmptyRow text="No members yet." /> : (
+        {(() => {
+          const filteredMembers = data.members.filter((m) => {
+            if (filterTeam === "A" && m.team !== "A") return false;
+            if (filterTeam === "B" && m.team !== "B") return false;
+            if (filterTeam === "none" && m.team) return false;
+            if (filterUnit === "none" && m.unit) return false;
+            if (filterUnit !== "all" && filterUnit !== "none" && m.unit !== filterUnit) return false;
+            if (filterSkill !== "any" && (m.skills?.[filterSkill] ?? 3) < filterSkillMin) return false;
+            return true;
+          });
+          return filteredMembers.length === 0 ? <EmptyRow text="No members match these filters." /> : (
           <div style={{ overflowX: "auto" }}>
             <div style={{ minWidth: 560 }}>
               <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 0.7fr 0.9fr 0.6fr", fontSize: 11, color: COLORS.textMuted, padding: "0 4px 8px", textTransform: "uppercase", letterSpacing: "0.03em" }}>
                 <div>Name</div><div>Unit</div><div>Tier</div><div>Team</div><div>Account</div><div></div>
               </div>
-              {data.members.map((m) => (
+              {filteredMembers.map((m) => (
                 <div
                   key={m.id}
                   onClick={() => canManage && (setForm(m), setShowForm(true))}
@@ -2744,7 +2787,8 @@ function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify, p
               ))}
             </div>
           </div>
-        )}
+          );
+        })()}
       </Panel>
     </div>
   );

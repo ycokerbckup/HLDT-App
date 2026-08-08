@@ -204,11 +204,19 @@ function computeAvatarLabels(people) {
 
 function Avatar({ label, color, size = 28, celebration }) {
   const emoji = celebrationEmoji(celebration);
-  return (
-    <div title={celebration ? (celebration === "birthday" ? "Birthday today!" : celebration === "graduation" ? "Graduated today!" : "Service milestone today!") : undefined} style={{ width: size, height: size, borderRadius: 999, background: emoji ? COLORS.amberDim : color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: emoji ? size * 0.55 : size * 0.4, fontWeight: 600, flexShrink: 0 }}>
+  const inner = (
+    <div style={{ width: size, height: size, borderRadius: 999, background: emoji ? COLORS.amberDim : color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: emoji ? size * 0.55 : size * 0.4, fontWeight: 600, flexShrink: 0 }}>
       {emoji || label}
     </div>
   );
+  if (emoji) {
+    return (
+      <div title={celebration === "birthday" ? "Birthday today!" : celebration === "graduation" ? "Graduated today!" : "Service milestone today!"}>
+        {inner}
+      </div>
+    );
+  }
+  return <div className="hldt-avatar-gradient-ring">{inner}</div>;
 }
 
 const inputStyle = {
@@ -242,7 +250,7 @@ function Badge({ children, tone = "gray" }) {
 
 function Panel({ title, right, children, style }) {
   return (
-    <div className="hldt-panel" style={{ background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 8, overflow: "hidden", ...style }}>
+    <div className="hldt-panel hldt-panel-hover" style={{ background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 14, overflow: "hidden", ...style }}>
       {title && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderBottom: `1px solid ${COLORS.border}`, background: COLORS.surface2 }}>
           <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 15, letterSpacing: "0.02em", textTransform: "uppercase", color: COLORS.textPrimary }}>{title}</h3>
@@ -271,7 +279,7 @@ function Btn({ children, onClick, tone = "default", small, type = "button", disa
     danger: { background: "transparent", color: COLORS.red, border: `1px solid ${COLORS.redDim}` },
   };
   return (
-    <button className="hldt-btn" type={type} onClick={onClick} disabled={disabled} style={{ ...toneStyles[tone], borderRadius: 6, padding: small ? "5px 10px" : "8px 14px", fontSize: small ? 12 : 13, fontWeight: 500, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 6, ...style }}>
+    <button className={`hldt-btn${tone === "amber" ? " hldt-shine" : ""}`} type={type} onClick={onClick} disabled={disabled} style={{ ...toneStyles[tone], borderRadius: 8, padding: small ? "5px 10px" : "8px 14px", fontSize: small ? 12 : 13, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 6, ...style }}>
       {children}
     </button>
   );
@@ -367,11 +375,13 @@ function useCountUp(target) {
 function Metric({ label, value, tone, isCurrency, onClick }) {
   const animated = useCountUp(typeof value === "number" ? value : 0);
   const display = isCurrency ? currency(animated) : animated;
+  const useGradient = !tone;
   return (
     <div
+      className="hldt-panel-hover"
       onClick={onClick}
       style={{
-        background: COLORS.surface2, borderRadius: 8, padding: "14px 16px", flex: 1, minWidth: 120,
+        background: COLORS.surface2, borderRadius: 12, padding: "14px 16px", flex: 1, minWidth: 120,
         cursor: onClick ? "pointer" : "default",
         transition: "background-color 150ms ease, transform 150ms ease",
       }}
@@ -379,7 +389,15 @@ function Metric({ label, value, tone, isCurrency, onClick }) {
       onMouseLeave={(e) => { if (onClick) e.currentTarget.style.background = COLORS.surface2; }}
     >
       <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
-      <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: isCurrency ? 22 : 28, color: tone === "amber" ? COLORS.amber : tone === "red" ? COLORS.red : tone === "green" ? COLORS.green : COLORS.textPrimary }}>{display}</div>
+      <div
+        className={useGradient ? "hldt-gradient-text" : undefined}
+        style={{
+          fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: isCurrency ? 22 : 28,
+          color: useGradient ? undefined : tone === "amber" ? COLORS.amber : tone === "red" ? COLORS.red : tone === "green" ? COLORS.green : COLORS.textPrimary,
+        }}
+      >
+        {display}
+      </div>
     </div>
   );
 }
@@ -919,7 +937,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                       <div
                         key={n.id}
                         onClick={() => { goToTab(n.id); setShowAccountMenu(false); }}
-                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 10px", marginBottom: 2, borderRadius: 6, cursor: "pointer", fontSize: 13, color: active ? COLORS.textPrimary : COLORS.textSecondary, background: active ? COLORS.surface2 : "transparent" }}
+                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 10px", marginBottom: 2, borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: active ? 600 : 400, color: active ? COLORS.amber : COLORS.textSecondary, background: active ? `linear-gradient(135deg, ${COLORS.amberDim}, rgba(61,220,151,0.08))` : "transparent" }}
                       >
                         <div style={{ position: "relative", display: "flex" }}>
                           <Icon size={16} strokeWidth={1.8} />
@@ -976,7 +994,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 const active = tab === n.id;
                 const hasUnread = unreadByTab[n.id] > 0;
                 return (
-                  <div key={n.id} className="hldt-nav-item" onClick={() => goToTab(n.id)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", marginBottom: 2, borderRadius: 6, cursor: "pointer", fontSize: 13, color: active ? COLORS.textPrimary : COLORS.textSecondary, background: active ? COLORS.surface2 : "transparent", borderLeft: active ? `2px solid ${COLORS.amber}` : "2px solid transparent" }}>
+                  <div key={n.id} className="hldt-nav-item" onClick={() => goToTab(n.id)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", marginBottom: 2, borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: active ? 600 : 400, color: active ? COLORS.amber : COLORS.textSecondary, background: active ? `linear-gradient(135deg, ${COLORS.amberDim}, rgba(61,220,151,0.08))` : "transparent", borderLeft: active ? `2px solid ${COLORS.amber}` : "2px solid transparent" }}>
                     <div style={{ position: "relative", display: "flex" }}>
                       <Icon size={15} strokeWidth={1.8} />
                       {hasUnread && <span style={{ position: "absolute", top: -2, right: -3, width: 6, height: 6, borderRadius: 999, background: COLORS.red, border: `1.5px solid ${COLORS.surface1}` }} />}
@@ -1028,6 +1046,36 @@ function Dashboard_Shell({ session, profile, setProfile }) {
 
 function SkeletonBar({ width = "100%", height = 14 }) {
   return <div className="hldt-skeleton" style={{ width, height, marginBottom: 8 }} />;
+}
+
+function Carousel({ children, itemWidth = 220 }) {
+  const scrollerRef = useRef(null);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const count = React.Children.count(children);
+
+  function handleScroll() {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const idx = Math.round(el.scrollLeft / (itemWidth + 12));
+    setActiveIdx(Math.min(count - 1, Math.max(0, idx)));
+  }
+
+  return (
+    <div>
+      <div ref={scrollerRef} className="hldt-carousel" onScroll={handleScroll}>
+        {React.Children.map(children, (child) => (
+          <div className="hldt-carousel-item" style={{ width: itemWidth }}>{child}</div>
+        ))}
+      </div>
+      {count > 1 && (
+        <div className="hldt-carousel-dots" style={{ color: COLORS.textMuted }}>
+          {Array.from({ length: count }).map((_, i) => (
+            <div key={i} className={`hldt-carousel-dot${i === activeIdx ? " active" : ""}`} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function SkeletonLoader() {
@@ -1087,9 +1135,9 @@ function NotificationBell({ notifications, readIds, onRead, onNavigate }) {
           background: COLORS.surface2, border: `1px solid ${COLORS.border}`, color: COLORS.textPrimary, cursor: "pointer", position: "relative",
         }}
       >
-        <Bell size={14} />
+        <span className={unread.length > 0 ? "hldt-wiggle-on-hover" : undefined} style={{ display: "flex" }}><Bell size={14} /></span>
         {unread.length > 0 && (
-          <span style={{ position: "absolute", top: -2, right: -2, minWidth: 15, height: 15, borderRadius: 999, background: COLORS.red, color: "#fff", fontSize: 9, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>
+          <span className="hldt-reaction-pop" style={{ position: "absolute", top: -2, right: -2, minWidth: 15, height: 15, borderRadius: 999, background: COLORS.red, color: "#fff", fontSize: 9, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>
             {unread.length > 9 ? "9+" : unread.length}
           </span>
         )}
@@ -1606,7 +1654,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
 
           <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
             {messages.length === 0 ? (
-              <EmptyRow text="No messages yet." />
+              <EmptyRow text="No messages yet — be the icebreaker. 👋" />
             ) : (
               messages.map((m, idx) => {
                 const mine = m.sender_id === session.user.id;
@@ -1914,11 +1962,35 @@ function FeedTab({ session, profile, isAdmin, canManage, notify }) {
       {!loaded ? (
         <SkeletonLoader />
       ) : posts.length === 0 ? (
-        <Panel><EmptyRow text="Nothing in the feed yet." /></Panel>
+        <Panel><EmptyRow text="Nothing in the feed yet — quiet in here. 🦗" /></Panel>
       ) : (
+        <>
+        {posts.length > 2 && (
+          <div style={{ marginBottom: 22 }}>
+            <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Recently added</div>
+            <Carousel itemWidth={200}>
+              {posts.slice(0, 8).map((p) => (
+                <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "block" }}>
+                  <div className="hldt-panel-hover" style={{ background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 12, overflow: "hidden" }}>
+                    {p.thumbnailUrl ? (
+                      <img src={p.thumbnailUrl} alt="" style={{ width: "100%", height: 110, objectFit: "cover", display: "block" }} />
+                    ) : (
+                      <div style={{ width: "100%", height: 110, background: COLORS.surface2, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <Link2 size={20} color={COLORS.textMuted} />
+                      </div>
+                    )}
+                    <div style={{ padding: 10 }}>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: COLORS.textPrimary, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{p.title}</div>
+                    </div>
+                  </div>
+                </a>
+              ))}
+            </Carousel>
+          </div>
+        )}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
           {posts.map((p) => (
-            <div key={p.id} className="hldt-panel" style={{ background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 10, overflow: "hidden" }}>
+            <div key={p.id} className="hldt-panel hldt-panel-hover" style={{ background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 12, overflow: "hidden" }}>
               <a href={p.url} target="_blank" rel="noopener noreferrer">
                 {p.thumbnailUrl ? (
                   <img src={p.thumbnailUrl} alt="" style={{ width: "100%", height: 130, objectFit: "cover", display: "block" }} />
@@ -1946,6 +2018,7 @@ function FeedTab({ session, profile, isAdmin, canManage, notify }) {
             </div>
           ))}
         </div>
+        </>
       )}
 
       {showSources && <ManageSourcesModal sources={sources} onClose={() => setShowSources(false)} reload={loadSources} notify={notify} />}
@@ -3005,7 +3078,7 @@ function EquipmentTab({ data, isAdmin, myMember, canAccessInventory, canDeleteTi
         </Panel>
       )}
 
-      {data.tickets.length === 0 ? <Panel><EmptyRow text="No checks logged yet." /></Panel> : data.tickets.map((t) => {
+      {data.tickets.length === 0 ? <Panel><EmptyRow text="All quiet — no checks logged yet. Equipment's either perfect or nobody's looked. 👀" /></Panel> : data.tickets.map((t) => {
         const issues = SYSTEMS.filter((s) => t.systems[s] === "Issue");
         return (
           <Panel key={t.id} style={{ marginBottom: 12 }}>
@@ -3259,7 +3332,7 @@ function RosterTab({ data, isAdmin, canManageRosters, reload, notify }) {
 
       <SectionHeader title="Tuesday prayer meeting" subtitle="8PM" right={canManageRosters && <Btn small tone="amber" onClick={() => setShowNewTuesday(true)}><Plus size={12} /> New</Btn>} />
       {tuesdayRosters.length === 0 ? (
-        <Panel style={{ marginBottom: 20 }}><EmptyRow text="No upcoming Tuesday rosters." /></Panel>
+        <Panel style={{ marginBottom: 20 }}><EmptyRow text="No upcoming Tuesday rosters yet." /></Panel>
       ) : (
         tuesdayRosters.map((r) => (
           <Panel key={r.id} style={{ marginBottom: 12 }} title={new Date(r.eventDate + "T00:00").toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
@@ -3286,7 +3359,7 @@ function RosterTab({ data, isAdmin, canManageRosters, reload, notify }) {
 
       <SectionHeader title="Saturday training" subtitle="Call time 9:50 AM · ~2 hours" right={canManageRosters && <Btn small tone="amber" onClick={() => setShowNewSaturday(true)}><Plus size={12} /> New</Btn>} />
       {saturdayRosters.length === 0 ? (
-        <Panel><EmptyRow text="No upcoming Saturday rosters." /></Panel>
+        <Panel><EmptyRow text="No upcoming Saturday rosters yet." /></Panel>
       ) : (
         saturdayRosters.map((r) => (
           <Panel key={r.id} style={{ marginBottom: 12 }} title={new Date(r.eventDate + "T00:00").toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}

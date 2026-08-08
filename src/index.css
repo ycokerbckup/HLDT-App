@@ -237,6 +237,123 @@ body {
   background: rgba(184, 113, 10, 0.18);
 }
 
+@keyframes hldt-gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+@keyframes hldt-shine-sweep {
+  0% { transform: translateX(-120%) skewX(-15deg); }
+  100% { transform: translateX(220%) skewX(-15deg); }
+}
+@keyframes hldt-wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(-12deg); }
+  40% { transform: rotate(10deg); }
+  60% { transform: rotate(-6deg); }
+  80% { transform: rotate(4deg); }
+}
+@keyframes hldt-pop-in {
+  0% { opacity: 0; transform: scale(0.7) translateY(4px); }
+  70% { transform: scale(1.04) translateY(0); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes hldt-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* gradient text — used sparingly, for hero numbers/moments only */
+.hldt-gradient-text {
+  background: linear-gradient(100deg, #E8A33D, #3DDC97, #E8A33D);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: hldt-gradient-shift 6s ease infinite;
+}
+
+/* gradient ring for avatars — the "modern app" default halo */
+.hldt-avatar-gradient-ring {
+  background: linear-gradient(135deg, #E8A33D, #3DDC97);
+  padding: 2px;
+  border-radius: 999px;
+  display: inline-flex;
+  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.hldt-avatar-gradient-ring:hover {
+  transform: scale(1.08) rotate(-3deg);
+}
+
+/* shine sweep — a light glint across primary CTAs on hover */
+.hldt-shine {
+  position: relative;
+  overflow: hidden;
+}
+.hldt-shine::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0;
+  width: 40%; height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,0.35), transparent);
+  transform: translateX(-120%) skewX(-15deg);
+  pointer-events: none;
+}
+.hldt-shine:hover::after {
+  animation: hldt-shine-sweep 900ms ease;
+}
+
+.hldt-wiggle-on-hover:hover {
+  animation: hldt-wiggle 500ms ease;
+  display: inline-block;
+}
+
+.hldt-panel-hover {
+  transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 220ms ease, border-color 220ms ease;
+}
+.hldt-panel-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.22);
+}
+
+.hldt-float {
+  animation: hldt-float 3.4s ease-in-out infinite;
+}
+
+/* carousel */
+.hldt-carousel {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding: 0 16px;
+  padding-bottom: 6px;
+}
+.hldt-carousel::-webkit-scrollbar {
+  height: 6px;
+}
+.hldt-carousel-item {
+  scroll-snap-align: start;
+  flex-shrink: 0;
+}
+.hldt-carousel-dots {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+  margin-top: 8px;
+}
+.hldt-carousel-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.25;
+  transition: opacity 200ms ease, width 200ms ease;
+}
+.hldt-carousel-dot.active {
+  opacity: 1;
+  width: 14px;
+}
+
 .hldt-week-toggle {
   transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
 }

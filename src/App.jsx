@@ -124,6 +124,14 @@ function getDue(m, month) {
   return { status: raw.status || "unset", amount: typeof raw.amount === "number" ? raw.amount : 0 };
 }
 
+function hexToRgba(hex, alpha) {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 function currency(n) {
   return `₦${Math.round(n || 0).toLocaleString()}`;
 }
@@ -284,13 +292,13 @@ function Field({ label, children }) {
 
 function Btn({ children, onClick, tone = "default", small, type = "button", disabled, style }) {
   const toneStyles = {
-    default: { background: COLORS.surface2, color: COLORS.textPrimary, border: `1px solid ${COLORS.borderStrong}` },
-    amber: { background: COLORS.amber, color: "#14171C", border: `1px solid ${COLORS.amber}` },
-    ghost: { background: "transparent", color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` },
-    danger: { background: "transparent", color: COLORS.red, border: `1px solid ${COLORS.redDim}` },
+    default: { background: COLORS.glass2, color: COLORS.textPrimary, border: `1px solid ${COLORS.glassBorder}` },
+    amber: { background: hexToRgba(COLORS.amber, 0.88), color: "#14171C", border: `1px solid ${hexToRgba(COLORS.amber, 0.95)}` },
+    ghost: { background: hexToRgba(COLORS.textPrimary, 0.04), color: COLORS.textSecondary, border: `1px solid ${COLORS.glassBorder}` },
+    danger: { background: hexToRgba(COLORS.red, 0.12), color: COLORS.red, border: `1px solid ${hexToRgba(COLORS.red, 0.3)}` },
   };
   return (
-    <button className={`hldt-btn${tone === "amber" ? " hldt-shine" : ""}`} type={type} onClick={onClick} disabled={disabled} style={{ ...toneStyles[tone], borderRadius: 8, padding: small ? "5px 10px" : "8px 14px", fontSize: small ? 12 : 13, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 6, ...style }}>
+    <button className={`hldt-btn hldt-glass${tone === "amber" ? " hldt-shine" : ""}`} type={type} onClick={onClick} disabled={disabled} style={{ ...toneStyles[tone], borderRadius: 10, padding: small ? "5px 10px" : "8px 14px", fontSize: small ? 12 : 13, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 6, ...style }}>
       {children}
     </button>
   );

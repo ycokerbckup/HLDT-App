@@ -86,7 +86,7 @@ body {
 .hldt-glow-orb {
   position: absolute;
   border-radius: 999px;
-  filter: blur(90px);
+  filter: blur(130px);
   opacity: 0.55;
 }
 .hldt-glow-orb.hldt-glow-warm {
@@ -94,7 +94,7 @@ body {
   height: 46vw;
   max-width: 560px;
   max-height: 560px;
-  background: radial-gradient(circle, #E8A33D 0%, transparent 70%);
+  background: radial-gradient(circle, #E8A33D 0%, rgba(232,163,61,0.65) 25%, rgba(232,163,61,0.28) 50%, rgba(232,163,61,0.08) 72%, transparent 100%);
   top: -10%;
   left: -6%;
   animation: hldt-drift-a 22s ease-in-out infinite;
@@ -104,7 +104,7 @@ body {
   height: 40vw;
   max-width: 480px;
   max-height: 480px;
-  background: radial-gradient(circle, #3DDC97 0%, transparent 70%);
+  background: radial-gradient(circle, #3DDC97 0%, rgba(61,220,151,0.65) 25%, rgba(61,220,151,0.28) 50%, rgba(61,220,151,0.08) 72%, transparent 100%);
   bottom: -12%;
   right: -8%;
   animation: hldt-drift-b 26s ease-in-out infinite;

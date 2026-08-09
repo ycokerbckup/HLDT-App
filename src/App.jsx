@@ -3630,7 +3630,7 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
               <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: `1px solid ${COLORS.border}` }}>
                 <span style={{ flex: 1, fontSize: 13 }}>{m.name}</span>
                 {["present", "absent", "excused"].map((s) => (
-                  <Btn key={s} small tone={draft[m.id] === s ? (s === "present" ? "amber" : s === "absent" ? "danger" : "ghost") : "ghost"} onClick={() => setDraft({ ...draft, [m.id]: s })}>
+                  <Btn key={s} small tone={draft[m.id] === s ? (s === "present" ? "amber" : s === "absent" ? "danger" : "default") : "ghost"} onClick={() => setDraft({ ...draft, [m.id]: s })}>
                     {s === "present" ? "Present" : s === "absent" ? "Absent" : "Excused"}
                   </Btn>
                 ))}

@@ -72,7 +72,7 @@ def main():
         print("Warning: APP_URL not set — emails will send without a clickable link.")
 
     pending = api_get(
-        "/rest/v1/notifications?type=in.(roster,assignment,signup,chat,announcement,birthday,milestone,graduation,cover_request,saturday_roster_reminder,tuesday_roster_reminder,attendance_warning,attendance_suspension,monthly_digest)&emailed=eq.false"
+        "/rest/v1/notifications?type=in.(roster,assignment,signup,chat,announcement,birthday,milestone,graduation,cover_request,saturday_roster_reminder,tuesday_roster_reminder,attendance_warning,attendance_suspension,monthly_digest,suspension_action_needed)&emailed=eq.false"
         "&select=id,type,title,body,link_tab,target_profile_id,dm_with_profile_id"
     )
     if not pending:

@@ -761,7 +761,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
           team: m.team, joinDate: m.join_date, skills: source.skills || {}, dues: source.dues || {},
           profileId: m.profile_id,
           homeAddress: source.home_address, sex: source.sex, dob: source.dob, occupation: source.occupation, kymCompletedAt: source.kym_completed_at,
-          unavailable: m.unavailable,
+          unavailable: m.unavailable, suspended: m.suspended,
         };
       }),
       onboarding: (onboardingRes.data || []).map((o) => ({
@@ -2640,7 +2640,7 @@ function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify, p
 
   async function saveMember() {
     if (!form.name.trim()) return;
-    const payload = { name: form.name, email: form.email, phone: form.phone, unit: form.unit || null, tier: form.tier || null, team: form.team || null, join_date: form.joinDate, skills: form.skills, dues: form.dues, unavailable: !!form.unavailable };
+    const payload = { name: form.name, email: form.email, phone: form.phone, unit: form.unit || null, tier: form.tier || null, team: form.team || null, join_date: form.joinDate, skills: form.skills, dues: form.dues, unavailable: !!form.unavailable, suspended: !!form.suspended };
     const isNew = !form.id;
     const { error } = form.id
       ? await supabase.from("members").update(payload).eq("id", form.id)
@@ -2732,6 +2732,12 @@ function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify, p
                 {form.unavailable ? "Marked unavailable" : "Available"}
               </Btn>
               {form.unavailable && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>Can't be assigned tickets or roster duty. Dues not expected, chat/notifications unaffected.</div>}
+            </Field>
+            <Field label="Suspension">
+              <Btn small tone={form.suspended ? "danger" : "ghost"} onClick={() => setForm({ ...form, suspended: !form.suspended })}>
+                {form.suspended ? "Suspended" : "In good standing"}
+              </Btn>
+              {form.suspended && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>Can't be assigned tickets or roster duty. Chat/notifications unaffected.</div>}
             </Field>
           </div>
           <div style={{ fontSize: 12, color: COLORS.textSecondary, margin: "10px 0 6px" }}>Self-reported proficiency (1-5)</div>
@@ -3403,7 +3409,7 @@ function EquipmentTab({ data, isAdmin, myMember, canAccessInventory, canDeleteTi
                 {TICKET_STATUSES.map((s) => <Btn key={s} small tone={t.status === s ? "amber" : "ghost"} onClick={() => updateStatus(t, s)}>{s}</Btn>)}
                 <select value={t.assignedToId || ""} onChange={(e) => assign(t, e.target.value)} style={{ ...inputStyle, width: 150, fontSize: 12, padding: "5px 8px" }}>
                   <option value="">Assign to...</option>
-                  {data.members.filter((m) => !m.unavailable).map((m) => <option key={m.id} value={m.id}>{m.name} (Tech {m.skills?.technical ?? 3})</option>)}
+                  {data.members.filter((m) => !m.unavailable && !m.suspended).map((m) => <option key={m.id} value={m.id}>{m.name} (Tech {m.skills?.technical ?? 3})</option>)}
                 </select>
               </div>
             )}
@@ -3468,7 +3474,7 @@ function TuesdayRosterEditor({ existing, members, onClose, onSaved, notify }) {
           <input type="number" style={{ ...inputStyle, width: 56 }} value={it.duration_minutes || ""} onChange={(e) => updateItem(idx, { duration_minutes: Number(e.target.value) })} />
           <select style={{ ...inputStyle, flex: 1.3 }} value={it.assigned_member_id || ""} onChange={(e) => { const mem = members.find((m) => m.id === e.target.value); updateItem(idx, { assigned_member_id: e.target.value, assigned_name: mem?.name || "" }); }}>
             <option value="">Unassigned</option>
-            {members.filter((m) => !m.unavailable).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            {members.filter((m) => !m.unavailable && !m.suspended).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
           <Trash2 size={14} style={{ cursor: "pointer", color: COLORS.textMuted, flexShrink: 0 }} onClick={() => removeItem(idx)} />
         </div>
@@ -3528,7 +3534,7 @@ function SaturdayRosterEditor({ existing, members, onClose, onSaved, notify }) {
       </div>
       <Field label="Trainers this week">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {members.filter((m) => !m.unavailable).map((m) => (
+          {members.filter((m) => !m.unavailable && !m.suspended).map((m) => (
             <Btn key={m.id} small tone={trainerIds.includes(m.id) ? "amber" : "ghost"} onClick={() => toggleTrainer(m.id)}>
               {m.name} · {(((m.skills?.proPresenter ?? 3) + (m.skills?.vmix ?? 3) + (m.skills?.resolume ?? 3) + (m.skills?.technical ?? 3)) / 4).toFixed(1)}
             </Btn>
@@ -3558,21 +3564,78 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
   const [showMark, setShowMark] = useState(false);
   const [draft, setDraft] = useState({});
   const [summaryFor, setSummaryFor] = useState(null);
-  const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryResult, setSummaryResult] = useState(null);
+  const [aiPending, setAiPending] = useState(false);
+
+  const MIN_PRESENT_TARGET = 10;
+
+  function computeStats(member) {
+    const now = new Date();
+    const thisMonth = now.toISOString().slice(0, 7);
+    const memberRecords = records.filter((r) => r.member_id === member.id && r.event_date.slice(0, 7) === thisMonth);
+    const allThisMonth = records.filter((r) => r.event_date.slice(0, 7) === thisMonth);
+
+    const present = memberRecords.filter((r) => r.status === "present").length;
+    const absent = memberRecords.filter((r) => r.status === "absent").length;
+    const excused = memberRecords.filter((r) => r.status === "excused").length;
+
+    const allEvents = new Set(allThisMonth.map((r) => `${r.event_type}|${r.event_date}`));
+    const eventsSinceJoin = new Set(
+      allThisMonth.filter((r) => !member.joinDate || r.event_date >= member.joinDate).map((r) => `${r.event_type}|${r.event_date}`)
+    );
+    const proratedMinimum = allEvents.size > 0 ? Math.round((MIN_PRESENT_TARGET * eventsSinceJoin.size) / allEvents.size) : MIN_PRESENT_TARGET;
+
+    const nonExcused = memberRecords.filter((r) => r.status !== "excused").sort((a, b) => a.event_date.localeCompare(b.event_date));
+    let currentConsecutiveAbsences = 0;
+    for (let i = nonExcused.length - 1; i >= 0; i--) {
+      if (nonExcused[i].status === "absent") currentConsecutiveAbsences++;
+      else break;
+    }
+
+    const excusableAbsences = memberRecords.filter(
+      (r) => r.status === "absent" && Date.now() - new Date(r.created_at).getTime() < 24 * 3600 * 1000
+    );
+
+    return {
+      present, absent, excused,
+      proratedMinimum, metMinimum: present >= proratedMinimum,
+      currentConsecutiveAbsences, excusableAbsences,
+    };
+  }
+
+  function fallbackRecommendation(stats) {
+    if (stats.absent >= 4) return { recommendation: "Suspension already triggered", reasoning: "4 or more absences this month automatically triggers the suspension notice." };
+    if (stats.absent >= 3) return { recommendation: "Formal warning already triggered", reasoning: "3 absences this month automatically triggers a second warning." };
+    if (stats.currentConsecutiveAbsences >= 2) return { recommendation: "Formal warning already triggered", reasoning: "2 consecutive absences automatically triggers a warning." };
+    if (!stats.metMinimum) return { recommendation: "Informal check-in recommended", reasoning: `Below the prorated minimum of ${stats.proratedMinimum} presences this month.` };
+    return { recommendation: "No action needed", reasoning: "Meeting expectations this month." };
+  }
 
   async function openSummary(member) {
+    const stats = computeStats(member);
+    const fb = fallbackRecommendation(stats);
     setSummaryFor(member);
-    setSummaryResult(null);
-    setSummaryLoading(true);
+    setSummaryResult({
+      stats,
+      summary: `${member.name}: ${stats.present} present, ${stats.absent} absent, ${stats.excused} excused this month (target: ${stats.proratedMinimum}+ present).`,
+      recommendation: fb.recommendation,
+      reasoning: fb.reasoning,
+      isAi: false,
+    });
+    setAiPending(true);
     const { data: result, error } = await supabase.functions.invoke("attendance-ai-summary", { body: { memberId: member.id } });
-    if (error || result?.error) {
-      notify?.(result?.error || error?.message || "Couldn't generate summary", "error");
-      setSummaryFor(null);
-    } else {
-      setSummaryResult(result);
+    setAiPending(false);
+    if (!error && result && !result.error && result.summary) {
+      setSummaryResult((prev) => (prev && prev.stats === stats ? { stats: result.stats, summary: result.summary, recommendation: result.recommendation, reasoning: result.reasoning, isAi: true, excusableAbsences: stats.excusableAbsences } : prev));
     }
-    setSummaryLoading(false);
+  }
+
+  async function excuseAbsence(recordId) {
+    const { error } = await supabase.rpc("excuse_attendance", { p_record_id: recordId });
+    if (error) { notify?.(error.message, "error"); return; }
+    notify?.("Marked excused");
+    load();
+    if (summaryFor) openSummary(summaryFor);
   }
 
   async function load() {
@@ -3620,7 +3683,7 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
     return data.members
       .map((m) => ({ m, counts: byMember[m.id] || { present: 0, absent: 0, excused: 0 } }))
       .filter((x) => x.counts.present + x.counts.absent + x.counts.excused > 0)
-      .sort((a, b) => (b.counts.present + b.counts.excused) - (b.counts.present + b.counts.excused) || a.m.name.localeCompare(b.m.name));
+      .sort((a, b) => (b.counts.present + b.counts.excused) - (a.counts.present + a.counts.excused) || a.m.name.localeCompare(b.m.name));
   }, [records, data.members]);
 
   const recentDates = useMemo(() => {
@@ -3639,7 +3702,7 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
     <div>
       <SectionHeader
         title="Attendance"
-        subtitle="Who actually showed up, separate from who was scheduled."
+        subtitle="Who actually showed up, separate from who was scheduled. Click a name for their summary."
         right={canManageRosters && <Btn tone="amber" onClick={() => setShowMark(true)}><Plus size={14} /> Mark attendance</Btn>}
       />
 
@@ -3655,7 +3718,7 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
           </div>
           <Btn small tone="ghost" onClick={openMarking}><RefreshCw size={12} /> Load existing marks for this date</Btn>
           <div style={{ marginTop: 14, maxHeight: 340, overflowY: "auto" }}>
-            {data.members.filter((m) => !m.unavailable).map((m) => (
+            {data.members.filter((m) => !m.unavailable && !m.suspended).map((m) => (
               <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: `1px solid ${COLORS.border}` }}>
                 <span style={{ flex: 1, fontSize: 13 }}>{m.name}</span>
                 {["present", "absent", "excused"].map((s) => (
@@ -3673,30 +3736,28 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 16, alignItems: "start" }}>
-        <Panel title="Tap a member for their attendance summary">
+        <Panel title="Attendance summary">
           {summary.length === 0 ? (
             <EmptyRow text="No attendance recorded yet." />
           ) : (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 18, padding: "8px 4px" }}>
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "1.6fr 0.7fr 0.7fr 0.7fr", fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", padding: "0 4px 8px" }}>
+                <div>Name</div><div>Present</div><div>Absent</div><div>Excused</div>
+              </div>
               {summary.map(({ m, counts }) => (
                 <div
                   key={m.id}
+                  className="hldt-row" data-clickable="true"
                   onClick={() => openSummary(m)}
-                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, cursor: "pointer", width: 68 }}
-                  title={`${counts.present} present · ${counts.absent} absent · ${counts.excused} excused`}
+                  style={{ display: "grid", gridTemplateColumns: "1.6fr 0.7fr 0.7fr 0.7fr", alignItems: "center", padding: "6px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 13, cursor: "pointer", borderRadius: 8 }}
                 >
-                  <div className="hldt-float" style={{ position: "relative" }}>
-                    <Avatar label={m.name?.[0] || "?"} color={hashColor(m.id)} size={52} />
-                    {counts.absent > 0 && (
-                      <span style={{ position: "absolute", top: -2, right: -2, minWidth: 16, height: 16, borderRadius: 999, background: COLORS.red, color: "#fff", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>
-                        {counts.absent}
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ fontSize: 11, color: COLORS.textSecondary, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: "100%" }}>{m.name}</div>
+                  <div>{m.name}</div>
+                  <div style={{ color: COLORS.green }}>{counts.present}</div>
+                  <div style={{ color: COLORS.red }}>{counts.absent}</div>
+                  <div style={{ color: COLORS.textMuted }}>{counts.excused}</div>
                 </div>
               ))}
-            </div>
+            </>
           )}
         </Panel>
         <Panel title="Recently marked">
@@ -3713,26 +3774,32 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
         </Panel>
       </div>
 
-      {summaryFor && (
-        <Modal title={summaryFor.name} onClose={() => setSummaryFor(null)} width={420}>
-          {summaryLoading ? (
-            <div style={{ fontSize: 13, color: COLORS.textMuted, padding: "12px 0" }}>Thinking...</div>
-          ) : summaryResult && (
-            <div>
-              <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
-                <Badge tone="green">{summaryResult.stats.present} present</Badge>
-                <Badge tone="red">{summaryResult.stats.absent} absent</Badge>
-                <Badge tone="gray">{summaryResult.stats.excused} excused</Badge>
-                <Badge tone={summaryResult.stats.metMinimum ? "green" : "amber"}>
-                  {summaryResult.stats.metMinimum ? "Meets" : "Below"} minimum ({summaryResult.stats.proratedMinimum})
-                </Badge>
-              </div>
-              <div style={{ fontSize: 13, color: COLORS.textPrimary, marginBottom: 14, lineHeight: 1.5 }}>{summaryResult.summary}</div>
-              <Panel style={{ background: COLORS.glass2 }}>
-                <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>Recommended measure</div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: COLORS.amber, marginBottom: 4 }}>{summaryResult.recommendation}</div>
-                <div style={{ fontSize: 12, color: COLORS.textSecondary }}>{summaryResult.reasoning}</div>
-              </Panel>
+      {summaryFor && summaryResult && (
+        <Modal title={summaryFor.name} onClose={() => { setSummaryFor(null); setSummaryResult(null); }} width={420}>
+          <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+            <Badge tone="green">{summaryResult.stats.present} present</Badge>
+            <Badge tone="red">{summaryResult.stats.absent} absent</Badge>
+            <Badge tone="gray">{summaryResult.stats.excused} excused</Badge>
+            <Badge tone={summaryResult.stats.metMinimum ? "green" : "amber"}>
+              {summaryResult.stats.metMinimum ? "Meets" : "Below"} minimum ({summaryResult.stats.proratedMinimum})
+            </Badge>
+          </div>
+          <div style={{ fontSize: 13, color: COLORS.textPrimary, marginBottom: 4, lineHeight: 1.5 }}>{summaryResult.summary}</div>
+          {aiPending && <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 10 }}>Refining with AI...</div>}
+          <Panel style={{ background: COLORS.glass2, marginTop: 10 }}>
+            <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>Recommended measure</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: COLORS.amber, marginBottom: 4 }}>{summaryResult.recommendation}</div>
+            <div style={{ fontSize: 12, color: COLORS.textSecondary }}>{summaryResult.reasoning}</div>
+          </Panel>
+          {summaryResult.stats.excusableAbsences?.length > 0 && canManageRosters && (
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>Recent absences (excusable within 24h)</div>
+              {summaryResult.stats.excusableAbsences.map((r) => (
+                <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: `1px solid ${COLORS.border}` }}>
+                  <span style={{ flex: 1, fontSize: 12 }}>{EVENT_TYPE_LABELS[r.event_type]} · {r.event_date}</span>
+                  <Btn small tone="ghost" onClick={() => excuseAbsence(r.id)}>Excuse</Btn>
+                </div>
+              ))}
             </div>
           )}
         </Modal>

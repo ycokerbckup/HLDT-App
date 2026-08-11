@@ -827,7 +827,13 @@ function Dashboard_Shell({ session, profile, setProfile }) {
     if (typeof window === "undefined") return null;
     return new URLSearchParams(window.location.search).get("dm") || null;
   });
-  const [pendingHighlight, setPendingHighlight] = useState(null);
+  const [pendingHighlight, setPendingHighlight] = useState(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    const h = params.get("highlight");
+    const t = params.get("tab");
+    return h && t ? { tab: t, id: h } : null;
+  });
   const [pendingMemberDetailId, setPendingMemberDetailId] = useState(null);
 
   useEffect(() => {
@@ -926,7 +932,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
         notifications={data.notifications}
         readIds={data.readIds}
         onRead={markNotificationRead}
-        onNavigate={(tabId, dmProfileId) => goToTab(tabId, dmProfileId)}
+        onNavigate={(tabId, dmProfileId, highlightId) => goToTab(tabId, dmProfileId, highlightId)}
       />
       {showKym && <KYMModal onClose={() => { setShowKym(false); load(); }} notify={notify} />}
       {celebrantType && <CelebrantPopup type={celebrantType} name={profile.full_name?.split(" ")[0] || "there"} onClose={() => setCelebrantType(null)} />}
@@ -999,7 +1005,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} pendingMemberDetailId={pendingMemberDetailId} onPendingMemberDetailConsumed={() => setPendingMemberDetailId(null)} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
                 {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
-                {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} myMember={myMember} reload={load} notify={notify} />}
+                {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} myMember={myMember} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "attendance" && <AttendanceTab data={data} canManageRosters={canManageRosters} myMember={myMember} notify={notify} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
@@ -1059,7 +1065,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} pendingMemberDetailId={pendingMemberDetailId} onPendingMemberDetailConsumed={() => setPendingMemberDetailId(null)} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
                 {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
-                {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} myMember={myMember} reload={load} notify={notify} />}
+                {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} myMember={myMember} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "attendance" && <AttendanceTab data={data} canManageRosters={canManageRosters} myMember={myMember} notify={notify} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
@@ -1299,7 +1305,13 @@ function NotificationBell({ notifications, readIds, onRead, onNavigate }) {
 
   function handleClick(n) {
     onRead(n.id);
-    if (n.linkTab) onNavigate(n.linkTab, n.dmWithProfileId || null);
+    if (n.linkTab) {
+      const highlightId =
+        n.type === "saturday_roster_reminder" ? "saturday-roster-section" :
+        n.type === "tuesday_roster_reminder" ? "tuesday-roster-section" :
+        null;
+      onNavigate(n.linkTab, n.dmWithProfileId || null, highlightId);
+    }
     setOpen(false);
   }
 
@@ -3680,7 +3692,17 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
   );
 }
 
-function RosterTab({ data, isAdmin, canManageRosters, myMember, reload, notify }) {
+function RosterTab({ data, isAdmin, canManageRosters, myMember, reload, notify, pendingHighlight, onPendingHighlightConsumed }) {
+  useEffect(() => {
+    if (!pendingHighlight || pendingHighlight.tab !== "roster") return;
+    const t = setTimeout(() => {
+      document.getElementById(pendingHighlight.id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+    onPendingHighlightConsumed?.();
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingHighlight]);
+
   const teamA = data.members.filter((m) => m.team === "A");
   const teamB = data.members.filter((m) => m.team === "B");
   const services = ["Sunday services (x4)", "Wednesday midweek", "Saturday training", "Tuesday 8PM meeting (mandatory)"];
@@ -3851,6 +3873,7 @@ function RosterTab({ data, isAdmin, canManageRosters, myMember, reload, notify }
         {services.map((s) => <RowLine key={s}><Clock size={13} style={{ color: COLORS.textMuted, marginRight: 4 }} />{s}</RowLine>)}
       </Panel>
 
+      <div id="tuesday-roster-section" />
       <SectionHeader title="Tuesday prayer meeting" subtitle="8PM" right={canManageRosters && <Btn small tone="amber" onClick={() => setShowNewTuesday(true)}><Plus size={12} /> New</Btn>} />
       {tuesdayRosters.length === 0 ? (
         <Panel style={{ marginBottom: 20 }}><EmptyRow text="No upcoming Tuesday rosters yet." /></Panel>
@@ -3878,6 +3901,7 @@ function RosterTab({ data, isAdmin, canManageRosters, myMember, reload, notify }
         ))
       )}
 
+      <div id="saturday-roster-section" />
       <SectionHeader title="Saturday training" subtitle="Call time 9:50 AM · ~2 hours" right={canManageRosters && <Btn small tone="amber" onClick={() => setShowNewSaturday(true)}><Plus size={12} /> New</Btn>} />
       {saturdayRosters.length === 0 ? (
         <Panel><EmptyRow text="No upcoming Saturday rosters yet." /></Panel>

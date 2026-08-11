@@ -42,12 +42,20 @@ def api_patch(path, payload):
         r.read()
 
 
-def cta_button(link_tab, dm_with):
+HIGHLIGHT_BY_TYPE = {
+    "saturday_roster_reminder": "saturday-roster-section",
+    "tuesday_roster_reminder": "tuesday-roster-section",
+}
+
+
+def cta_button(link_tab, dm_with, highlight_id=None):
     if not APP_URL:
         return ""
     url = f"{APP_URL}/?tab={link_tab or 'dashboard'}"
     if dm_with:
         url += f"&dm={dm_with}"
+    if highlight_id:
+        url += f"&highlight={highlight_id}"
     return (
         f'<p><a href="{url}" '
         f'style="display:inline-block;padding:10px 16px;background:#E8A33D;'
@@ -64,7 +72,7 @@ def main():
         print("Warning: APP_URL not set — emails will send without a clickable link.")
 
     pending = api_get(
-        "/rest/v1/notifications?type=in.(roster,assignment,signup,chat,announcement,birthday,milestone,graduation,cover_request)&emailed=eq.false"
+        "/rest/v1/notifications?type=in.(roster,assignment,signup,chat,announcement,birthday,milestone,graduation,cover_request,saturday_roster_reminder,tuesday_roster_reminder)&emailed=eq.false"
         "&select=id,type,title,body,link_tab,target_profile_id,dm_with_profile_id"
     )
     if not pending:
@@ -86,7 +94,7 @@ def main():
         to = [email_by_id.get(target)] if target else all_emails
         to = [t for t in to if t]
 
-        html = f"<p>{n.get('body') or ''}</p>" + cta_button(n.get("link_tab"), n.get("dm_with_profile_id"))
+        html = f"<p>{n.get('body') or ''}</p>" + cta_button(n.get("link_tab"), n.get("dm_with_profile_id"), HIGHLIGHT_BY_TYPE.get(n["type"]))
         sent = send_email(to, n["title"], html)
         api_patch(f"/rest/v1/notifications?id=eq.{n['id']}", {"emailed": True})
         print(("sent" if sent else "skipped/failed") + ":", n["title"], "->", len(to), "recipients")

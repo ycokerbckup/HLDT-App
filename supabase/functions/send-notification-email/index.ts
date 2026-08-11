@@ -14,12 +14,18 @@ const GMAIL_APP_PASSWORD = Deno.env.get("GMAIL_APP_PASSWORD")!;
 const APP_URL = (Deno.env.get("APP_URL") || "").replace(/\/$/, "");
 const FROM_NAME = "Display Team Ops";
 
-const EMAILABLE_TYPES = ["roster", "assignment", "signup", "chat", "announcement", "birthday", "milestone", "graduation", "cover_request"];
+const EMAILABLE_TYPES = ["roster", "assignment", "signup", "chat", "announcement", "birthday", "milestone", "graduation", "cover_request", "saturday_roster_reminder", "tuesday_roster_reminder"];
 
-function ctaButton(linkTab?: string, dmWith?: string): string {
+const HIGHLIGHT_BY_TYPE: Record<string, string> = {
+  saturday_roster_reminder: "saturday-roster-section",
+  tuesday_roster_reminder: "tuesday-roster-section",
+};
+
+function ctaButton(linkTab?: string, dmWith?: string, highlightId?: string): string {
   if (!APP_URL) return "";
   let url = `${APP_URL}/?tab=${linkTab || "dashboard"}`;
   if (dmWith) url += `&dm=${dmWith}`;
+  if (highlightId) url += `&highlight=${highlightId}`;
   return `<p><a href="${url}" style="display:inline-block;padding:10px 16px;background:#E8A33D;color:#14171C;text-decoration:none;border-radius:6px;font-weight:600;">Open in app</a></p>`;
 }
 
@@ -104,7 +110,7 @@ serve(async (req) => {
     console.log("Final recipient count:", to.length);
 
     if (to.length > 0) {
-      const html = `<p>${record.body || ""}</p>` + ctaButton(record.link_tab, record.dm_with_profile_id);
+      const html = `<p>${record.body || ""}</p>` + ctaButton(record.link_tab, record.dm_with_profile_id, HIGHLIGHT_BY_TYPE[record.type]);
       try {
         await sendEmail(to, record.title, html);
         console.log("Email sent successfully to", to.length, "recipients");

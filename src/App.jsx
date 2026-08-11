@@ -3557,6 +3557,23 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
   const [showMark, setShowMark] = useState(false);
   const [draft, setDraft] = useState({});
+  const [summaryFor, setSummaryFor] = useState(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryResult, setSummaryResult] = useState(null);
+
+  async function openSummary(member) {
+    setSummaryFor(member);
+    setSummaryResult(null);
+    setSummaryLoading(true);
+    const { data: result, error } = await supabase.functions.invoke("attendance-ai-summary", { body: { memberId: member.id } });
+    if (error || result?.error) {
+      notify?.(result?.error || error?.message || "Couldn't generate summary", "error");
+      setSummaryFor(null);
+    } else {
+      setSummaryResult(result);
+    }
+    setSummaryLoading(false);
+  }
 
   async function load() {
     const { data: rows } = await supabase.from("attendance_records").select("*").order("event_date", { ascending: false });
@@ -3656,23 +3673,30 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 16, alignItems: "start" }}>
-        <Panel title="Attendance summary">
+        <Panel title="Tap a member for their attendance summary">
           {summary.length === 0 ? (
             <EmptyRow text="No attendance recorded yet." />
           ) : (
-            <>
-              <div style={{ display: "grid", gridTemplateColumns: "1.6fr 0.7fr 0.7fr 0.7fr", fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", padding: "0 4px 8px" }}>
-                <div>Name</div><div>Present</div><div>Absent</div><div>Excused</div>
-              </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 18, padding: "8px 4px" }}>
               {summary.map(({ m, counts }) => (
-                <div key={m.id} style={{ display: "grid", gridTemplateColumns: "1.6fr 0.7fr 0.7fr 0.7fr", alignItems: "center", padding: "6px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 13 }}>
-                  <div>{m.name}</div>
-                  <div style={{ color: COLORS.green }}>{counts.present}</div>
-                  <div style={{ color: COLORS.red }}>{counts.absent}</div>
-                  <div style={{ color: COLORS.textMuted }}>{counts.excused}</div>
+                <div
+                  key={m.id}
+                  onClick={() => openSummary(m)}
+                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, cursor: "pointer", width: 68 }}
+                  title={`${counts.present} present · ${counts.absent} absent · ${counts.excused} excused`}
+                >
+                  <div className="hldt-float" style={{ position: "relative" }}>
+                    <Avatar label={m.name?.[0] || "?"} color={hashColor(m.id)} size={52} />
+                    {counts.absent > 0 && (
+                      <span style={{ position: "absolute", top: -2, right: -2, minWidth: 16, height: 16, borderRadius: 999, background: COLORS.red, color: "#fff", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>
+                        {counts.absent}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11, color: COLORS.textSecondary, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: "100%" }}>{m.name}</div>
                 </div>
               ))}
-            </>
+            </div>
           )}
         </Panel>
         <Panel title="Recently marked">
@@ -3688,6 +3712,31 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
           )}
         </Panel>
       </div>
+
+      {summaryFor && (
+        <Modal title={summaryFor.name} onClose={() => setSummaryFor(null)} width={420}>
+          {summaryLoading ? (
+            <div style={{ fontSize: 13, color: COLORS.textMuted, padding: "12px 0" }}>Thinking...</div>
+          ) : summaryResult && (
+            <div>
+              <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+                <Badge tone="green">{summaryResult.stats.present} present</Badge>
+                <Badge tone="red">{summaryResult.stats.absent} absent</Badge>
+                <Badge tone="gray">{summaryResult.stats.excused} excused</Badge>
+                <Badge tone={summaryResult.stats.metMinimum ? "green" : "amber"}>
+                  {summaryResult.stats.metMinimum ? "Meets" : "Below"} minimum ({summaryResult.stats.proratedMinimum})
+                </Badge>
+              </div>
+              <div style={{ fontSize: 13, color: COLORS.textPrimary, marginBottom: 14, lineHeight: 1.5 }}>{summaryResult.summary}</div>
+              <Panel style={{ background: COLORS.glass2 }}>
+                <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>Recommended measure</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: COLORS.amber, marginBottom: 4 }}>{summaryResult.recommendation}</div>
+                <div style={{ fontSize: 12, color: COLORS.textSecondary }}>{summaryResult.reasoning}</div>
+              </Panel>
+            </div>
+          )}
+        </Modal>
+      )}
     </div>
   );
 }

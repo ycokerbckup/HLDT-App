@@ -101,7 +101,7 @@ $$ language plpgsql security definer set search_path = public;
 -- ============================================================
 -- Suspension field on members, sitting alongside "unavailable".
 -- ============================================================
-alter table members add column suspended boolean not null default false;
+alter table members add column if not exists suspended boolean not null default false;
 
 drop view if exists members_directory;
 create view members_directory as

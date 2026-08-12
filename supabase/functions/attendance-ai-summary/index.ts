@@ -19,7 +19,7 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MIN_PRESENT_TARGET = 10;
+const MIN_PRESENT_TARGET = 8;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {

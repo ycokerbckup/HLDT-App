@@ -3567,7 +3567,7 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
   const [summaryResult, setSummaryResult] = useState(null);
   const [aiPending, setAiPending] = useState(false);
 
-  const MIN_PRESENT_TARGET = 10;
+  const MIN_PRESENT_TARGET = 8;
 
   function computeStats(member) {
     const now = new Date();

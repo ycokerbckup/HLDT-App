@@ -150,15 +150,14 @@ function skillSummary(m) {
 }
 
 function renderTaggedBody(body, taggedProfileIds, members) {
-  if (!taggedProfileIds || taggedProfileIds.length === 0) return body;
-  const names = taggedProfileIds
+  const names = (taggedProfileIds || [])
     .map((id) => members.find((m) => m.profileId === id)?.name)
     .filter(Boolean);
-  if (names.length === 0) return body;
-  const escaped = names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const patterns = [...names, "everyone"];
+  const escaped = patterns.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   const pattern = new RegExp(`(@(?:${escaped.join("|")}))`, "g");
   return body.split(pattern).map((part, i) =>
-    names.some((n) => part === "@" + n) ? (
+    patterns.some((n) => part === "@" + n) ? (
       <span key={i} style={{ color: "#E8A33D", fontWeight: 600 }}>{part}</span>
     ) : (
       part
@@ -1729,16 +1728,24 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
     const lastAt = text.lastIndexOf("@");
     const newText = text.slice(0, lastAt) + "@" + member.name + " ";
     setText(newText);
-    setTaggedIds((prev) => (prev.includes(member.profileId) ? prev : [...prev, member.profileId]));
+    if (member.isEveryone) {
+      setTaggedIds((prev) => [...new Set([...prev, ...dmCandidates.map((m) => m.profileId)])]);
+    } else {
+      setTaggedIds((prev) => (prev.includes(member.profileId) ? prev : [...prev, member.profileId]));
+    }
     setTagQuery(null);
   }
 
   const tagSuggestions = useMemo(() => {
     if (tagQuery === null) return [];
     const q = tagQuery.toLowerCase();
-    return dmCandidates.filter((m) => m.name.toLowerCase().includes(q)).slice(0, 6);
+    const matches = dmCandidates.filter((m) => m.name.toLowerCase().includes(q)).slice(0, 6);
+    if (thread.type === "team" && "everyone".startsWith(q)) {
+      return [{ id: "everyone", name: "everyone", isEveryone: true }, ...matches].slice(0, 7);
+    }
+    return matches;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tagQuery, dmCandidates.length]);
+  }, [tagQuery, dmCandidates.length, thread.type]);
 
   function receiptFor(m) {
     if (m.sender_id !== session.user.id) return null;
@@ -2074,8 +2081,14 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
               <div className="hldt-modal hldt-glass" style={{ position: "absolute", bottom: "100%", left: 12, marginBottom: 4, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 6, zIndex: 60, minWidth: 160 }}>
                 {tagSuggestions.map((m) => (
                   <div key={m.id} className="hldt-row" data-clickable="true" onClick={() => selectTag(m)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>
-                    <Avatar label={avatarLabels[m.profileId] || "?"} color={hashColor(m.profileId)} size={20} />
-                    {m.name}
+                    {m.isEveryone ? (
+                      <div style={{ width: 20, height: 20, borderRadius: 999, background: COLORS.amberDim, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <MessageCircle size={11} color={COLORS.amber} />
+                      </div>
+                    ) : (
+                      <Avatar label={avatarLabels[m.profileId] || "?"} color={hashColor(m.profileId)} size={20} />
+                    )}
+                    {m.isEveryone ? <span>everyone <span style={{ color: COLORS.textMuted, fontSize: 11 }}>· tags the whole team channel</span></span> : m.name}
                   </div>
                 ))}
               </div>

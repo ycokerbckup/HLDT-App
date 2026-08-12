@@ -149,6 +149,23 @@ function skillSummary(m) {
   return `PP${s.proPresenter ?? 3} VM${s.vmix ?? 3} RS${s.resolume ?? 3} TC${s.technical ?? 3}`;
 }
 
+function renderTaggedBody(body, taggedProfileIds, members) {
+  if (!taggedProfileIds || taggedProfileIds.length === 0) return body;
+  const names = taggedProfileIds
+    .map((id) => members.find((m) => m.profileId === id)?.name)
+    .filter(Boolean);
+  if (names.length === 0) return body;
+  const escaped = names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const pattern = new RegExp(`(@(?:${escaped.join("|")}))`, "g");
+  return body.split(pattern).map((part, i) =>
+    names.some((n) => part === "@" + n) ? (
+      <span key={i} style={{ color: "#E8A33D", fontWeight: 600 }}>{part}</span>
+    ) : (
+      part
+    )
+  );
+}
+
 function todayDDMM() {
   const d = nowWAT();
   return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
@@ -1524,6 +1541,8 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
   const [pins, setPins] = useState([]);
   const [replyingTo, setReplyingTo] = useState(null);
   const [text, setText] = useState("");
+  const [taggedIds, setTaggedIds] = useState([]);
+  const [tagQuery, setTagQuery] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState("");
   const [unreadByThread, setUnreadByThread] = useState({});
@@ -1683,12 +1702,43 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
       body: text.trim(),
       conversation_id: thread.type === "dm" ? thread.conversationId : null,
       reply_to_id: replyingTo?.id || null,
+      tagged_profile_ids: taggedIds.length > 0 ? taggedIds : null,
     };
     const { error } = await supabase.from("messages").insert(payload);
     if (error) { notify?.(error.message, "error"); return; }
     setText("");
     setReplyingTo(null);
+    setTaggedIds([]);
+    setTagQuery(null);
   }
+
+  function handleTextChange(value) {
+    setText(value);
+    const lastAt = value.lastIndexOf("@");
+    if (lastAt !== -1) {
+      const afterAt = value.slice(lastAt + 1);
+      if (afterAt.length <= 30 && !afterAt.includes(" ") && !afterAt.includes("\n")) {
+        setTagQuery(afterAt);
+        return;
+      }
+    }
+    setTagQuery(null);
+  }
+
+  function selectTag(member) {
+    const lastAt = text.lastIndexOf("@");
+    const newText = text.slice(0, lastAt) + "@" + member.name + " ";
+    setText(newText);
+    setTaggedIds((prev) => (prev.includes(member.profileId) ? prev : [...prev, member.profileId]));
+    setTagQuery(null);
+  }
+
+  const tagSuggestions = useMemo(() => {
+    if (tagQuery === null) return [];
+    const q = tagQuery.toLowerCase();
+    return dmCandidates.filter((m) => m.name.toLowerCase().includes(q)).slice(0, 6);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tagQuery, dmCandidates.length]);
 
   function receiptFor(m) {
     if (m.sender_id !== session.user.id) return null;
@@ -1920,7 +1970,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                                 <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>{quoted.body}</div>
                               </div>
                             )}
-                            {m.body}
+                            {renderTaggedBody(m.body, m.tagged_profile_ids, members)}
                             {m.edited_at && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 6 }}>(edited)</span>}
                           </div>
                           <div className="hldt-msg-actions" style={{ display: "flex", position: "relative" }}>
@@ -2019,16 +2069,28 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
               <X size={14} style={{ cursor: "pointer", color: COLORS.textMuted, flexShrink: 0 }} onClick={() => setReplyingTo(null)} />
             </div>
           )}
-          <div style={{ padding: 12, borderTop: `1px solid ${COLORS.border}`, display: "flex", gap: 8 }}>
-            <input
-              className="hldt-composer-input"
-              style={{ ...inputStyle, flex: 1, borderRadius: 999, padding: "10px 16px" }}
-              placeholder="Type a message..."
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && send()}
-            />
-            <Btn tone="amber" onClick={send} style={{ borderRadius: 999 }}>Send</Btn>
+          <div style={{ padding: 12, borderTop: `1px solid ${COLORS.border}`, position: "relative" }}>
+            {tagSuggestions.length > 0 && (
+              <div className="hldt-modal hldt-glass" style={{ position: "absolute", bottom: "100%", left: 12, marginBottom: 4, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 6, zIndex: 60, minWidth: 160 }}>
+                {tagSuggestions.map((m) => (
+                  <div key={m.id} className="hldt-row" data-clickable="true" onClick={() => selectTag(m)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>
+                    <Avatar label={avatarLabels[m.profileId] || "?"} color={hashColor(m.profileId)} size={20} />
+                    {m.name}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                className="hldt-composer-input"
+                style={{ ...inputStyle, flex: 1, borderRadius: 999, padding: "10px 16px" }}
+                placeholder="Type a message... (@ to tag someone)"
+                value={text}
+                onChange={(e) => handleTextChange(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && send()}
+              />
+              <Btn tone="amber" onClick={send} style={{ borderRadius: 999 }}>Send</Btn>
+            </div>
           </div>
         </div>
         )}

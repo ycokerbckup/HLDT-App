@@ -879,6 +879,22 @@ function Dashboard_Shell({ session, profile, setProfile }) {
     setCelebrantType(type);
   }, [loaded, myMember, data.onboarding, session.user.id]);
 
+  const [showTour, setShowTour] = useState(false);
+  const tourPromptedRef = useRef(false);
+  useEffect(() => {
+    if (!loaded || tourPromptedRef.current) return;
+    const key = `hldt-tour-done-${session.user.id}`;
+    if (localStorage.getItem(key)) return;
+    tourPromptedRef.current = true;
+    const t = setTimeout(() => setShowTour(true), 5000);
+    return () => clearTimeout(t);
+  }, [loaded, session.user.id]);
+
+  function finishTour() {
+    localStorage.setItem(`hldt-tour-done-${session.user.id}`, "1");
+    setShowTour(false);
+  }
+
   async function markNotificationRead(id) {
     if (data.readIds.includes(id)) return;
     await supabase.from("notification_reads").insert({ notification_id: id, profile_id: session.user.id });
@@ -952,12 +968,14 @@ function Dashboard_Shell({ session, profile, setProfile }) {
       />
       {showKym && <KYMModal onClose={() => { setShowKym(false); load(); }} notify={notify} />}
       {celebrantType && <CelebrantPopup type={celebrantType} name={profile.full_name?.split(" ")[0] || "there"} onClose={() => setCelebrantType(null)} />}
+      {showTour && !showKym && !celebrantType && <TourGuide onDone={finishTour} />}
 
       {isMobile ? (
         <>
           {/* Hamburger opens a full drawer with every tab, so nothing is scrolled off-screen */}
           <div style={{ position: "fixed", top: 8, left: 8, zIndex: 1500 }}>
             <button
+              data-tour="nav"
               onClick={() => setShowAccountMenu(!showAccountMenu)}
               aria-label="Menu"
               style={{ width: 32, height: 32, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.surface2, border: `1px solid ${COLORS.border}`, color: COLORS.textPrimary, cursor: "pointer", position: "relative" }}
@@ -1024,7 +1042,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} myMember={myMember} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "attendance" && <AttendanceTab data={data} canManageRosters={canManageRosters} myMember={myMember} notify={notify} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
-                {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
+                {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} canSeeReadReceipts={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
                 {tab === "chat" && <ChatTab session={session} profile={profile} members={data.members} onboarding={data.onboarding} notify={notify} pendingDmProfileId={pendingDm} onPendingDmConsumed={() => setPendingDm(null)} />}
                 {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} canReadFeedback={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} />}
@@ -1034,7 +1052,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
         </>
       ) : (
         <>
-          <div className="hldt-glass" style={{ width: 190, flexShrink: 0, background: COLORS.glass1, borderRight: `1px solid ${COLORS.glassBorder}`, display: "flex", flexDirection: "column" }}>
+          <div data-tour="nav" className="hldt-glass" style={{ width: 190, flexShrink: 0, background: COLORS.glass1, borderRight: `1px solid ${COLORS.glassBorder}`, display: "flex", flexDirection: "column" }}>
             <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${COLORS.border}` }}>
               <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 19, letterSpacing: "0.02em", lineHeight: 1.1 }}>DISPLAY TEAM</div>
               <div style={{ fontSize: 11, color: COLORS.textMuted, fontFamily: "'JetBrains Mono', monospace", marginTop: 4 }}>OPS CONSOLE</div>
@@ -1084,7 +1102,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} myMember={myMember} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "attendance" && <AttendanceTab data={data} canManageRosters={canManageRosters} myMember={myMember} notify={notify} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
-                {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
+                {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} canSeeReadReceipts={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
                 {tab === "chat" && <ChatTab session={session} profile={profile} members={data.members} onboarding={data.onboarding} notify={notify} pendingDmProfileId={pendingDm} onPendingDmConsumed={() => setPendingDm(null)} />}
                 {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} canReadFeedback={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} />}
@@ -1117,11 +1135,11 @@ function Carousel({ children, itemWidth = 220, autoAdvanceMs = 3200 }) {
   useEffect(() => {
     if (paused || count <= 1) return;
     const timer = setInterval(() => {
-      const el = scrollerRef.current;
-      if (!el) return;
-      const nextIdx = (Math.round(el.scrollLeft / (itemWidth + 12)) + 1) % count;
-      el.scrollTo({ left: nextIdx * (itemWidth + 12), behavior: "smooth" });
-      setActiveIdx(nextIdx);
+      setActiveIdx((cur) => {
+        const next = (cur + 1) % count;
+        scrollerRef.current?.scrollTo({ left: next * (itemWidth + 12), behavior: "smooth" });
+        return next;
+      });
     }, autoAdvanceMs);
     return () => clearInterval(timer);
   }, [paused, count, itemWidth, autoAdvanceMs]);
@@ -1239,6 +1257,7 @@ function GlobalSearch({ data, goToTab, isOperationsUser }) {
   return (
     <div style={{ position: "fixed", top: isMobile ? 8 : 16, right: isMobile ? 84 : 112, zIndex: 1500 }}>
       <button
+        data-tour="search"
         onClick={() => setOpen(true)}
         aria-label="Search"
         style={{ width: isMobile ? 32 : 36, height: isMobile ? 32 : 36, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.surface2, border: `1px solid ${COLORS.border}`, color: COLORS.textPrimary, cursor: "pointer" }}
@@ -1343,6 +1362,7 @@ function NotificationBell({ notifications, readIds, onRead, onNavigate }) {
   return (
     <div style={{ position: "fixed", top: isMobile ? 8 : 16, right: isMobile ? 46 : 64, zIndex: 1500 }}>
       <button
+        data-tour="bell"
         onClick={() => setOpen(!open)}
         aria-label="Notifications"
         style={{
@@ -1397,12 +1417,38 @@ function NotificationBell({ notifications, readIds, onRead, onNavigate }) {
 
 /* ---------------- announcements ---------------- */
 
-function AnnouncementsTab({ data, isAdmin, canPost, reload, notify, adminId, adminName, pendingHighlight, onPendingHighlightConsumed }) {
+function AnnouncementsTab({ data, isAdmin, canPost, canSeeReadReceipts, reload, notify, adminId, adminName, pendingHighlight, onPendingHighlightConsumed }) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const blank = () => ({ title: "", body: "" });
   const [form, setForm] = useState(blank());
   const [highlightedId, setHighlightedId] = useState(null);
+  const [readersByAnnouncement, setReadersByAnnouncement] = useState({});
+  const [showReadersFor, setShowReadersFor] = useState(null);
+
+  useEffect(() => {
+    if (!canSeeReadReceipts) return;
+    async function loadReaders() {
+      const { data: rows } = await supabase
+        .from("notification_reads")
+        .select("read_at, profiles(id, full_name), notifications!inner(announcement_id, type)")
+        .eq("notifications.type", "announcement");
+      const grouped = {};
+      (rows || []).forEach((r) => {
+        const aid = r.notifications?.announcement_id;
+        if (!aid) return;
+        if (!grouped[aid]) grouped[aid] = [];
+        grouped[aid].push({ name: r.profiles?.full_name || "Someone", readAt: r.read_at });
+      });
+      setReadersByAnnouncement(grouped);
+    }
+    loadReaders();
+    const channel = supabase
+      .channel("announcement-reads-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "notification_reads" }, loadReaders)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [canSeeReadReceipts]);
 
   useEffect(() => {
     if (!pendingHighlight || pendingHighlight.tab !== "announcements") return;
@@ -1491,12 +1537,34 @@ function AnnouncementsTab({ data, isAdmin, canPost, reload, notify, adminId, adm
               )}
             </div>
             <div style={{ fontSize: 13, color: COLORS.textSecondary, whiteSpace: "pre-wrap", marginBottom: 8 }}>{a.body}</div>
-            <div style={{ fontSize: 11, color: COLORS.textMuted, display: "flex", gap: 10 }}>
+            <div style={{ fontSize: 11, color: COLORS.textMuted, display: "flex", gap: 10, alignItems: "center" }}>
               <span>{a.createdByName || "Admin"} · {new Date(a.createdAt).toLocaleString()}</span>
               {canPost && withinEditWindow(a) && <span style={{ color: COLORS.amber }}>{timeLeft(a)}</span>}
+              {canSeeReadReceipts && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 3, cursor: "pointer", marginLeft: "auto" }} onClick={() => setShowReadersFor(a.id)}>
+                  <Eye size={12} /> {(readersByAnnouncement[a.id] || []).length}
+                </span>
+              )}
             </div>
           </Panel>
         ))
+      )}
+
+      {showReadersFor && (
+        <Modal title="Read by" onClose={() => setShowReadersFor(null)} width={320}>
+          {(readersByAnnouncement[showReadersFor] || []).length === 0 ? (
+            <EmptyRow text="No one has read this yet." />
+          ) : (
+            (readersByAnnouncement[showReadersFor] || [])
+              .sort((x, y) => new Date(x.readAt) - new Date(y.readAt))
+              .map((r, i) => (
+                <RowLine key={i}>
+                  <span style={{ flex: 1 }}>{r.name}</span>
+                  <span style={{ fontSize: 11, color: COLORS.textMuted }}>{new Date(r.readAt).toLocaleString()}</span>
+                </RowLine>
+              ))
+          )}
+        </Modal>
       )}
     </div>
   );
@@ -2383,6 +2451,60 @@ function KYMModal({ onClose, notify }) {
       </Field>
       {error && <div style={{ fontSize: 12, color: COLORS.red }}>{error}</div>}
     </Modal>
+  );
+}
+
+const TOUR_STEPS = [
+  { selector: '[data-tour="search"]', title: "Search", body: "Find members, announcements, and tickets in seconds." },
+  { selector: '[data-tour="bell"]', title: "Notifications", body: "Anything that needs your attention shows up here first." },
+  { selector: '[data-tour="nav"]', title: "Everything else", body: "Roster, Dues, Chat, Attendance — all your tools live here." },
+];
+
+function TourGuide({ onDone }) {
+  const [step, setStep] = useState(0);
+  const [rect, setRect] = useState(null);
+  const stepData = TOUR_STEPS[step];
+
+  useEffect(() => {
+    const el = document.querySelector(stepData.selector);
+    if (!el) {
+      if (step < TOUR_STEPS.length - 1) setStep((s) => s + 1);
+      else onDone();
+      return;
+    }
+    setRect(el.getBoundingClientRect());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
+  if (!rect) return null;
+
+  function next() {
+    if (step < TOUR_STEPS.length - 1) setStep((s) => s + 1);
+    else onDone();
+  }
+
+  const pad = 8;
+  const tooltipTop = Math.min(rect.bottom + 14, (typeof window !== "undefined" ? window.innerHeight : 800) - 170);
+  const tooltipLeft = Math.min(Math.max(rect.left, 12), (typeof window !== "undefined" ? window.innerWidth : 400) - 252);
+
+  return (
+    <>
+      <div className="hldt-tour-spotlight" style={{ top: rect.top - pad, left: rect.left - pad, width: rect.width + pad * 2, height: rect.height + pad * 2 }} />
+      <div
+        className="hldt-glass"
+        style={{ position: "fixed", top: tooltipTop, left: tooltipLeft, width: 240, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 14, padding: 14, zIndex: 3001, boxShadow: "0 16px 40px rgba(0,0,0,0.4)" }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.textPrimary, marginBottom: 4 }}>{stepData.title}</div>
+        <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12, lineHeight: 1.4 }}>{stepData.body}</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span onClick={onDone} style={{ fontSize: 11, color: COLORS.textMuted, cursor: "pointer" }}>Skip</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 10, color: COLORS.textMuted }}>{step + 1}/{TOUR_STEPS.length}</span>
+            <Btn small tone="amber" onClick={next}>{step < TOUR_STEPS.length - 1 ? "Next" : "Done"}</Btn>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -3629,7 +3751,7 @@ function SaturdayRosterEditor({ existing, members, onClose, onSaved, notify }) {
   );
 }
 
-const EVENT_TYPE_LABELS = { sunday: "Sunday service", tuesday: "Tuesday meeting", saturday: "Saturday training" };
+const EVENT_TYPE_LABELS = { sunday: "Sunday service", midweek: "Wednesday midweek", tuesday: "Tuesday meeting", saturday: "Saturday training" };
 
 function AttendanceTab({ data, canManageRosters, myMember, notify }) {
   const [records, setRecords] = useState([]);

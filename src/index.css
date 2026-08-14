@@ -363,6 +363,15 @@ body {
   width: 14px;
 }
 
+.hldt-tour-spotlight {
+  position: fixed;
+  border-radius: 14px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.68);
+  pointer-events: none;
+  transition: top 300ms ease, left 300ms ease, width 300ms ease, height 300ms ease;
+  z-index: 3000;
+}
+
 .hldt-week-toggle {
   transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
 }

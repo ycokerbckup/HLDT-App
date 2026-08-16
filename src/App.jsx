@@ -3135,7 +3135,7 @@ function OnboardingTab({ data, isAdmin, canManage, reload, adminName, notify }) 
 
 /* ---------------- equipment ---------------- */
 
-const INVENTORY_CATEGORIES = ["Projector", "Camera", "Screen", "Mixer", "Cable", "Microphone", "Computer", "Lighting", "Other"];
+const INVENTORY_CATEGORIES = ["Screen", "Mixer", "Cable", "Computer", "CPU", "Mouse", "Keyboard", "Other"];
 const CONDITIONS = ["New", "Good", "Fair", "Poor", "Faulty"];
 
 function InventoryPanel({ notify }) {

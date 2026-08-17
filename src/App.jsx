@@ -882,16 +882,18 @@ function Dashboard_Shell({ session, profile, setProfile }) {
   const [showTour, setShowTour] = useState(false);
   const tourPromptedRef = useRef(false);
   useEffect(() => {
-    if (!loaded || tourPromptedRef.current) return;
-    const key = `hldt-tour-done-${session.user.id}`;
-    if (localStorage.getItem(key)) return;
+    if (!loaded || !profile || tourPromptedRef.current) return;
+    if ((profile.tour_version_seen || 0) >= TOUR_VERSION) return;
     tourPromptedRef.current = true;
-    const t = setTimeout(() => setShowTour(true), 5000);
+    const t = setTimeout(() => {
+      setShowTour(true);
+      setProfile((p) => (p ? { ...p, tour_version_seen: TOUR_VERSION } : p));
+      supabase.rpc("mark_tour_seen", { p_version: TOUR_VERSION });
+    }, 5000);
     return () => clearTimeout(t);
-  }, [loaded, session.user.id]);
+  }, [loaded, profile]);
 
   function finishTour() {
-    localStorage.setItem(`hldt-tour-done-${session.user.id}`, "1");
     setShowTour(false);
   }
 
@@ -2453,6 +2455,11 @@ function KYMModal({ onClose, notify }) {
     </Modal>
   );
 }
+
+// Bump this whenever the tour content changes meaningfully — that's the
+// only thing that re-shows it to everyone. Otherwise it's genuinely
+// once per account, tracked server-side.
+const TOUR_VERSION = 1;
 
 const TOUR_STEPS = [
   { selector: '[data-tour="search"]', title: "Search", body: "Find members, announcements, and tickets in seconds." },

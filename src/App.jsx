@@ -3799,9 +3799,7 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
       else break;
     }
 
-    const excusableAbsences = memberRecords.filter(
-      (r) => r.status === "absent" && Date.now() - new Date(r.created_at).getTime() < 24 * 3600 * 1000
-    );
+    const excusableAbsences = memberRecords.filter((r) => r.status === "absent");
 
     return {
       present, absent, excused,
@@ -4000,11 +3998,11 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
           </Panel>
           {summaryResult.stats.excusableAbsences?.length > 0 && canManageRosters && (
             <div style={{ marginTop: 14 }}>
-              <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>Recent absences (excusable within 24h)</div>
+              <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>Absences this month (can be pardoned)</div>
               {summaryResult.stats.excusableAbsences.map((r) => (
                 <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: `1px solid ${COLORS.border}` }}>
                   <span style={{ flex: 1, fontSize: 12 }}>{EVENT_TYPE_LABELS[r.event_type]} · {r.event_date}</span>
-                  <Btn small tone="ghost" onClick={() => excuseAbsence(r.id)}>Excuse</Btn>
+                  <Btn small tone="ghost" onClick={() => excuseAbsence(r.id)}>Pardon</Btn>
                 </div>
               ))}
             </div>

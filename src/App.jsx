@@ -885,10 +885,14 @@ function Dashboard_Shell({ session, profile, setProfile }) {
     if (!loaded || !profile || tourPromptedRef.current) return;
     if ((profile.tour_version_seen || 0) >= TOUR_VERSION) return;
     tourPromptedRef.current = true;
-    const t = setTimeout(() => {
+    const t = setTimeout(async () => {
       setShowTour(true);
-      setProfile((p) => (p ? { ...p, tour_version_seen: TOUR_VERSION } : p));
-      supabase.rpc("mark_tour_seen", { p_version: TOUR_VERSION });
+      const { error } = await supabase.rpc("mark_tour_seen", { p_version: TOUR_VERSION });
+      if (error) {
+        console.error("mark_tour_seen failed:", error.message);
+      } else {
+        setProfile((p) => (p ? { ...p, tour_version_seen: TOUR_VERSION } : p));
+      }
     }, 5000);
     return () => clearTimeout(t);
   }, [loaded, profile]);

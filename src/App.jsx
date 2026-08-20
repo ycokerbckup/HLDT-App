@@ -3843,6 +3843,27 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
     if (summaryFor) openSummary(summaryFor);
   }
 
+  const [editingBatch, setEditingBatch] = useState(null);
+  const [editForm, setEditForm] = useState({ eventType: "sunday", eventDate: "" });
+
+  function openEditBatch(batch) {
+    setEditingBatch(batch);
+    setEditForm({ eventType: batch.eventType, eventDate: batch.eventDate });
+  }
+
+  async function saveEditBatch() {
+    const { error } = await supabase.rpc("edit_attendance_event", {
+      p_old_event_type: editingBatch.eventType,
+      p_old_event_date: editingBatch.eventDate,
+      p_new_event_type: editForm.eventType,
+      p_new_event_date: editForm.eventDate,
+    });
+    if (error) { notify?.(error.message, "error"); return; }
+    notify?.("Event corrected");
+    setEditingBatch(null);
+    load();
+  }
+
   async function load() {
     const { data: rows } = await supabase.from("attendance_records").select("*").order("event_date", { ascending: false });
     setRecords(rows || []);
@@ -3895,8 +3916,10 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
     const seen = new Map();
     records.forEach((r) => {
       const key = `${r.event_type}|${r.event_date}`;
-      if (!seen.has(key)) seen.set(key, { eventType: r.event_type, eventDate: r.event_date, count: 0 });
-      seen.get(key).count++;
+      if (!seen.has(key)) seen.set(key, { eventType: r.event_type, eventDate: r.event_date, count: 0, latestCreated: r.created_at });
+      const entry = seen.get(key);
+      entry.count++;
+      if (r.created_at > entry.latestCreated) entry.latestCreated = r.created_at;
     });
     return Array.from(seen.values()).sort((a, b) => b.eventDate.localeCompare(a.eventDate)).slice(0, 10);
   }, [records]);
@@ -3969,15 +3992,36 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
           {recentDates.length === 0 ? (
             <EmptyRow text="Nothing marked yet." />
           ) : (
-            recentDates.map((d, i) => (
-              <RowLine key={i}>
-                <span style={{ flex: 1 }}>{EVENT_TYPE_LABELS[d.eventType]}</span>
-                <span style={{ fontSize: 11, color: COLORS.textMuted }}>{d.eventDate} · {d.count} marked</span>
-              </RowLine>
-            ))
+            recentDates.map((d, i) => {
+              const editable = canManageRosters && Date.now() - new Date(d.latestCreated).getTime() < 24 * 3600 * 1000;
+              return (
+                <RowLine key={i}>
+                  <span style={{ flex: 1 }}>{EVENT_TYPE_LABELS[d.eventType]}</span>
+                  <span style={{ fontSize: 11, color: COLORS.textMuted, marginRight: editable ? 8 : 0 }}>{d.eventDate} · {d.count} marked</span>
+                  {editable && (
+                    <Pencil size={13} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => openEditBatch(d)} />
+                  )}
+                </RowLine>
+              );
+            })
           )}
         </Panel>
       </div>
+
+      {editingBatch && (
+        <Modal title="Fix the event" onClose={() => setEditingBatch(null)} width={340}>
+          <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 12 }}>
+            Corrects all {editingBatch.count} marks currently filed under {EVENT_TYPE_LABELS[editingBatch.eventType]} · {editingBatch.eventDate}.
+          </div>
+          <Field label="Event">
+            <select style={inputStyle} value={editForm.eventType} onChange={(e) => setEditForm({ ...editForm, eventType: e.target.value })}>
+              {Object.entries(EVENT_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </Field>
+          <Field label="Date"><input type="date" style={inputStyle} value={editForm.eventDate} onChange={(e) => setEditForm({ ...editForm, eventDate: e.target.value })} /></Field>
+          <Btn tone="amber" onClick={saveEditBatch}><Save size={13} /> Save correction</Btn>
+        </Modal>
+      )}
 
       {summaryFor && summaryResult && (
         <Modal title={summaryFor.name} onClose={() => { setSummaryFor(null); setSummaryResult(null); }} width={420}>

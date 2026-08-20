@@ -3993,7 +3993,7 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
             <EmptyRow text="Nothing marked yet." />
           ) : (
             recentDates.map((d, i) => {
-              const editable = canManageRosters && Date.now() - new Date(d.latestCreated).getTime() < 24 * 3600 * 1000;
+              const editable = canManageRosters;
               return (
                 <RowLine key={i}>
                   <span style={{ flex: 1 }}>{EVENT_TYPE_LABELS[d.eventType]}</span>

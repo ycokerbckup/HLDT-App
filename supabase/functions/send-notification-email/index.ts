@@ -16,6 +16,9 @@ const FROM_NAME = "Display Team Ops";
 
 const EMAILABLE_TYPES = ["roster", "assignment", "signup", "chat", "announcement", "birthday", "milestone", "graduation", "cover_request", "saturday_roster_reminder", "tuesday_roster_reminder", "attendance_warning", "attendance_suspension", "monthly_digest", "suspension_action_needed", "mention", "attendance_marking_reminder", "suspension_lifted"];
 
+const PRESENCE_TYPES = ["chat", "mention"];
+const PRESENCE_WINDOW_MS = 90 * 1000;
+
 const HIGHLIGHT_BY_TYPE: Record<string, string> = {
   saturday_roster_reminder: "saturday-roster-section",
   tuesday_roster_reminder: "tuesday-roster-section",
@@ -80,11 +83,13 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
-    const { data: profiles, error: profilesError } = await supabase.from("profiles").select("id,email");
+    const { data: profiles, error: profilesError } = await supabase.from("profiles").select("id,email,last_seen_at");
     if (profilesError) console.log("profiles query error:", JSON.stringify(profilesError));
     const emailById: Record<string, string> = {};
-    (profiles || []).forEach((p: { id: string; email: string | null }) => {
+    const lastSeenById: Record<string, string> = {};
+    (profiles || []).forEach((p: { id: string; email: string | null; last_seen_at: string | null }) => {
       if (p.email) emailById[p.id] = p.email;
+      if (p.last_seen_at) lastSeenById[p.id] = p.last_seen_at;
     });
     const allEmails = Object.values(emailById);
     console.log("Total profiles with email on file:", allEmails.length);
@@ -97,6 +102,15 @@ serve(async (req) => {
       console.log("Skipping — team-channel chat broadcast, DMs only");
       await supabase.from("notifications").update({ emailed: true }).eq("id", record.id);
       return new Response("skip-team-chat", { status: 200 });
+    }
+
+    if (PRESENCE_TYPES.includes(record.type) && record.target_profile_id) {
+      const lastSeen = lastSeenById[record.target_profile_id];
+      if (lastSeen && Date.now() - new Date(lastSeen).getTime() < PRESENCE_WINDOW_MS) {
+        console.log("Skipping — recipient active on site within the last 90s");
+        await supabase.from("notifications").update({ emailed: true }).eq("id", record.id);
+        return new Response("skip-active-recipient", { status: 200 });
+      }
     }
 
     if (record.target_profile_id) {

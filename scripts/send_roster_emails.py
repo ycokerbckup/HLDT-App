@@ -4,7 +4,9 @@ Polls the notifications table for rows not yet emailed, sends via Gmail
 SMTP (see email_utils.py), marks them processed either way (so a bad
 email address doesn't retry forever). Team-channel chat broadcasts are
 intentionally skipped — every message in a group channel emailing
-everyone would be unusable spam.
+everyone would be unusable spam. Chat/mention emails to a specific
+person are also skipped if that person was active on the site within
+the last 90 seconds — they'll see it live, no need to email.
 
 Every email includes a clickable "Open in app" button pointing at the
 right tab (and, for DMs, the right conversation), built from the APP_URL
@@ -13,12 +15,16 @@ environment variable / repo variable.
 import json
 import os
 import urllib.request
+from datetime import datetime, timedelta, timezone
 
 from email_utils import send_email, email_configured
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SERVICE_KEY = os.environ["SERVICE_ROLE_KEY"]
 APP_URL = os.environ.get("APP_URL", "").rstrip("/")
+
+PRESENCE_TYPES = {"chat", "mention"}
+PRESENCE_WINDOW_SECONDS = 90
 
 
 def api_get(path):
@@ -40,6 +46,13 @@ def api_patch(path, payload):
     )
     with urllib.request.urlopen(req, timeout=20) as r:
         r.read()
+
+
+def recently_active(last_seen_at_str):
+    if not last_seen_at_str:
+        return False
+    last_seen = datetime.fromisoformat(last_seen_at_str.replace("Z", "+00:00"))
+    return datetime.now(timezone.utc) - last_seen < timedelta(seconds=PRESENCE_WINDOW_SECONDS)
 
 
 HIGHLIGHT_BY_TYPE = {
@@ -79,8 +92,9 @@ def main():
         print("Nothing to send.")
         return
 
-    profiles = api_get("/rest/v1/profiles?select=id,email")
+    profiles = api_get("/rest/v1/profiles?select=id,email,last_seen_at")
     email_by_id = {p["id"]: p.get("email") for p in profiles}
+    last_seen_by_id = {p["id"]: p.get("last_seen_at") for p in profiles}
     all_emails = [e for e in email_by_id.values() if e]
 
     for n in pending:
@@ -91,6 +105,13 @@ def main():
             continue
 
         target = n.get("target_profile_id")
+
+        # Skip chat/mention emails if the recipient is currently on the site.
+        if n["type"] in PRESENCE_TYPES and target and recently_active(last_seen_by_id.get(target)):
+            api_patch(f"/rest/v1/notifications?id=eq.{n['id']}", {"emailed": True})
+            print("skipped (recipient active on site):", n["title"])
+            continue
+
         to = [email_by_id.get(target)] if target else all_emails
         to = [t for t in to if t]
 

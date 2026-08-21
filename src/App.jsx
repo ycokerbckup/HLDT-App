@@ -878,6 +878,19 @@ function Dashboard_Shell({ session, profile, setProfile }) {
     setCelebrantType(type);
   }, [loaded, myMember, data.onboarding, session.user.id]);
 
+  useEffect(() => {
+    function ping() {
+      if (document.visibilityState === "visible") supabase.rpc("heartbeat");
+    }
+    ping();
+    const interval = setInterval(ping, 25000);
+    document.addEventListener("visibilitychange", ping);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", ping);
+    };
+  }, []);
+
   const [showTour, setShowTour] = useState(false);
   const tourPromptedRef = useRef(false);
   useEffect(() => {

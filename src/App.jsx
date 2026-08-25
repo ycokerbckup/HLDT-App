@@ -1040,6 +1040,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                   <div style={{ fontSize: 12, color: COLORS.textPrimary, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profile.full_name || session.user.email}</div>
                   <Badge tone={isAdmin ? "amber" : "gray"}>{profile.role}</Badge>
                   <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                    <PushNotificationToggle session={session} />
                     {isAdmin && <Btn small tone="ghost" onClick={() => { exportAllData(); notify("Backup downloaded"); setShowAccountMenu(false); }}><Download size={12} /> Export data</Btn>}
                     <Btn small tone="ghost" onClick={() => supabase.auth.signOut()}><LogOut size={12} /> Sign out</Btn>
                   </div>
@@ -1102,6 +1103,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
               </div>
               <Badge tone={isAdmin ? "amber" : "gray"}>{profile.role}</Badge>
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                <PushNotificationToggle session={session} />
                 {isAdmin && <Btn small tone="ghost" onClick={() => { exportAllData(); notify("Backup downloaded"); }}><Download size={12} /> Export data</Btn>}
                 <Btn small tone="ghost" onClick={() => supabase.auth.signOut()}><LogOut size={12} /> Sign out</Btn>
               </div>
@@ -1348,6 +1350,74 @@ function GlobalSearch({ data, goToTab, isOperationsUser }) {
         </div>
       )}
     </div>
+  );
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
+}
+
+function PushNotificationToggle({ session }) {
+  const [status, setStatus] = useState("checking"); // checking | unsupported | denied | off | on | working
+  const supported = typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+
+  useEffect(() => {
+    if (!supported) { setStatus("unsupported"); return; }
+    if (Notification.permission === "denied") { setStatus("denied"); return; }
+    navigator.serviceWorker.ready.then(async (reg) => {
+      const sub = await reg.pushManager.getSubscription();
+      setStatus(sub ? "on" : "off");
+    }).catch(() => setStatus("off"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function enable() {
+    const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+    if (!vapidKey) { alert("Push isn't configured yet — ask an admin to set VITE_VAPID_PUBLIC_KEY."); return; }
+    setStatus("working");
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") { setStatus("denied"); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(vapidKey),
+    });
+    const json = sub.toJSON();
+    await supabase.from("push_subscriptions").upsert({
+      profile_id: session.user.id,
+      endpoint: json.endpoint,
+      p256dh: json.keys.p256dh,
+      auth: json.keys.auth,
+    }, { onConflict: "endpoint" });
+    setStatus("on");
+  }
+
+  async function disable() {
+    setStatus("working");
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      await supabase.from("push_subscriptions").delete().eq("endpoint", sub.endpoint);
+      await sub.unsubscribe();
+    }
+    setStatus("off");
+  }
+
+  if (status === "unsupported") return null;
+  if (status === "checking") return null;
+
+  return (
+    <Btn
+      small tone={status === "on" ? "amber" : "ghost"}
+      disabled={status === "working" || status === "denied"}
+      onClick={status === "on" ? disable : enable}
+    >
+      <Bell size={12} />
+      {status === "on" ? "Push on" : status === "denied" ? "Push blocked (check browser settings)" : status === "working" ? "Working..." : "Enable push"}
+    </Btn>
   );
 }
 

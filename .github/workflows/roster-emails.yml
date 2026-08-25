@@ -11,11 +11,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Send roster/assignment emails
+      - name: Install dependencies
+        run: pip install pywebpush --break-system-packages
+
+      - name: Send roster/assignment emails and push notifications
         env:
           SUPABASE_URL: https://jsxatpqdolmgcoyibbam.supabase.co
           SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           APP_URL: ${{ vars.APP_URL }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_CLAIM_EMAIL: ${{ secrets.VAPID_CLAIM_EMAIL }}
         run: python3 scripts/send_roster_emails.py

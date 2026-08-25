@@ -1,0 +1,45 @@
+name: Build iOS App
+
+# NOTE: without Apple signing credentials (see below), this only proves
+# the app compiles cleanly on real Xcode/macOS — it produces a
+# simulator build, not an installable .ipa. To get a real .ipa:
+#   1. Enroll in the Apple Developer Program (developer.apple.com, $99/yr)
+#   2. Create a signing certificate + provisioning profile for this app
+#      (App ID: com.hldt.app) in the Apple Developer portal
+#   3. Add these as GitHub secrets: IOS_CERTIFICATE_BASE64,
+#      IOS_CERTIFICATE_PASSWORD, IOS_PROVISION_PROFILE_BASE64,
+#      APPLE_TEAM_ID
+#   4. Tell Claude — the signing + archive + .ipa export steps get added
+#      once those exist; nothing here can produce them without that
+#      real Apple Developer account.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Sync Capacitor
+        run: npx cap sync ios
+
+      - name: Build for simulator (proves the app compiles correctly)
+        working-directory: ios/App
+        run: |
+          pod install || true
+          xcodebuild -workspace App.xcworkspace -scheme App \
+            -destination "generic/platform=iOS Simulator" \
+            -configuration Debug build

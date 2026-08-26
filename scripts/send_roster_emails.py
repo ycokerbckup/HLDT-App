@@ -42,7 +42,7 @@ NOTIFICATION_TYPES = (
     "cover_request,saturday_roster_reminder,tuesday_roster_reminder,attendance_warning,"
     "attendance_suspension,monthly_digest,suspension_action_needed,mention,"
     "attendance_marking_reminder,suspension_lifted,special_event_reminder,"
-    "special_event_assignee_reminder"
+    "special_event_assignee_reminder,new_special_event,event_personal_reminder"
 )
 
 

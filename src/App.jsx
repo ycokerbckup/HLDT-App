@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   LayoutDashboard, Users, GraduationCap, Wrench, CalendarDays,
-  Wallet, MessageSquare, Plus, X, ChevronRight, Shield, User,
+  Wallet, MessageSquare, Plus, X, ChevronRight, ChevronLeft, Shield, User,
   CheckCircle2, Clock, Trash2, Save, LogOut, RefreshCw, Download,
   Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil, GripVertical, Eye, EyeOff, Camera, Menu, CornerUpLeft, Check, CheckCheck, Boxes, DollarSign, Sparkles, ClipboardCheck, Search as SearchIcon, PartyPopper
 } from "lucide-react";
@@ -830,6 +830,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
   const canAccessInventory = myUnit === "Technical" || myUnit === "Operations";
   const canDeleteTickets = myUnit === "Technical" || myUnit === "Operations";
   const canManageRosters = isAdmin && (myUnit === "Operations" || myUnit === "Admin");
+  const canManageEvents = isAdmin && (myUnit === "Operations" || myUnit === "Welfare");
   const canSeeDues = myUnit === "Welfare" || myUnit === "Operations";
 
   const unreadByTab = {};
@@ -1025,7 +1026,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                       <div
                         key={n.id}
                         onClick={() => { goToTab(n.id); setShowAccountMenu(false); }}
-                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 10px", marginBottom: 2, borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: active ? 600 : 400, color: active ? COLORS.amber : COLORS.textSecondary, background: active ? `linear-gradient(135deg, ${COLORS.amberDim}, rgba(61,220,151,0.08))` : "transparent" }}
+                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 10px", marginBottom: 2, borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: active || n.id === "events" ? 600 : 400, color: active ? COLORS.amber : n.id === "events" ? COLORS.green : COLORS.textSecondary, background: active ? `linear-gradient(135deg, ${COLORS.amberDim}, rgba(61,220,151,0.08))` : "transparent" }}
                       >
                         <div style={{ position: "relative", display: "flex" }}>
                           <Icon size={16} strokeWidth={1.8} />
@@ -1061,7 +1062,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} myMember={myMember} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "attendance" && <AttendanceTab data={data} canManageRosters={canManageRosters} myMember={myMember} notify={notify} />}
-                {tab === "events" && <SpecialEventsTab data={data} canManageRosters={canManageRosters} notify={notify} />}
+                {tab === "events" && <SpecialEventsTab data={data} canManageEvents={canManageEvents} myUnit={myUnit} session={session} notify={notify} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} canSeeReadReceipts={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
@@ -1085,7 +1086,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 const active = tab === n.id;
                 const hasUnread = unreadByTab[n.id] > 0;
                 return (
-                  <div key={n.id} className="hldt-nav-item" onClick={() => goToTab(n.id)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", marginBottom: 2, borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: active ? 600 : 400, color: active ? COLORS.amber : COLORS.textSecondary, background: active ? `linear-gradient(135deg, ${COLORS.amberDim}, rgba(61,220,151,0.08))` : "transparent", borderLeft: active ? `2px solid ${COLORS.amber}` : "2px solid transparent" }}>
+                  <div key={n.id} className="hldt-nav-item" onClick={() => goToTab(n.id)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", marginBottom: 2, borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: active || n.id === "events" ? 600 : 400, color: active ? COLORS.amber : n.id === "events" ? COLORS.green : COLORS.textSecondary, background: active ? `linear-gradient(135deg, ${COLORS.amberDim}, rgba(61,220,151,0.08))` : "transparent", borderLeft: active ? `2px solid ${COLORS.amber}` : n.id === "events" ? `2px solid ${COLORS.green}` : "2px solid transparent" }}>
                     <div style={{ position: "relative", display: "flex" }}>
                       <Icon size={15} strokeWidth={1.8} />
                       {hasUnread && <span style={{ position: "absolute", top: -2, right: -3, width: 6, height: 6, borderRadius: 999, background: COLORS.red, border: `1.5px solid ${COLORS.surface1}` }} />}
@@ -1123,7 +1124,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} myMember={myMember} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "attendance" && <AttendanceTab data={data} canManageRosters={canManageRosters} myMember={myMember} notify={notify} />}
-                {tab === "events" && <SpecialEventsTab data={data} canManageRosters={canManageRosters} notify={notify} />}
+                {tab === "events" && <SpecialEventsTab data={data} canManageEvents={canManageEvents} myUnit={myUnit} session={session} notify={notify} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} canSeeReadReceipts={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
@@ -4170,6 +4171,16 @@ function formatDateShort(dateStr) {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
+// Time is stored as 24h "HH:MM" (from a native time input) — display
+// it friendlier, e.g. "14:00" -> "2:00 PM".
+function formatTime12h(hhmm) {
+  if (!hhmm) return "";
+  const [h, m] = hhmm.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
+}
+
 // Groups consecutive dates into ranges, e.g. [9,10,11,13] -> "Sep 9-11, Sep 13".
 // A range only collapses to "start-end" when every date inside it shares
 // the same time (or none do) — otherwise each date is listed on its own
@@ -4194,7 +4205,7 @@ function formatEventDates(eventDates) {
 
   return groups.map((g) => {
     const label = g.length === 1 ? formatDateShort(g[0].date) : `${formatDateShort(g[0].date)}-${formatDateShort(g[g.length - 1].date).split(" ").pop()}`;
-    return g[0].time ? `${label}, ${g[0].time}` : label;
+    return g[0].time ? `${label}, ${formatTime12h(g[0].time)}` : label;
   }).join(" · ");
 }
 
@@ -4227,12 +4238,170 @@ function ImageFramePicker({ src, focusX, focusY, onChange, height = 160 }) {
   );
 }
 
-function SpecialEventsTab({ data, canManageRosters, notify }) {
+const REMINDER_OPTIONS = [
+  { id: "2_days_before", label: "2 days before" },
+  { id: "1_day_before", label: "1 day before" },
+  { id: "day_of_9am", label: "Day of, 9am" },
+  { id: "2_hours_before", label: "2 hours before", needsTime: true },
+  { id: "1_hour_before", label: "1 hour before", needsTime: true },
+];
+
+const NORMAL_EVENT_BY_DOW = { 0: "Sunday Service", 2: "Tuesday Meeting", 3: "Wednesday Midweek", 6: "Saturday Training" };
+
+function EventCalendar({ events, roles, members, session, notify }) {
+  const [monthCursor, setMonthCursor] = useState(() => {
+    const t = nowWAT();
+    return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), 1));
+  });
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [mySubs, setMySubs] = useState([]);
+
+  async function loadSubs() {
+    const { data } = await supabase.from("event_reminder_subscriptions").select("*").eq("profile_id", session.user.id);
+    setMySubs(data || []);
+  }
+  useEffect(() => { loadSubs(); }, []);
+
+  const year = monthCursor.getUTCFullYear();
+  const month = monthCursor.getUTCMonth();
+  const firstOfMonth = new Date(Date.UTC(year, month, 1));
+  const startWeekday = firstOfMonth.getUTCDay();
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const today = todayStringWAT();
+
+  const specialByDate = {};
+  events.forEach((ev) => {
+    (ev.event_dates || []).forEach((d) => {
+      if (!specialByDate[d.date]) specialByDate[d.date] = [];
+      specialByDate[d.date].push({ event: ev, occurrence: d });
+    });
+  });
+
+  const cells = [];
+  for (let i = 0; i < startWeekday; i++) cells.push(null);
+  for (let day = 1; day <= daysInMonth; day++) {
+    cells.push(`${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
+  }
+
+  async function toggleReminder(eventId, eventDate, reminderType) {
+    const existing = mySubs.find((s) => s.event_id === eventId && s.event_date === eventDate && s.reminder_type === reminderType);
+    if (existing) {
+      await supabase.from("event_reminder_subscriptions").delete().eq("id", existing.id);
+    } else {
+      const countForOccurrence = mySubs.filter((s) => s.event_id === eventId && s.event_date === eventDate).length;
+      if (countForOccurrence >= 2) { notify?.("You can pick up to 2 reminders per event", "error"); return; }
+      const { error } = await supabase.from("event_reminder_subscriptions").insert({ event_id: eventId, event_date: eventDate, profile_id: session.user.id, reminder_type: reminderType });
+      if (error) { notify?.(error.message, "error"); return; }
+    }
+    loadSubs();
+  }
+
+  const normalLabel = selectedDate ? NORMAL_EVENT_BY_DOW[new Date(selectedDate + "T00:00:00Z").getUTCDay()] : null;
+  const specialsToday = selectedDate ? (specialByDate[selectedDate] || []) : [];
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <Btn small tone="ghost" onClick={() => setMonthCursor(new Date(Date.UTC(year, month - 1, 1)))}><ChevronLeft size={14} /></Btn>
+        <div style={{ fontWeight: 700, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          {firstOfMonth.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" })}
+        </div>
+        <Btn small tone="ghost" onClick={() => setMonthCursor(new Date(Date.UTC(year, month + 1, 1)))}><ChevronRight size={14} /></Btn>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, fontSize: 10, color: COLORS.textMuted, textAlign: "center", marginBottom: 4 }}>
+        {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <div key={i}>{d}</div>)}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+        {cells.map((dateStr, i) => {
+          if (!dateStr) return <div key={i} />;
+          const dow = new Date(dateStr + "T00:00:00Z").getUTCDay();
+          const hasNormal = dow in NORMAL_EVENT_BY_DOW;
+          const hasSpecial = !!specialByDate[dateStr];
+          const isToday = dateStr === today;
+          const dayNum = Number(dateStr.slice(-2));
+          return (
+            <div
+              key={i}
+              onClick={() => setSelectedDate(dateStr)}
+              className="hldt-panel-hover"
+              style={{
+                aspectRatio: "1", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                borderRadius: 8, cursor: "pointer", fontSize: 12,
+                background: isToday ? COLORS.amberDim : hasSpecial ? "rgba(232,163,61,0.08)" : hasNormal ? COLORS.glass2 : "transparent",
+                border: `1px solid ${isToday ? COLORS.amber : COLORS.border}`,
+              }}
+            >
+              <span style={{ color: isToday ? COLORS.amber : COLORS.textPrimary, fontWeight: isToday ? 700 : 400 }}>{dayNum}</span>
+              <div style={{ display: "flex", gap: 2, marginTop: 2 }}>
+                {hasNormal && <span style={{ width: 4, height: 4, borderRadius: 999, background: COLORS.green }} />}
+                {hasSpecial && <span style={{ width: 4, height: 4, borderRadius: 999, background: COLORS.amber }} />}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {selectedDate && (
+        <Modal title={formatDateShort(selectedDate)} onClose={() => setSelectedDate(null)} width={380}>
+          {normalLabel && (
+            <div style={{ marginBottom: specialsToday.length ? 14 : 0 }}>
+              <Badge tone="green">{normalLabel}</Badge>
+            </div>
+          )}
+          {specialsToday.length === 0 && !normalLabel && <EmptyRow text="Nothing scheduled." />}
+          {specialsToday.map(({ event: ev, occurrence }, idx) => {
+            const eventRoles = roles.filter((r) => r.event_id === ev.id);
+            const subsForThis = mySubs.filter((s) => s.event_id === ev.id && s.event_date === selectedDate);
+            return (
+              <div key={idx} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: idx < specialsToday.length - 1 ? `1px solid ${COLORS.border}` : "none" }}>
+                {ev.thumbnail_url && (
+                  isVideoUrl(ev.thumbnail_url) ? (
+                    <video src={ev.thumbnail_url} controls style={{ width: "100%", maxHeight: 120, borderRadius: 8, marginBottom: 8 }} />
+                  ) : (
+                    <img src={ev.thumbnail_url} alt="" style={{ width: "100%", height: 120, objectFit: "cover", objectPosition: `${ev.thumbnail_focus_x ?? 50}% ${ev.thumbnail_focus_y ?? 50}%`, borderRadius: 8, marginBottom: 8 }} />
+                  )
+                )}
+                <div style={{ fontWeight: 700, fontSize: 15 }}>{ev.title}</div>
+                <div style={{ fontSize: 12, color: COLORS.textMuted, marginBottom: 6 }}>
+                  {occurrence.time ? formatTime12h(occurrence.time) : "No time set"}{ev.location ? ` · ${ev.location}` : ""}
+                </div>
+                {ev.description && <div style={{ fontSize: 13, color: COLORS.textSecondary, marginBottom: 8 }}>{ev.description}</div>}
+                {eventRoles.length > 0 && (
+                  <div style={{ marginBottom: 10 }}>
+                    {eventRoles.map((r) => {
+                      const assignee = members.find((m) => m.id === r.assigned_member_id);
+                      return <div key={r.id} style={{ fontSize: 12, color: COLORS.textSecondary }}>{r.role_name}: {assignee?.name || "Unassigned"}</div>;
+                    })}
+                  </div>
+                )}
+                <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", marginBottom: 6 }}>Remind me (up to 2)</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {REMINDER_OPTIONS.filter((o) => !o.needsTime || occurrence.time).map((opt) => {
+                    const active = subsForThis.some((s) => s.reminder_type === opt.id);
+                    return (
+                      <Btn key={opt.id} small tone={active ? "amber" : "ghost"} onClick={() => toggleReminder(ev.id, selectedDate, opt.id)}>
+                        {opt.label}
+                      </Btn>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function SpecialEventsTab({ data, canManageEvents, myUnit, session, notify }) {
   const isMobile = useIsMobile();
   const [events, setEvents] = useState([]);
   const [roles, setRoles] = useState([]);
   const [loaded, setLoaded] = useState(false);
+  const [view, setView] = useState("list");
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ title: "", description: "", location: "" });
   const [dateList, setDateList] = useState([]);
   const [singleDate, setSingleDate] = useState("");
@@ -4244,6 +4413,7 @@ function SpecialEventsTab({ data, canManageRosters, notify }) {
   const [mediaFocusX, setMediaFocusX] = useState(50);
   const [mediaFocusY, setMediaFocusY] = useState(50);
   const [mediaPreview, setMediaPreview] = useState(null);
+  const [existingThumbnail, setExistingThumbnail] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [showPast, setShowPast] = useState(false);
   const [newRoleName, setNewRoleName] = useState({});
@@ -4267,6 +4437,39 @@ function SpecialEventsTab({ data, canManageRosters, notify }) {
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, []);
+
+  function ownsEvent(ev) {
+    const creator = data.members.find((m) => m.profileId === ev.created_by);
+    return canManageEvents && creator?.unit === myUnit;
+  }
+
+  function resetForm() {
+    setForm({ title: "", description: "", location: "" });
+    setDateList([]);
+    setMediaFile(null);
+    setMediaPreview(null);
+    setExistingThumbnail(null);
+    setMediaFocusX(50);
+    setMediaFocusY(50);
+    setEditingId(null);
+  }
+
+  function startCreate() {
+    resetForm();
+    setShowForm(true);
+  }
+
+  function startEdit(ev) {
+    setForm({ title: ev.title, description: ev.description || "", location: ev.location || "" });
+    setDateList(ev.event_dates || []);
+    setExistingThumbnail(ev.thumbnail_url);
+    setMediaFile(null);
+    setMediaPreview(null);
+    setMediaFocusX(ev.thumbnail_focus_x ?? 50);
+    setMediaFocusY(ev.thumbnail_focus_y ?? 50);
+    setEditingId(ev.id);
+    setShowForm(true);
+  }
 
   function addSingleDate() {
     if (!singleDate) return;
@@ -4299,37 +4502,37 @@ function SpecialEventsTab({ data, canManageRosters, notify }) {
     if (!file) return;
     setMediaFile(file);
     setMediaPreview(URL.createObjectURL(file));
+    setExistingThumbnail(null);
     setMediaFocusX(50);
     setMediaFocusY(50);
   }
 
-  async function createEvent() {
+  async function saveEvent() {
     if (!form.title.trim() || dateList.length === 0) { notify?.("Title and at least one date are required", "error"); return; }
     setUploading(true);
-    let thumbnailUrl = null;
+    let thumbnailUrl = existingThumbnail;
+    let focusX = mediaFocusX, focusY = mediaFocusY;
     if (mediaFile) {
       const path = `${Date.now()}-${mediaFile.name}`;
       const { error: upErr } = await supabase.storage.from("event-media").upload(path, mediaFile);
       if (upErr) { notify?.(upErr.message, "error"); setUploading(false); return; }
       const { data: pub } = supabase.storage.from("event-media").getPublicUrl(path);
       thumbnailUrl = pub.publicUrl;
+      if (mediaFile.type?.startsWith("video")) { focusX = 50; focusY = 50; }
     }
-    const isVideo = mediaFile?.type?.startsWith("video");
-    const { error } = await supabase.from("special_events").insert({
+    const payload = {
       title: form.title, description: form.description || null, location: form.location || null,
       event_dates: dateList, thumbnail_url: thumbnailUrl,
-      thumbnail_focus_x: isVideo ? 50 : mediaFocusX, thumbnail_focus_y: isVideo ? 50 : mediaFocusY,
-    });
+      thumbnail_focus_x: focusX, thumbnail_focus_y: focusY,
+    };
+    const { error } = editingId
+      ? await supabase.from("special_events").update(payload).eq("id", editingId)
+      : await supabase.from("special_events").insert(payload);
     setUploading(false);
     if (error) { notify?.(error.message, "error"); return; }
-    notify?.("Event created");
+    notify?.(editingId ? "Event updated" : "Event created");
     setShowForm(false);
-    setForm({ title: "", description: "", location: "" });
-    setDateList([]);
-    setMediaFile(null);
-    setMediaPreview(null);
-    setMediaFocusX(50);
-    setMediaFocusY(50);
+    resetForm();
     load();
   }
 
@@ -4371,6 +4574,7 @@ function SpecialEventsTab({ data, canManageRosters, notify }) {
   function renderEvent(ev) {
     const eventRoles = roles.filter((r) => r.event_id === ev.id);
     const countdown = countdownLabel(ev.event_dates);
+    const editable = ownsEvent(ev);
     return (
       <Panel key={ev.id} style={{ marginBottom: 14, overflow: "hidden" }}>
         {ev.thumbnail_url && (
@@ -4391,7 +4595,8 @@ function SpecialEventsTab({ data, canManageRosters, notify }) {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Badge tone={countdown.tone}>{countdown.text}</Badge>
-            {canManageRosters && <Trash2 size={14} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => deleteEvent(ev.id)} />}
+            {editable && <Pencil size={13} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => startEdit(ev)} />}
+            {editable && <Trash2 size={14} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => deleteEvent(ev.id)} />}
           </div>
         </div>
         {ev.description && <div style={{ fontSize: 13, color: COLORS.textSecondary, marginBottom: 10 }}>{ev.description}</div>}
@@ -4405,7 +4610,7 @@ function SpecialEventsTab({ data, canManageRosters, notify }) {
             return (
               <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: `1px solid ${COLORS.border}` }}>
                 <span style={{ flex: 1, fontSize: 13 }}>{r.role_name}</span>
-                {canManageRosters ? (
+                {editable ? (
                   <select style={{ ...inputStyle, width: "auto", fontSize: 12, padding: "4px 8px" }} value={r.assigned_member_id || ""} onChange={(e) => assignRole(r.id, e.target.value)}>
                     <option value="">Unassigned</option>
                     {data.members.filter((m) => !m.unavailable && !m.suspended).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
@@ -4413,12 +4618,12 @@ function SpecialEventsTab({ data, canManageRosters, notify }) {
                 ) : (
                   <span style={{ fontSize: 12, color: assignee ? COLORS.textPrimary : COLORS.textMuted }}>{assignee?.name || "Unassigned"}</span>
                 )}
-                {canManageRosters && <X size={13} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => removeRole(r.id)} />}
+                {editable && <X size={13} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => removeRole(r.id)} />}
               </div>
             );
           })
         )}
-        {canManageRosters && (
+        {editable && (
           <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
             <input style={{ ...inputStyle, flex: 1, fontSize: 12 }} placeholder="Add a role (e.g. ProPresenter Prayer 1)" value={newRoleName[ev.id] || ""} onChange={(e) => setNewRoleName({ ...newRoleName, [ev.id]: e.target.value })} onKeyDown={(e) => e.key === "Enter" && addRole(ev.id)} />
             <Btn small tone="ghost" onClick={() => addRole(ev.id)}><Plus size={12} /> Add role</Btn>
@@ -4433,24 +4638,35 @@ function SpecialEventsTab({ data, canManageRosters, notify }) {
       <SectionHeader
         title="Special Events"
         subtitle="One-off events outside the regular weekly schedule."
-        right={canManageRosters && <Btn tone="amber" onClick={() => setShowForm(true)}><Plus size={14} /> New event</Btn>}
+        right={canManageEvents && <Btn tone="amber" onClick={startCreate}><Plus size={14} /> New event</Btn>}
       />
 
+      <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+        <Btn small tone={view === "list" ? "amber" : "ghost"} onClick={() => setView("list")}>List</Btn>
+        <Btn small tone={view === "calendar" ? "amber" : "ghost"} onClick={() => setView("calendar")}>Calendar</Btn>
+      </div>
+
       {showForm && (
-        <Panel title="New event" style={{ marginBottom: 16 }} right={<X size={16} style={{ cursor: "pointer" }} onClick={() => setShowForm(false)} />}>
+        <Panel title={editingId ? "Edit event" : "New event"} style={{ marginBottom: 16 }} right={<X size={16} style={{ cursor: "pointer" }} onClick={() => { setShowForm(false); resetForm(); }} />}>
           <Field label="Title"><input style={inputStyle} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></Field>
           <Field label="Location (optional)"><input style={inputStyle} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} /></Field>
           <Field label="Description (optional)"><textarea style={{ ...inputStyle, minHeight: 60 }} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
 
           <Field label="Thumbnail image or video (optional)">
             <input type="file" accept="image/*,video/*" onChange={handleMediaChange} style={{ fontSize: 12, color: COLORS.textSecondary }} />
-            {mediaPreview && (
+            {mediaPreview ? (
               isVideoUrl(mediaFile?.name || "") || mediaFile?.type?.startsWith("video") ? (
                 <video src={mediaPreview} controls style={{ width: "100%", maxHeight: 160, marginTop: 8, borderRadius: 8 }} />
               ) : (
                 <ImageFramePicker src={mediaPreview} focusX={mediaFocusX} focusY={mediaFocusY} onChange={(x, y) => { setMediaFocusX(x); setMediaFocusY(y); }} />
               )
-            )}
+            ) : existingThumbnail ? (
+              isVideoUrl(existingThumbnail) ? (
+                <video src={existingThumbnail} controls style={{ width: "100%", maxHeight: 160, marginTop: 8, borderRadius: 8 }} />
+              ) : (
+                <ImageFramePicker src={existingThumbnail} focusX={mediaFocusX} focusY={mediaFocusY} onChange={(x, y) => { setMediaFocusX(x); setMediaFocusY(y); }} />
+              )
+            ) : null}
           </Field>
 
           <div style={{ fontSize: 12, color: COLORS.textSecondary, margin: "12px 0 6px", fontWeight: 600 }}>Dates — flexible, mix ranges and single days</div>
@@ -4459,7 +4675,7 @@ function SpecialEventsTab({ data, canManageRosters, notify }) {
             <div style={{ marginBottom: 10, display: "flex", flexWrap: "wrap", gap: 6 }}>
               {dateList.map((d, i) => (
                 <Badge key={i} tone="amber">
-                  {formatDateShort(d.date)}{d.time ? `, ${d.time}` : ""}
+                  {formatDateShort(d.date)}{d.time ? `, ${formatTime12h(d.time)}` : ""}
                   <X size={10} style={{ marginLeft: 4, cursor: "pointer", verticalAlign: "middle" }} onClick={() => removeDate(i)} />
                 </Badge>
               ))}
@@ -4468,36 +4684,44 @@ function SpecialEventsTab({ data, canManageRosters, notify }) {
 
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr auto", gap: 8, alignItems: "end", marginBottom: 8 }}>
             <Field label="Single date"><input type="date" style={inputStyle} value={singleDate} onChange={(e) => setSingleDate(e.target.value)} /></Field>
-            <Field label="Time (optional)"><input style={inputStyle} placeholder="e.g. 10:00 AM" value={singleTime} onChange={(e) => setSingleTime(e.target.value)} /></Field>
+            <Field label="Time (optional)"><input type="time" style={inputStyle} value={singleTime} onChange={(e) => setSingleTime(e.target.value)} /></Field>
             <Btn small tone="ghost" onClick={addSingleDate}><Plus size={12} /> Add date</Btn>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr auto", gap: 8, alignItems: "end" }}>
             <Field label="Range start"><input type="date" style={inputStyle} value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} /></Field>
             <Field label="Range end"><input type="date" style={inputStyle} value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} /></Field>
-            <Field label="Time (optional)"><input style={inputStyle} placeholder="e.g. 10:00 AM" value={rangeTime} onChange={(e) => setRangeTime(e.target.value)} /></Field>
+            <Field label="Time (optional)"><input type="time" style={inputStyle} value={rangeTime} onChange={(e) => setRangeTime(e.target.value)} /></Field>
             <Btn small tone="ghost" onClick={addRange}><Plus size={12} /> Add range</Btn>
           </div>
 
           <div style={{ marginTop: 16 }}>
-            <Btn tone="amber" onClick={createEvent} disabled={uploading}>{uploading ? "Saving..." : <><Save size={13} /> Create event</>}</Btn>
+            <Btn tone="amber" onClick={saveEvent} disabled={uploading}>{uploading ? "Saving..." : <><Save size={13} /> {editingId ? "Save changes" : "Create event"}</>}</Btn>
           </div>
         </Panel>
       )}
 
-      {upcoming.length === 0 ? (
-        <Panel><EmptyRow text="No upcoming special events." /></Panel>
+      {view === "calendar" ? (
+        <Panel>
+          <EventCalendar events={events} roles={roles} members={data.members} session={session} notify={notify} />
+        </Panel>
       ) : (
-        upcoming.map(renderEvent)
-      )}
+        <>
+          {upcoming.length === 0 ? (
+            <Panel><EmptyRow text="No upcoming special events." /></Panel>
+          ) : (
+            upcoming.map(renderEvent)
+          )}
 
-      {past.length > 0 && (
-        <div style={{ marginTop: 20 }}>
-          <div className="hldt-row" data-clickable="true" onClick={() => setShowPast(!showPast)} style={{ cursor: "pointer", fontSize: 12, color: COLORS.textMuted, padding: "6px 4px", display: "flex", alignItems: "center", gap: 6 }}>
-            {showPast ? "Hide" : "Show"} past events ({past.length})
-          </div>
-          {showPast && past.map(renderEvent)}
-        </div>
+          {past.length > 0 && (
+            <div style={{ marginTop: 20 }}>
+              <div className="hldt-row" data-clickable="true" onClick={() => setShowPast(!showPast)} style={{ cursor: "pointer", fontSize: 12, color: COLORS.textMuted, padding: "6px 4px", display: "flex", alignItems: "center", gap: 6 }}>
+                {showPast ? "Hide" : "Show"} past events ({past.length})
+              </div>
+              {showPast && past.map(renderEvent)}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

@@ -41,7 +41,8 @@ NOTIFICATION_TYPES = (
     "roster,assignment,signup,chat,announcement,birthday,milestone,graduation,"
     "cover_request,saturday_roster_reminder,tuesday_roster_reminder,attendance_warning,"
     "attendance_suspension,monthly_digest,suspension_action_needed,mention,"
-    "attendance_marking_reminder,suspension_lifted"
+    "attendance_marking_reminder,suspension_lifted,special_event_reminder,"
+    "special_event_assignee_reminder"
 )
 
 

@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, GraduationCap, Wrench, CalendarDays,
   Wallet, MessageSquare, Plus, X, ChevronRight, Shield, User,
   CheckCircle2, Clock, Trash2, Save, LogOut, RefreshCw, Download,
-  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil, GripVertical, Eye, EyeOff, Camera, Menu, CornerUpLeft, Check, CheckCheck, Boxes, DollarSign, Sparkles, ClipboardCheck, Search as SearchIcon
+  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil, GripVertical, Eye, EyeOff, Camera, Menu, CornerUpLeft, Check, CheckCheck, Boxes, DollarSign, Sparkles, ClipboardCheck, Search as SearchIcon, PartyPopper
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "./supabaseClient";
@@ -963,6 +963,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
     { id: "equipment", label: "Equipment", icon: Wrench },
     { id: "roster", label: "Roster", icon: CalendarDays },
     { id: "attendance", label: "Attendance", icon: ClipboardCheck },
+    { id: "events", label: "Events", icon: PartyPopper },
     ...(canSeeDues ? [{ id: "dues", label: "Dues", icon: Wallet }] : []),
     { id: "feedback", label: "Feedback", icon: MessageSquare },
   ];
@@ -1060,6 +1061,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} myMember={myMember} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "attendance" && <AttendanceTab data={data} canManageRosters={canManageRosters} myMember={myMember} notify={notify} />}
+                {tab === "events" && <SpecialEventsTab data={data} canManageRosters={canManageRosters} notify={notify} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} canSeeReadReceipts={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
@@ -1121,6 +1123,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} myMember={myMember} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "attendance" && <AttendanceTab data={data} canManageRosters={canManageRosters} myMember={myMember} notify={notify} />}
+                {tab === "events" && <SpecialEventsTab data={data} canManageRosters={canManageRosters} notify={notify} />}
                 {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} canSeeReadReceipts={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
@@ -4135,6 +4138,179 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
             </div>
           )}
         </Modal>
+      )}
+    </div>
+  );
+}
+
+function countdownLabel(eventDateStr) {
+  const today = todayStringWAT();
+  const diffDays = Math.round((new Date(eventDateStr + "T00:00:00Z") - new Date(today + "T00:00:00Z")) / 86400000);
+  if (diffDays < 0) return { text: `${Math.abs(diffDays)}d ago`, tone: "gray" };
+  if (diffDays === 0) return { text: "Today!", tone: "amber" };
+  if (diffDays === 1) return { text: "Tomorrow", tone: "amber" };
+  if (diffDays <= 7) return { text: `In ${diffDays} days`, tone: "amber" };
+  return { text: `In ${diffDays} days`, tone: "gray" };
+}
+
+function SpecialEventsTab({ data, canManageRosters, notify }) {
+  const [events, setEvents] = useState([]);
+  const [roles, setRoles] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ title: "", description: "", eventDate: "", eventTime: "", location: "" });
+  const [showPast, setShowPast] = useState(false);
+  const [newRoleName, setNewRoleName] = useState({});
+
+  async function load() {
+    const [{ data: ev }, { data: rl }] = await Promise.all([
+      supabase.from("special_events").select("*").order("event_date"),
+      supabase.from("special_event_roles").select("*"),
+    ]);
+    setEvents(ev || []);
+    setRoles(rl || []);
+    setLoaded(true);
+  }
+
+  useEffect(() => {
+    load();
+    const channel = supabase
+      .channel("special-events-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "special_events" }, load)
+      .on("postgres_changes", { event: "*", schema: "public", table: "special_event_roles" }, load)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  async function createEvent() {
+    if (!form.title.trim() || !form.eventDate) { notify?.("Title and date are required", "error"); return; }
+    const { error } = await supabase.from("special_events").insert({
+      title: form.title, description: form.description || null, event_date: form.eventDate,
+      event_time: form.eventTime || null, location: form.location || null,
+    });
+    if (error) { notify?.(error.message, "error"); return; }
+    notify?.("Event created");
+    setShowForm(false);
+    setForm({ title: "", description: "", eventDate: "", eventTime: "", location: "" });
+    load();
+  }
+
+  async function deleteEvent(id) {
+    await supabase.from("special_events").delete().eq("id", id);
+    load();
+  }
+
+  async function addRole(eventId) {
+    const name = (newRoleName[eventId] || "").trim();
+    if (!name) return;
+    const { error } = await supabase.from("special_event_roles").insert({ event_id: eventId, role_name: name });
+    if (error) { notify?.(error.message, "error"); return; }
+    setNewRoleName({ ...newRoleName, [eventId]: "" });
+    load();
+  }
+
+  async function assignRole(roleId, memberId) {
+    const { error } = await supabase.from("special_event_roles").update({ assigned_member_id: memberId || null }).eq("id", roleId);
+    if (error) { notify?.(error.message, "error"); return; }
+    load();
+  }
+
+  async function removeRole(roleId) {
+    await supabase.from("special_event_roles").delete().eq("id", roleId);
+    load();
+  }
+
+  if (!loaded) return <SkeletonLoader />;
+
+  const today = todayStringWAT();
+  const upcoming = events.filter((e) => e.event_date >= today);
+  const past = events.filter((e) => e.event_date < today).sort((a, b) => b.event_date.localeCompare(a.event_date));
+
+  function renderEvent(ev) {
+    const eventRoles = roles.filter((r) => r.event_id === ev.id);
+    const countdown = countdownLabel(ev.event_date);
+    return (
+      <Panel key={ev.id} style={{ marginBottom: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 6 }}>
+          <div>
+            <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 16, color: COLORS.textPrimary }}>{ev.title}</div>
+            <div style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 2 }}>
+              {ev.event_date}{ev.event_time ? ` · ${ev.event_time}` : ""}{ev.location ? ` · ${ev.location}` : ""}
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Badge tone={countdown.tone}>{countdown.text}</Badge>
+            {canManageRosters && <Trash2 size={14} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => deleteEvent(ev.id)} />}
+          </div>
+        </div>
+        {ev.description && <div style={{ fontSize: 13, color: COLORS.textSecondary, marginBottom: 10 }}>{ev.description}</div>}
+
+        <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>Assignments</div>
+        {eventRoles.length === 0 ? (
+          <div style={{ fontSize: 12, color: COLORS.textMuted, marginBottom: 8 }}>No roles set up yet.</div>
+        ) : (
+          eventRoles.map((r) => {
+            const assignee = data.members.find((m) => m.id === r.assigned_member_id);
+            return (
+              <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: `1px solid ${COLORS.border}` }}>
+                <span style={{ flex: 1, fontSize: 13 }}>{r.role_name}</span>
+                {canManageRosters ? (
+                  <select style={{ ...inputStyle, width: "auto", fontSize: 12, padding: "4px 8px" }} value={r.assigned_member_id || ""} onChange={(e) => assignRole(r.id, e.target.value)}>
+                    <option value="">Unassigned</option>
+                    {data.members.filter((m) => !m.unavailable && !m.suspended).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                ) : (
+                  <span style={{ fontSize: 12, color: assignee ? COLORS.textPrimary : COLORS.textMuted }}>{assignee?.name || "Unassigned"}</span>
+                )}
+                {canManageRosters && <X size={13} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => removeRole(r.id)} />}
+              </div>
+            );
+          })
+        )}
+        {canManageRosters && (
+          <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+            <input style={{ ...inputStyle, flex: 1, fontSize: 12 }} placeholder="Add a role (e.g. Photographer)" value={newRoleName[ev.id] || ""} onChange={(e) => setNewRoleName({ ...newRoleName, [ev.id]: e.target.value })} onKeyDown={(e) => e.key === "Enter" && addRole(ev.id)} />
+            <Btn small tone="ghost" onClick={() => addRole(ev.id)}><Plus size={12} /> Add role</Btn>
+          </div>
+        )}
+      </Panel>
+    );
+  }
+
+  return (
+    <div>
+      <SectionHeader
+        title="Special Events"
+        subtitle="One-off events outside the regular weekly schedule."
+        right={canManageRosters && <Btn tone="amber" onClick={() => setShowForm(true)}><Plus size={14} /> New event</Btn>}
+      />
+
+      {showForm && (
+        <Panel title="New event" style={{ marginBottom: 16 }} right={<X size={16} style={{ cursor: "pointer" }} onClick={() => setShowForm(false)} />}>
+          <Field label="Title"><input style={inputStyle} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></Field>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label="Date"><input type="date" style={inputStyle} value={form.eventDate} onChange={(e) => setForm({ ...form, eventDate: e.target.value })} /></Field>
+            <Field label="Time (optional)"><input style={inputStyle} placeholder="e.g. 10:00 AM" value={form.eventTime} onChange={(e) => setForm({ ...form, eventTime: e.target.value })} /></Field>
+          </div>
+          <Field label="Location (optional)"><input style={inputStyle} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} /></Field>
+          <Field label="Description (optional)"><textarea style={{ ...inputStyle, minHeight: 60 }} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
+          <Btn tone="amber" onClick={createEvent}><Save size={13} /> Create event</Btn>
+        </Panel>
+      )}
+
+      {upcoming.length === 0 ? (
+        <Panel><EmptyRow text="No upcoming special events." /></Panel>
+      ) : (
+        upcoming.map(renderEvent)
+      )}
+
+      {past.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <div className="hldt-row" data-clickable="true" onClick={() => setShowPast(!showPast)} style={{ cursor: "pointer", fontSize: 12, color: COLORS.textMuted, padding: "6px 4px", display: "flex", alignItems: "center", gap: 6 }}>
+            {showPast ? "Hide" : "Show"} past events ({past.length})
+          </div>
+          {showPast && past.map(renderEvent)}
+        </div>
       )}
     </div>
   );

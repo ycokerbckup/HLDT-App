@@ -4202,7 +4202,33 @@ function isVideoUrl(url) {
   return /\.(mp4|mov|webm)(\?|$)/i.test(url || "");
 }
 
+function ImageFramePicker({ src, focusX, focusY, onChange, height = 160 }) {
+  const boxRef = useRef(null);
+  function handlePick(e) {
+    const rect = boxRef.current.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const x = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+    const y = Math.max(0, Math.min(100, ((clientY - rect.top) / rect.height) * 100));
+    onChange(x, y);
+  }
+  return (
+    <div>
+      <div
+        ref={boxRef}
+        onClick={handlePick}
+        style={{ position: "relative", width: "100%", height, borderRadius: 8, overflow: "hidden", cursor: "crosshair", marginTop: 8 }}
+      >
+        <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `${focusX}% ${focusY}%`, display: "block" }} />
+        <div style={{ position: "absolute", left: `${focusX}%`, top: `${focusY}%`, width: 14, height: 14, marginLeft: -7, marginTop: -7, borderRadius: 999, border: "2px solid white", boxShadow: "0 0 0 1px rgba(0,0,0,0.4)", pointerEvents: "none" }} />
+      </div>
+      <div style={{ fontSize: 10, color: COLORS.textMuted, marginTop: 4 }}>Tap anywhere on the image to set what stays in frame.</div>
+    </div>
+  );
+}
+
 function SpecialEventsTab({ data, canManageRosters, notify }) {
+  const isMobile = useIsMobile();
   const [events, setEvents] = useState([]);
   const [roles, setRoles] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -4215,6 +4241,8 @@ function SpecialEventsTab({ data, canManageRosters, notify }) {
   const [rangeEnd, setRangeEnd] = useState("");
   const [rangeTime, setRangeTime] = useState("");
   const [mediaFile, setMediaFile] = useState(null);
+  const [mediaFocusX, setMediaFocusX] = useState(50);
+  const [mediaFocusY, setMediaFocusY] = useState(50);
   const [mediaPreview, setMediaPreview] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [showPast, setShowPast] = useState(false);
@@ -4271,6 +4299,8 @@ function SpecialEventsTab({ data, canManageRosters, notify }) {
     if (!file) return;
     setMediaFile(file);
     setMediaPreview(URL.createObjectURL(file));
+    setMediaFocusX(50);
+    setMediaFocusY(50);
   }
 
   async function createEvent() {
@@ -4284,9 +4314,11 @@ function SpecialEventsTab({ data, canManageRosters, notify }) {
       const { data: pub } = supabase.storage.from("event-media").getPublicUrl(path);
       thumbnailUrl = pub.publicUrl;
     }
+    const isVideo = mediaFile?.type?.startsWith("video");
     const { error } = await supabase.from("special_events").insert({
       title: form.title, description: form.description || null, location: form.location || null,
       event_dates: dateList, thumbnail_url: thumbnailUrl,
+      thumbnail_focus_x: isVideo ? 50 : mediaFocusX, thumbnail_focus_y: isVideo ? 50 : mediaFocusY,
     });
     setUploading(false);
     if (error) { notify?.(error.message, "error"); return; }
@@ -4296,6 +4328,8 @@ function SpecialEventsTab({ data, canManageRosters, notify }) {
     setDateList([]);
     setMediaFile(null);
     setMediaPreview(null);
+    setMediaFocusX(50);
+    setMediaFocusY(50);
     load();
   }
 
@@ -4344,7 +4378,7 @@ function SpecialEventsTab({ data, canManageRosters, notify }) {
             {isVideoUrl(ev.thumbnail_url) ? (
               <video src={ev.thumbnail_url} controls style={{ width: "100%", maxHeight: 220, objectFit: "cover", display: "block" }} />
             ) : (
-              <img src={ev.thumbnail_url} alt="" style={{ width: "100%", maxHeight: 220, objectFit: "cover", display: "block" }} />
+              <img src={ev.thumbnail_url} alt="" style={{ width: "100%", maxHeight: 220, objectFit: "cover", objectPosition: `${ev.thumbnail_focus_x ?? 50}% ${ev.thumbnail_focus_y ?? 50}%`, display: "block" }} />
             )}
           </div>
         )}
@@ -4386,7 +4420,7 @@ function SpecialEventsTab({ data, canManageRosters, notify }) {
         )}
         {canManageRosters && (
           <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-            <input style={{ ...inputStyle, flex: 1, fontSize: 12 }} placeholder="Add a role (e.g. Photographer)" value={newRoleName[ev.id] || ""} onChange={(e) => setNewRoleName({ ...newRoleName, [ev.id]: e.target.value })} onKeyDown={(e) => e.key === "Enter" && addRole(ev.id)} />
+            <input style={{ ...inputStyle, flex: 1, fontSize: 12 }} placeholder="Add a role (e.g. ProPresenter Prayer 1)" value={newRoleName[ev.id] || ""} onChange={(e) => setNewRoleName({ ...newRoleName, [ev.id]: e.target.value })} onKeyDown={(e) => e.key === "Enter" && addRole(ev.id)} />
             <Btn small tone="ghost" onClick={() => addRole(ev.id)}><Plus size={12} /> Add role</Btn>
           </div>
         )}
@@ -4414,7 +4448,7 @@ function SpecialEventsTab({ data, canManageRosters, notify }) {
               isVideoUrl(mediaFile?.name || "") || mediaFile?.type?.startsWith("video") ? (
                 <video src={mediaPreview} controls style={{ width: "100%", maxHeight: 160, marginTop: 8, borderRadius: 8 }} />
               ) : (
-                <img src={mediaPreview} alt="" style={{ width: "100%", maxHeight: 160, objectFit: "cover", marginTop: 8, borderRadius: 8 }} />
+                <ImageFramePicker src={mediaPreview} focusX={mediaFocusX} focusY={mediaFocusY} onChange={(x, y) => { setMediaFocusX(x); setMediaFocusY(y); }} />
               )
             )}
           </Field>
@@ -4432,13 +4466,13 @@ function SpecialEventsTab({ data, canManageRosters, notify }) {
             </div>
           )}
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "end", marginBottom: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr auto", gap: 8, alignItems: "end", marginBottom: 8 }}>
             <Field label="Single date"><input type="date" style={inputStyle} value={singleDate} onChange={(e) => setSingleDate(e.target.value)} /></Field>
             <Field label="Time (optional)"><input style={inputStyle} placeholder="e.g. 10:00 AM" value={singleTime} onChange={(e) => setSingleTime(e.target.value)} /></Field>
             <Btn small tone="ghost" onClick={addSingleDate}><Plus size={12} /> Add date</Btn>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 8, alignItems: "end" }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr auto", gap: 8, alignItems: "end" }}>
             <Field label="Range start"><input type="date" style={inputStyle} value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} /></Field>
             <Field label="Range end"><input type="date" style={inputStyle} value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} /></Field>
             <Field label="Time (optional)"><input style={inputStyle} placeholder="e.g. 10:00 AM" value={rangeTime} onChange={(e) => setRangeTime(e.target.value)} /></Field>

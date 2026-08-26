@@ -2,6 +2,15 @@ import { precacheAndRoute } from "workbox-precaching";
 import { registerRoute } from "workbox-routing";
 import { NetworkOnly } from "workbox-strategies";
 
+// A new version activates immediately instead of sitting "waiting"
+// until every open tab is closed — combined with the client-side
+// controllerchange listener (see main.jsx), this means people see
+// changes on their next reload, not after quitting the browser.
+self.skipWaiting();
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
 // App shell + static assets get precached for offline load.
 precacheAndRoute(self.__WB_MANIFEST);
 

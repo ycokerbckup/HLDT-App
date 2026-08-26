@@ -4143,14 +4143,63 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
   );
 }
 
-function countdownLabel(eventDateStr) {
+function nextUpcomingDate(eventDates) {
   const today = todayStringWAT();
-  const diffDays = Math.round((new Date(eventDateStr + "T00:00:00Z") - new Date(today + "T00:00:00Z")) / 86400000);
-  if (diffDays < 0) return { text: `${Math.abs(diffDays)}d ago`, tone: "gray" };
+  const future = eventDates.map((d) => d.date).filter((d) => d >= today).sort();
+  return future[0] || null;
+}
+
+function countdownLabel(eventDates) {
+  const today = todayStringWAT();
+  const allPast = eventDates.every((d) => d.date < today);
+  if (allPast) {
+    const lastDate = eventDates.map((d) => d.date).sort().slice(-1)[0];
+    const diffDays = Math.round((new Date(today + "T00:00:00Z") - new Date(lastDate + "T00:00:00Z")) / 86400000);
+    return { text: `${diffDays}d ago`, tone: "gray" };
+  }
+  const next = nextUpcomingDate(eventDates);
+  const diffDays = Math.round((new Date(next + "T00:00:00Z") - new Date(today + "T00:00:00Z")) / 86400000);
   if (diffDays === 0) return { text: "Today!", tone: "amber" };
   if (diffDays === 1) return { text: "Tomorrow", tone: "amber" };
   if (diffDays <= 7) return { text: `In ${diffDays} days`, tone: "amber" };
   return { text: `In ${diffDays} days`, tone: "gray" };
+}
+
+function formatDateShort(dateStr) {
+  const d = new Date(dateStr + "T00:00:00Z");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+// Groups consecutive dates into ranges, e.g. [9,10,11,13] -> "Sep 9-11, Sep 13".
+// A range only collapses to "start-end" when every date inside it shares
+// the same time (or none do) — otherwise each date is listed on its own
+// so a differing time per day isn't silently hidden.
+function formatEventDates(eventDates) {
+  const sorted = [...eventDates].sort((a, b) => a.date.localeCompare(b.date));
+  const groups = [];
+  let current = [sorted[0]];
+  for (let i = 1; i < sorted.length; i++) {
+    const prevDay = new Date(sorted[i - 1].date + "T00:00:00Z");
+    const thisDay = new Date(sorted[i].date + "T00:00:00Z");
+    const isConsecutive = (thisDay - prevDay) === 86400000;
+    const sameTime = sorted[i].time === current[0].time;
+    if (isConsecutive && sameTime) {
+      current.push(sorted[i]);
+    } else {
+      groups.push(current);
+      current = [sorted[i]];
+    }
+  }
+  groups.push(current);
+
+  return groups.map((g) => {
+    const label = g.length === 1 ? formatDateShort(g[0].date) : `${formatDateShort(g[0].date)}-${formatDateShort(g[g.length - 1].date).split(" ").pop()}`;
+    return g[0].time ? `${label}, ${g[0].time}` : label;
+  }).join(" · ");
+}
+
+function isVideoUrl(url) {
+  return /\.(mp4|mov|webm)(\?|$)/i.test(url || "");
 }
 
 function SpecialEventsTab({ data, canManageRosters, notify }) {
@@ -4158,13 +4207,22 @@ function SpecialEventsTab({ data, canManageRosters, notify }) {
   const [roles, setRoles] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ title: "", description: "", eventDate: "", eventTime: "", location: "" });
+  const [form, setForm] = useState({ title: "", description: "", location: "" });
+  const [dateList, setDateList] = useState([]);
+  const [singleDate, setSingleDate] = useState("");
+  const [singleTime, setSingleTime] = useState("");
+  const [rangeStart, setRangeStart] = useState("");
+  const [rangeEnd, setRangeEnd] = useState("");
+  const [rangeTime, setRangeTime] = useState("");
+  const [mediaFile, setMediaFile] = useState(null);
+  const [mediaPreview, setMediaPreview] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const [showPast, setShowPast] = useState(false);
   const [newRoleName, setNewRoleName] = useState({});
 
   async function load() {
     const [{ data: ev }, { data: rl }] = await Promise.all([
-      supabase.from("special_events").select("*").order("event_date"),
+      supabase.from("special_events").select("*").order("created_at"),
       supabase.from("special_event_roles").select("*"),
     ]);
     setEvents(ev || []);
@@ -4182,16 +4240,62 @@ function SpecialEventsTab({ data, canManageRosters, notify }) {
     return () => supabase.removeChannel(channel);
   }, []);
 
+  function addSingleDate() {
+    if (!singleDate) return;
+    setDateList([...dateList, { date: singleDate, time: singleTime || null }]);
+    setSingleDate("");
+    setSingleTime("");
+  }
+
+  function addRange() {
+    if (!rangeStart || !rangeEnd || rangeEnd < rangeStart) { notify?.("Pick a valid start and end date", "error"); return; }
+    const out = [];
+    let d = new Date(rangeStart + "T00:00:00Z");
+    const end = new Date(rangeEnd + "T00:00:00Z");
+    while (d <= end) {
+      out.push({ date: d.toISOString().slice(0, 10), time: rangeTime || null });
+      d = new Date(d.getTime() + 86400000);
+    }
+    setDateList([...dateList, ...out]);
+    setRangeStart("");
+    setRangeEnd("");
+    setRangeTime("");
+  }
+
+  function removeDate(idx) {
+    setDateList(dateList.filter((_, i) => i !== idx));
+  }
+
+  function handleMediaChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setMediaFile(file);
+    setMediaPreview(URL.createObjectURL(file));
+  }
+
   async function createEvent() {
-    if (!form.title.trim() || !form.eventDate) { notify?.("Title and date are required", "error"); return; }
+    if (!form.title.trim() || dateList.length === 0) { notify?.("Title and at least one date are required", "error"); return; }
+    setUploading(true);
+    let thumbnailUrl = null;
+    if (mediaFile) {
+      const path = `${Date.now()}-${mediaFile.name}`;
+      const { error: upErr } = await supabase.storage.from("event-media").upload(path, mediaFile);
+      if (upErr) { notify?.(upErr.message, "error"); setUploading(false); return; }
+      const { data: pub } = supabase.storage.from("event-media").getPublicUrl(path);
+      thumbnailUrl = pub.publicUrl;
+    }
     const { error } = await supabase.from("special_events").insert({
-      title: form.title, description: form.description || null, event_date: form.eventDate,
-      event_time: form.eventTime || null, location: form.location || null,
+      title: form.title, description: form.description || null, location: form.location || null,
+      event_dates: dateList, thumbnail_url: thumbnailUrl,
     });
+    setUploading(false);
     if (error) { notify?.(error.message, "error"); return; }
     notify?.("Event created");
     setShowForm(false);
-    setForm({ title: "", description: "", eventDate: "", eventTime: "", location: "" });
+    setForm({ title: "", description: "", location: "" });
+    setDateList([]);
+    setMediaFile(null);
+    setMediaPreview(null);
     load();
   }
 
@@ -4223,19 +4327,32 @@ function SpecialEventsTab({ data, canManageRosters, notify }) {
   if (!loaded) return <SkeletonLoader />;
 
   const today = todayStringWAT();
-  const upcoming = events.filter((e) => e.event_date >= today);
-  const past = events.filter((e) => e.event_date < today).sort((a, b) => b.event_date.localeCompare(a.event_date));
+  const upcoming = events
+    .filter((e) => e.event_dates.some((d) => d.date >= today))
+    .sort((a, b) => nextUpcomingDate(a.event_dates).localeCompare(nextUpcomingDate(b.event_dates)));
+  const past = events
+    .filter((e) => e.event_dates.every((d) => d.date < today))
+    .sort((a, b) => (b.event_dates.map((d) => d.date).sort().slice(-1)[0]).localeCompare(a.event_dates.map((d) => d.date).sort().slice(-1)[0]));
 
   function renderEvent(ev) {
     const eventRoles = roles.filter((r) => r.event_id === ev.id);
-    const countdown = countdownLabel(ev.event_date);
+    const countdown = countdownLabel(ev.event_dates);
     return (
-      <Panel key={ev.id} style={{ marginBottom: 14 }}>
+      <Panel key={ev.id} style={{ marginBottom: 14, overflow: "hidden" }}>
+        {ev.thumbnail_url && (
+          <div style={{ margin: "-16px -16px 12px" }}>
+            {isVideoUrl(ev.thumbnail_url) ? (
+              <video src={ev.thumbnail_url} controls style={{ width: "100%", maxHeight: 220, objectFit: "cover", display: "block" }} />
+            ) : (
+              <img src={ev.thumbnail_url} alt="" style={{ width: "100%", maxHeight: 220, objectFit: "cover", display: "block" }} />
+            )}
+          </div>
+        )}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 6 }}>
           <div>
             <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 16, color: COLORS.textPrimary }}>{ev.title}</div>
             <div style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 2 }}>
-              {ev.event_date}{ev.event_time ? ` · ${ev.event_time}` : ""}{ev.location ? ` · ${ev.location}` : ""}
+              {formatEventDates(ev.event_dates)}{ev.location ? ` · ${ev.location}` : ""}
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -4288,13 +4405,49 @@ function SpecialEventsTab({ data, canManageRosters, notify }) {
       {showForm && (
         <Panel title="New event" style={{ marginBottom: 16 }} right={<X size={16} style={{ cursor: "pointer" }} onClick={() => setShowForm(false)} />}>
           <Field label="Title"><input style={inputStyle} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></Field>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <Field label="Date"><input type="date" style={inputStyle} value={form.eventDate} onChange={(e) => setForm({ ...form, eventDate: e.target.value })} /></Field>
-            <Field label="Time (optional)"><input style={inputStyle} placeholder="e.g. 10:00 AM" value={form.eventTime} onChange={(e) => setForm({ ...form, eventTime: e.target.value })} /></Field>
-          </div>
           <Field label="Location (optional)"><input style={inputStyle} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} /></Field>
           <Field label="Description (optional)"><textarea style={{ ...inputStyle, minHeight: 60 }} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
-          <Btn tone="amber" onClick={createEvent}><Save size={13} /> Create event</Btn>
+
+          <Field label="Thumbnail image or video (optional)">
+            <input type="file" accept="image/*,video/*" onChange={handleMediaChange} style={{ fontSize: 12, color: COLORS.textSecondary }} />
+            {mediaPreview && (
+              isVideoUrl(mediaFile?.name || "") || mediaFile?.type?.startsWith("video") ? (
+                <video src={mediaPreview} controls style={{ width: "100%", maxHeight: 160, marginTop: 8, borderRadius: 8 }} />
+              ) : (
+                <img src={mediaPreview} alt="" style={{ width: "100%", maxHeight: 160, objectFit: "cover", marginTop: 8, borderRadius: 8 }} />
+              )
+            )}
+          </Field>
+
+          <div style={{ fontSize: 12, color: COLORS.textSecondary, margin: "12px 0 6px", fontWeight: 600 }}>Dates — flexible, mix ranges and single days</div>
+
+          {dateList.length > 0 && (
+            <div style={{ marginBottom: 10, display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {dateList.map((d, i) => (
+                <Badge key={i} tone="amber">
+                  {formatDateShort(d.date)}{d.time ? `, ${d.time}` : ""}
+                  <X size={10} style={{ marginLeft: 4, cursor: "pointer", verticalAlign: "middle" }} onClick={() => removeDate(i)} />
+                </Badge>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "end", marginBottom: 8 }}>
+            <Field label="Single date"><input type="date" style={inputStyle} value={singleDate} onChange={(e) => setSingleDate(e.target.value)} /></Field>
+            <Field label="Time (optional)"><input style={inputStyle} placeholder="e.g. 10:00 AM" value={singleTime} onChange={(e) => setSingleTime(e.target.value)} /></Field>
+            <Btn small tone="ghost" onClick={addSingleDate}><Plus size={12} /> Add date</Btn>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 8, alignItems: "end" }}>
+            <Field label="Range start"><input type="date" style={inputStyle} value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} /></Field>
+            <Field label="Range end"><input type="date" style={inputStyle} value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} /></Field>
+            <Field label="Time (optional)"><input style={inputStyle} placeholder="e.g. 10:00 AM" value={rangeTime} onChange={(e) => setRangeTime(e.target.value)} /></Field>
+            <Btn small tone="ghost" onClick={addRange}><Plus size={12} /> Add range</Btn>
+          </div>
+
+          <div style={{ marginTop: 16 }}>
+            <Btn tone="amber" onClick={createEvent} disabled={uploading}>{uploading ? "Saving..." : <><Save size={13} /> Create event</>}</Btn>
+          </div>
         </Panel>
       )}
 

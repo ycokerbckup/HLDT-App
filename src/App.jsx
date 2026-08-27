@@ -444,15 +444,17 @@ function Modal({ title, onClose, children, width = 480, footer, dismissable = tr
     >
       <div
         className="hldt-modal hldt-glass"
-        style={{ width, maxWidth: "100%", maxHeight: "85vh", overflowY: "auto", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 16, padding: 20 }}
+        style={{ width, maxWidth: "100%", maxHeight: "85vh", display: "flex", flexDirection: "column", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 16, overflow: "hidden" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 20px 12px", flexShrink: 0 }}>
           <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 17, color: COLORS.textPrimary }}>{title}</h3>
-          {dismissable && <X size={18} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={onClose} />}
+          {dismissable && <X size={18} style={{ cursor: "pointer", color: COLORS.textMuted, flexShrink: 0 }} onClick={onClose} />}
         </div>
-        {children}
-        {footer && <div style={{ marginTop: 16, display: "flex", gap: 8, justifyContent: "flex-end" }}>{footer}</div>}
+        <div style={{ overflowY: "auto", padding: "0 20px 20px" }}>
+          {children}
+        </div>
+        {footer && <div style={{ padding: "0 20px 20px", display: "flex", gap: 8, justifyContent: "flex-end", flexShrink: 0 }}>{footer}</div>}
       </div>
     </div>
   );
@@ -4527,7 +4529,7 @@ function SpecialEventsTab({ data, canManageEvents, myUnit, session, notify }) {
     };
     const { error } = editingId
       ? await supabase.from("special_events").update(payload).eq("id", editingId)
-      : await supabase.from("special_events").insert(payload);
+      : await supabase.from("special_events").insert({ ...payload, created_by: session.user.id });
     setUploading(false);
     if (error) { notify?.(error.message, "error"); return; }
     notify?.(editingId ? "Event updated" : "Event created");

@@ -4174,10 +4174,15 @@ function formatDateShort(dateStr) {
 }
 
 // Time is stored as 24h "HH:MM" (from a native time input) — display
-// it friendlier, e.g. "14:00" -> "2:00 PM".
+// it friendlier, e.g. "14:00" -> "2:00 PM". Events created before this
+// structured input existed may still hold old free-text like "6:00 AM"
+// — that doesn't match the strict pattern, so it's shown as-is instead
+// of being force-parsed into NaN.
 function formatTime12h(hhmm) {
   if (!hhmm) return "";
-  const [h, m] = hhmm.split(":").map(Number);
+  const match = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim());
+  if (!match) return hhmm;
+  const h = Number(match[1]), m = Number(match[2]);
   const period = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return `${h12}:${String(m).padStart(2, "0")} ${period}`;
@@ -4215,7 +4220,14 @@ function isVideoUrl(url) {
   return /\.(mp4|mov|webm)(\?|$)/i.test(url || "");
 }
 
-function ImageFramePicker({ src, focusX, focusY, onChange, height = 160 }) {
+// Shared between the upload preview and every place a thumbnail
+// actually displays, so the crop you frame is genuinely the crop
+// you get — a fixed pixel height (as this used to be) lets the
+// effective width-to-height ratio balloon out on wide screens,
+// revealing far more of the photo than was visible while framing it.
+const EVENT_THUMBNAIL_ASPECT = "1.91 / 1";
+
+function ImageFramePicker({ src, focusX, focusY, onChange }) {
   const boxRef = useRef(null);
   function handlePick(e) {
     const rect = boxRef.current.getBoundingClientRect();
@@ -4230,7 +4242,7 @@ function ImageFramePicker({ src, focusX, focusY, onChange, height = 160 }) {
       <div
         ref={boxRef}
         onClick={handlePick}
-        style={{ position: "relative", width: "100%", height, borderRadius: 8, overflow: "hidden", cursor: "crosshair", marginTop: 8 }}
+        style={{ position: "relative", width: "100%", aspectRatio: EVENT_THUMBNAIL_ASPECT, borderRadius: 8, overflow: "hidden", cursor: "crosshair", marginTop: 8 }}
       >
         <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `${focusX}% ${focusY}%`, display: "block" }} />
         <div style={{ position: "absolute", left: `${focusX}%`, top: `${focusY}%`, width: 14, height: 14, marginLeft: -7, marginTop: -7, borderRadius: 999, border: "2px solid white", boxShadow: "0 0 0 1px rgba(0,0,0,0.4)", pointerEvents: "none" }} />
@@ -4360,7 +4372,7 @@ function EventCalendar({ events, roles, members, session, notify }) {
                   isVideoUrl(ev.thumbnail_url) ? (
                     <video src={ev.thumbnail_url} controls style={{ width: "100%", maxHeight: 120, borderRadius: 8, marginBottom: 8 }} />
                   ) : (
-                    <img src={ev.thumbnail_url} alt="" style={{ width: "100%", height: 120, objectFit: "cover", objectPosition: `${ev.thumbnail_focus_x ?? 50}% ${ev.thumbnail_focus_y ?? 50}%`, borderRadius: 8, marginBottom: 8 }} />
+                    <img src={ev.thumbnail_url} alt="" style={{ width: "100%", aspectRatio: EVENT_THUMBNAIL_ASPECT, objectFit: "cover", objectPosition: `${ev.thumbnail_focus_x ?? 50}% ${ev.thumbnail_focus_y ?? 50}%`, borderRadius: 8, marginBottom: 8 }} />
                   )
                 )}
                 <div style={{ fontWeight: 700, fontSize: 15 }}>{ev.title}</div>
@@ -4584,7 +4596,7 @@ function SpecialEventsTab({ data, canManageEvents, myUnit, session, notify }) {
             {isVideoUrl(ev.thumbnail_url) ? (
               <video src={ev.thumbnail_url} controls style={{ width: "100%", maxHeight: 220, objectFit: "cover", display: "block" }} />
             ) : (
-              <img src={ev.thumbnail_url} alt="" style={{ width: "100%", maxHeight: 220, objectFit: "cover", objectPosition: `${ev.thumbnail_focus_x ?? 50}% ${ev.thumbnail_focus_y ?? 50}%`, display: "block" }} />
+              <img src={ev.thumbnail_url} alt="" style={{ width: "100%", aspectRatio: EVENT_THUMBNAIL_ASPECT, objectFit: "cover", objectPosition: `${ev.thumbnail_focus_x ?? 50}% ${ev.thumbnail_focus_y ?? 50}%`, display: "block" }} />
             )}
           </div>
         )}

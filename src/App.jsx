@@ -832,7 +832,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
   const canAccessInventory = myUnit === "Technical" || myUnit === "Operations";
   const canDeleteTickets = myUnit === "Technical" || myUnit === "Operations";
   const canManageRosters = isAdmin && (myUnit === "Operations" || myUnit === "Admin");
-  const canManageEvents = isAdmin && (myUnit === "Operations" || myUnit === "Welfare");
+  const canManageEvents = isAdmin && (myUnit === "Operations" || myUnit === "Welfare" || myUnit === "Admin");
   const canSeeDues = myUnit === "Welfare" || myUnit === "Operations";
 
   const unreadByTab = {};

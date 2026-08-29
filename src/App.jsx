@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import {
   LayoutDashboard, Users, GraduationCap, Wrench, CalendarDays,
   Wallet, MessageSquare, Plus, X, ChevronRight, ChevronLeft, Shield, User,
@@ -437,7 +438,7 @@ function Metric({ label, value, tone, isCurrency, onClick }) {
 }
 
 function Modal({ title, onClose, children, width = 480, footer, dismissable = true }) {
-  return (
+  return createPortal(
     <div
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, padding: 20 }}
       onClick={dismissable ? onClose : undefined}
@@ -456,7 +457,8 @@ function Modal({ title, onClose, children, width = 480, footer, dismissable = tr
         </div>
         {footer && <div style={{ padding: "0 20px 20px", display: "flex", gap: 8, justifyContent: "flex-end", flexShrink: 0 }}>{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -4457,6 +4459,11 @@ function SpecialEventsTab({ data, canManageEvents, myUnit, session, notify }) {
     return canManageEvents && creator?.unit === myUnit;
   }
 
+  // Operations can delete any event and manage roles on any event,
+  // regardless of who created it — editing the event's own details
+  // (title/date/location/thumbnail) stays scoped to same-unit-owns-it.
+  const opsOverride = canManageEvents && myUnit === "Operations";
+
   function resetForm() {
     setForm({ title: "", description: "", location: "" });
     setDateList([]);
@@ -4588,7 +4595,9 @@ function SpecialEventsTab({ data, canManageEvents, myUnit, session, notify }) {
   function renderEvent(ev) {
     const eventRoles = roles.filter((r) => r.event_id === ev.id);
     const countdown = countdownLabel(ev.event_dates);
-    const editable = ownsEvent(ev);
+    const canEditDetails = ownsEvent(ev);
+    const canDeleteThis = opsOverride || ownsEvent(ev);
+    const canManageRolesThis = opsOverride || ownsEvent(ev);
     return (
       <Panel key={ev.id} style={{ marginBottom: 14, overflow: "hidden" }}>
         {ev.thumbnail_url && (
@@ -4609,8 +4618,8 @@ function SpecialEventsTab({ data, canManageEvents, myUnit, session, notify }) {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Badge tone={countdown.tone}>{countdown.text}</Badge>
-            {editable && <Pencil size={13} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => startEdit(ev)} />}
-            {editable && <Trash2 size={14} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => deleteEvent(ev.id)} />}
+            {canEditDetails && <Pencil size={13} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => startEdit(ev)} />}
+            {canDeleteThis && <Trash2 size={14} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => deleteEvent(ev.id)} />}
           </div>
         </div>
         {ev.description && <div style={{ fontSize: 13, color: COLORS.textSecondary, marginBottom: 10 }}>{ev.description}</div>}
@@ -4624,7 +4633,7 @@ function SpecialEventsTab({ data, canManageEvents, myUnit, session, notify }) {
             return (
               <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: `1px solid ${COLORS.border}` }}>
                 <span style={{ flex: 1, fontSize: 13 }}>{r.role_name}</span>
-                {editable ? (
+                {canManageRolesThis ? (
                   <select style={{ ...inputStyle, width: "auto", fontSize: 12, padding: "4px 8px" }} value={r.assigned_member_id || ""} onChange={(e) => assignRole(r.id, e.target.value)}>
                     <option value="">Unassigned</option>
                     {data.members.filter((m) => !m.unavailable && !m.suspended).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
@@ -4632,12 +4641,12 @@ function SpecialEventsTab({ data, canManageEvents, myUnit, session, notify }) {
                 ) : (
                   <span style={{ fontSize: 12, color: assignee ? COLORS.textPrimary : COLORS.textMuted }}>{assignee?.name || "Unassigned"}</span>
                 )}
-                {editable && <X size={13} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => removeRole(r.id)} />}
+                {canManageRolesThis && <X size={13} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => removeRole(r.id)} />}
               </div>
             );
           })
         )}
-        {editable && (
+        {canManageRolesThis && (
           <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
             <input style={{ ...inputStyle, flex: 1, fontSize: 12 }} placeholder="Add a role (e.g. ProPresenter Prayer 1)" value={newRoleName[ev.id] || ""} onChange={(e) => setNewRoleName({ ...newRoleName, [ev.id]: e.target.value })} onKeyDown={(e) => e.key === "Enter" && addRole(ev.id)} />
             <Btn small tone="ghost" onClick={() => addRole(ev.id)}><Plus size={12} /> Add role</Btn>

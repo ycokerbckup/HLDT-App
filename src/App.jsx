@@ -237,12 +237,14 @@ function computeAvatarLabels(people) {
   return labels;
 }
 
-function Avatar({ label, color, size = 28, celebration }) {
+function Avatar({ label, color, size = 28, celebration, photoUrl }) {
   const emoji = celebrationEmoji(celebration);
-  const inner = (
+  const inner = emoji || !photoUrl ? (
     <div style={{ width: size, height: size, borderRadius: 999, background: emoji ? COLORS.amberDim : color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: emoji ? size * 0.55 : size * 0.4, fontWeight: 600, flexShrink: 0 }}>
       {emoji || label}
     </div>
+  ) : (
+    <img src={photoUrl} alt="" style={{ width: size, height: size, borderRadius: 999, objectFit: "cover", flexShrink: 0, display: "block" }} />
   );
   if (emoji) {
     return (
@@ -734,6 +736,9 @@ function Dashboard_Shell({ session, profile, setProfile }) {
       : supabase.from("members_directory").select("*").order("name");
 
     const membersRes = await membersPromise;
+    const { data: avatarRows } = await supabase.from("profiles").select("id, avatar_url");
+    const avatarByProfileId = {};
+    (avatarRows || []).forEach((p) => { if (p.avatar_url) avatarByProfileId[p.id] = p.avatar_url; });
 
     let ownMemberRow = null;
     if (!isAdmin) {
@@ -781,6 +786,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
           profileId: m.profile_id,
           homeAddress: source.home_address, sex: source.sex, dob: source.dob, occupation: source.occupation, kymCompletedAt: source.kym_completed_at,
           unavailable: m.unavailable, suspended: m.suspended,
+          avatarUrl: avatarByProfileId[m.profile_id] || null,
         };
       }),
       onboarding: (onboardingRes.data || []).map((o) => ({
@@ -896,6 +902,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
     };
   }, []);
 
+  const [showProfile, setShowProfile] = useState(false);
   const [showTour, setShowTour] = useState(false);
   const tourPromptedRef = useRef(false);
   useEffect(() => {
@@ -993,6 +1000,17 @@ function Dashboard_Shell({ session, profile, setProfile }) {
       {showKym && <KYMModal onClose={() => { setShowKym(false); load(); }} notify={notify} />}
       {celebrantType && <CelebrantPopup type={celebrantType} name={profile.full_name?.split(" ")[0] || "there"} onClose={() => setCelebrantType(null)} />}
       {showTour && !showKym && !celebrantType && <TourGuide onDone={finishTour} />}
+      {showProfile && (
+        <ProfileModal
+          session={session}
+          profile={profile}
+          setProfile={setProfile}
+          myMember={myMember}
+          onClose={() => setShowProfile(false)}
+          reload={load}
+          notify={notify}
+        />
+      )}
 
       {isMobile ? (
         <>
@@ -1046,6 +1064,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                   <div style={{ fontSize: 12, color: COLORS.textPrimary, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profile.full_name || session.user.email}</div>
                   <Badge tone={isAdmin ? "amber" : "gray"}>{profile.role}</Badge>
                   <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                    <Btn small tone="ghost" onClick={() => { setShowProfile(true); setShowAccountMenu(false); }}><User size={12} /> My Profile</Btn>
                     <PushNotificationToggle session={session} />
                     {isAdmin && <Btn small tone="ghost" onClick={() => { exportAllData(); notify("Backup downloaded"); setShowAccountMenu(false); }}><Download size={12} /> Export data</Btn>}
                     <Btn small tone="ghost" onClick={() => supabase.auth.signOut()}><LogOut size={12} /> Sign out</Btn>
@@ -1110,6 +1129,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
               </div>
               <Badge tone={isAdmin ? "amber" : "gray"}>{profile.role}</Badge>
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                <Btn small tone="ghost" onClick={() => setShowProfile(true)}><User size={12} /> My Profile</Btn>
                 <PushNotificationToggle session={session} />
                 {isAdmin && <Btn small tone="ghost" onClick={() => { exportAllData(); notify("Backup downloaded"); }}><Download size={12} /> Export data</Btn>}
                 <Btn small tone="ghost" onClick={() => supabase.auth.signOut()}><LogOut size={12} /> Sign out</Btn>
@@ -1366,6 +1386,85 @@ function urlBase64ToUint8Array(base64String) {
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
   const rawData = atob(base64);
   return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
+}
+
+function ProfileModal({ session, profile, setProfile, myMember, onClose, reload, notify }) {
+  const [fullName, setFullName] = useState(profile.full_name || "");
+  const [phone, setPhone] = useState(myMember?.phone || "");
+  const [skills, setSkills] = useState(myMember?.skills || { proPresenter: 3, vmix: 3, resolume: 3, technical: 3 });
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(profile.avatar_url || null);
+  const [saving, setSaving] = useState(false);
+
+  function handlePhotoChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  }
+
+  async function save() {
+    setSaving(true);
+    let avatarUrl = profile.avatar_url || null;
+    if (photoFile) {
+      const path = `${session.user.id}-${Date.now()}-${photoFile.name}`;
+      const { error: upErr } = await supabase.storage.from("avatars").upload(path, photoFile);
+      if (upErr) { notify?.(upErr.message, "error"); setSaving(false); return; }
+      const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
+      avatarUrl = pub.publicUrl;
+    }
+
+    const { error: profErr } = await supabase.rpc("update_own_profile", { p_full_name: fullName.trim() || null, p_avatar_url: avatarUrl });
+    if (profErr) { notify?.(profErr.message, "error"); setSaving(false); return; }
+
+    if (myMember) {
+      const { error: memErr } = await supabase.rpc("update_own_member_info", { p_phone: phone.trim() || null, p_skills: skills });
+      if (memErr) { notify?.(memErr.message, "error"); setSaving(false); return; }
+    }
+
+    setSaving(false);
+    notify?.("Profile updated");
+    setProfile((p) => (p ? { ...p, full_name: fullName.trim() || p.full_name, avatar_url: avatarUrl } : p));
+    onClose();
+    reload();
+  }
+
+  return (
+    <Modal title="My Profile" onClose={onClose} width={400}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 18 }}>
+        <div style={{ position: "relative" }}>
+          {photoPreview ? (
+            <img src={photoPreview} alt="" style={{ width: 84, height: 84, borderRadius: 999, objectFit: "cover", border: `2px solid ${COLORS.amber}` }} />
+          ) : (
+            <Avatar label={(fullName || session.user.email)?.[0]?.toUpperCase() || "?"} color={hashColor(session.user.id)} size={84} />
+          )}
+        </div>
+        <label style={{ marginTop: 10, fontSize: 12, color: COLORS.amber, cursor: "pointer" }}>
+          Change photo
+          <input type="file" accept="image/*" onChange={handlePhotoChange} style={{ display: "none" }} />
+        </label>
+      </div>
+
+      <Field label="Full name"><input style={inputStyle} value={fullName} onChange={(e) => setFullName(e.target.value)} /></Field>
+      <Field label="Email"><input style={{ ...inputStyle, opacity: 0.6 }} value={session.user.email} disabled /></Field>
+      {myMember && <Field label="Phone"><input style={inputStyle} value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>}
+
+      {myMember && (
+        <>
+          <div style={{ fontSize: 12, color: COLORS.textSecondary, margin: "10px 0 6px" }}>Self-reported proficiency (1-5)</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+            {["proPresenter", "vmix", "resolume", "technical"].map((k) => (
+              <Field key={k} label={k}><input type="number" min={1} max={5} style={inputStyle} value={skills[k]} onChange={(e) => setSkills({ ...skills, [k]: Number(e.target.value) })} /></Field>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div style={{ marginTop: 16 }}>
+        <Btn tone="amber" onClick={save} disabled={saving}>{saving ? "Saving..." : <><Save size={13} /> Save profile</>}</Btn>
+      </div>
+    </Modal>
+  );
 }
 
 function PushNotificationToggle({ session }) {
@@ -1738,6 +1837,10 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [members]);
 
+  function avatarPhotoFor(profileId) {
+    return members.find((m) => m.profileId === profileId)?.avatarUrl || null;
+  }
+
   function celebrationForProfile(profileId) {
     const m = members.find((mem) => mem.profileId === profileId);
     return getCelebrationForMember(m, onboarding);
@@ -2042,7 +2145,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
               onClick={() => { setThread({ type: "team" }); setMobileShowThread(true); }}
               style={{ padding: "9px 12px", borderRadius: 12, cursor: "pointer", background: thread.type === "team" ? COLORS.amberDim : "transparent", fontSize: 13, fontWeight: thread.type === "team" ? 600 : 400, display: "flex", alignItems: "center", gap: 6 }}
             >
-              <span style={{ flex: 1, color: thread.type === "team" ? COLORS.amber : COLORS.textPrimary }}># Team channel</span>
+              <span style={{ flex: 1, color: thread.type === "team" ? COLORS.amber : COLORS.textPrimary, display: "flex", alignItems: "center", gap: 6 }}><Users size={13} /> Team channel</span>
               {unreadByThread.team && <span className="hldt-pulse" style={{ width: 8, height: 8, borderRadius: 999, background: COLORS.red, flexShrink: 0 }} />}
             </div>
             <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.04em", padding: "12px 12px 4px" }}>Direct messages</div>
@@ -2060,7 +2163,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                     onClick={() => { startDm(m); setMobileShowThread(true); }}
                     style={{ padding: "8px 12px", borderRadius: 12, cursor: "pointer", background: active ? COLORS.amberDim : "transparent", fontSize: 13, fontWeight: active ? 600 : 400, display: "flex", alignItems: "center", gap: 10 }}
                   >
-                    <Avatar label={avatarLabels[m.profileId] || "?"} color={hashColor(m.profileId)} size={30} celebration={celebrationForProfile(m.profileId)} />
+                    <Avatar label={avatarLabels[m.profileId] || "?"} color={hashColor(m.profileId)} size={30} celebration={celebrationForProfile(m.profileId)} photoUrl={avatarPhotoFor(m.profileId)} />
                     <span style={{ flex: 1, color: active ? COLORS.amber : COLORS.textPrimary }}>{m.name}</span>
                     {hasUnread && <span className="hldt-pulse" style={{ width: 8, height: 8, borderRadius: 999, background: COLORS.red, flexShrink: 0 }} />}
                   </div>
@@ -2122,7 +2225,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                         padding: highlightedId === m.id ? 6 : 0, margin: highlightedId === m.id ? -6 : 0,
                       }}
                     >
-                    <Avatar label={avatarLabels[m.sender_id] || m.sender_name?.[0] || "?"} color={hashColor(m.sender_id)} size={30} celebration={celebrationForProfile(m.sender_id)} />
+                    <Avatar label={avatarLabels[m.sender_id] || m.sender_name?.[0] || "?"} color={hashColor(m.sender_id)} size={30} celebration={celebrationForProfile(m.sender_id)} photoUrl={avatarPhotoFor(m.sender_id)} />
                     <div style={{ maxWidth: "70%" }}>
                       {!mine && <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 2, fontWeight: 500 }}>{m.sender_name}</div>}
                       {editingId === m.id ? (
@@ -2266,7 +2369,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                         <MessageCircle size={11} color={COLORS.amber} />
                       </div>
                     ) : (
-                      <Avatar label={avatarLabels[m.profileId] || "?"} color={hashColor(m.profileId)} size={20} />
+                      <Avatar label={avatarLabels[m.profileId] || "?"} color={hashColor(m.profileId)} size={20} photoUrl={avatarPhotoFor(m.profileId)} />
                     )}
                     {m.isEveryone ? <span>everyone <span style={{ color: COLORS.textMuted, fontSize: 11 }}>· tags the whole team channel</span></span> : m.name}
                   </div>

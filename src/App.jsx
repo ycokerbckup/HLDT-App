@@ -5052,14 +5052,32 @@ function DueEditModal({ member, month, onClose, onSaved, notify }) {
 }
 
 function DuesTab({ data, isAdmin, reload, myMemberId, notify }) {
-  const months = MONTHS();
+  const [monthPage, setMonthPage] = useState(0);
+  const months = useMemo(() => {
+    const out = [];
+    for (let i = -2 + monthPage * 5; i <= 2 + monthPage * 5; i++) {
+      const mo = monthStringWAT(i);
+      if (mo >= DUES_START_MONTH) out.push(mo);
+    }
+    return out;
+  }, [monthPage]);
+  const atStart = months.length > 0 && months[0] <= DUES_START_MONTH;
   const [editing, setEditing] = useState(null);
+
+  const pageNav = (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+      <Btn small tone="ghost" disabled={atStart} onClick={() => setMonthPage(monthPage - 1)}><ChevronLeft size={13} /> Earlier</Btn>
+      <Btn small tone="ghost" onClick={() => setMonthPage(monthPage + 1)}>Later <ChevronRight size={13} /></Btn>
+      {monthPage !== 0 && <Btn small tone="ghost" onClick={() => setMonthPage(0)}>Back to today</Btn>}
+    </div>
+  );
 
   if (!isAdmin) {
     const mine = data.members.find((m) => m.id === myMemberId);
     return (
       <div>
         <SectionHeader title="Dues" subtitle="Your dues record" />
+        {pageNav}
         <Panel>
           {!mine ? (
             <EmptyRow text="No member record is linked to your account yet — ask an admin." />
@@ -5087,6 +5105,7 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify }) {
   return (
     <div>
       <SectionHeader title="Dues" subtitle="Members ₦3,500 · Leaders ₦5,500 expected. Click a cell to record what was actually paid." />
+      {pageNav}
       <Panel>
         <div style={{ overflowX: "auto" }}>
           <div style={{ display: "grid", gridTemplateColumns: `1.4fr repeat(${months.length}, 0.9fr)`, fontSize: 11, color: COLORS.textMuted, padding: "0 4px 8px", textTransform: "uppercase" }}>

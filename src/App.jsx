@@ -1339,7 +1339,7 @@ function GlobalSearch({ data, goToTab, isOperationsUser }) {
                     {results.members.map((m) => (
                       <div key={m.id}>
                         <div className="hldt-row" data-clickable="true" onClick={() => clickMember(m)} style={{ padding: "8px 6px", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
-                          <Avatar label={m.name?.[0] || "?"} color={hashColor(m.id)} size={22} />
+                          <Avatar label={m.name?.[0] || "?"} color={hashColor(m.id)} size={22} photoUrl={m.avatarUrl} />
                           {m.name}
                         </div>
                         {memberChoiceId === m.id && (

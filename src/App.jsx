@@ -1857,6 +1857,15 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const composerRef = useRef(null);
+
+  function autoGrowComposer() {
+    const el = composerRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 120) + "px";
+  }
+
   async function send() {
     if (!text.trim()) return;
     const payload = {
@@ -1873,6 +1882,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
     setReplyingTo(null);
     setTaggedIds([]);
     setTagQuery(null);
+    if (composerRef.current) composerRef.current.style.height = "auto";
   }
 
   function handleTextChange(value) {
@@ -2116,10 +2126,16 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                     <div style={{ maxWidth: "70%" }}>
                       {!mine && <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 2, fontWeight: 500 }}>{m.sender_name}</div>}
                       {editingId === m.id ? (
-                        <div style={{ display: "flex", gap: 6 }}>
-                          <input style={{ ...inputStyle, fontSize: 12 }} value={editText} onChange={(e) => setEditText(e.target.value)} />
-                          <Btn small tone="amber" onClick={() => saveEdit(m)}>Save</Btn>
-                          <Btn small tone="ghost" onClick={() => setEditingId(null)}>Cancel</Btn>
+                        <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 6, width: isMobile ? 220 : "auto" }}>
+                          <textarea
+                            style={{ ...inputStyle, fontSize: 12, flex: 1, minHeight: 60, resize: "vertical" }}
+                            value={editText}
+                            onChange={(e) => setEditText(e.target.value)}
+                          />
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <Btn small tone="amber" onClick={() => saveEdit(m)}>Save</Btn>
+                            <Btn small tone="ghost" onClick={() => setEditingId(null)}>Cancel</Btn>
+                          </div>
                         </div>
                       ) : (
                         <div style={{ display: "flex", alignItems: "flex-end", gap: 4, flexDirection: mine ? "row-reverse" : "row" }}>
@@ -2129,7 +2145,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                               color: mine ? COLORS.amber : COLORS.textPrimary,
                               padding: "9px 14px", borderRadius: 18,
                               borderBottomRightRadius: mine ? 6 : 18, borderBottomLeftRadius: mine ? 18 : 6,
-                              fontSize: 13.5, lineHeight: 1.4,
+                              fontSize: 13.5, lineHeight: 1.4, whiteSpace: "pre-wrap", wordBreak: "break-word",
                             }}
                           >
                             {quoted && (
@@ -2257,14 +2273,15 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                 ))}
               </div>
             )}
-            <div style={{ display: "flex", gap: 8 }}>
-              <input
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+              <textarea
+                ref={composerRef}
                 className="hldt-composer-input"
-                style={{ ...inputStyle, flex: 1, borderRadius: 999, padding: "10px 16px" }}
+                style={{ ...inputStyle, flex: 1, borderRadius: 20, padding: "10px 16px", resize: "none", maxHeight: 120, overflowY: "auto", lineHeight: 1.4, fontFamily: "inherit" }}
                 placeholder="Type a message... (@ to tag someone)"
                 value={text}
-                onChange={(e) => handleTextChange(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && send()}
+                onChange={(e) => { handleTextChange(e.target.value); autoGrowComposer(); }}
+                rows={1}
               />
               <Btn tone="amber" onClick={send} style={{ borderRadius: 999 }}>Send</Btn>
             </div>

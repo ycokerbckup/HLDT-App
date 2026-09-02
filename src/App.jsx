@@ -4502,7 +4502,7 @@ function EventCalendar({ events, roles, members, session, notify }) {
           )}
           {specialsToday.length === 0 && !normalLabel && <EmptyRow text="Nothing scheduled." />}
           {specialsToday.map(({ event: ev, occurrence }, idx) => {
-            const eventRoles = roles.filter((r) => r.event_id === ev.id);
+            const eventRoles = roles.filter((r) => r.event_id === ev.id && (!r.event_date || r.event_date === selectedDate));
             const subsForThis = mySubs.filter((s) => s.event_id === ev.id && s.event_date === selectedDate);
             return (
               <div key={idx} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: idx < specialsToday.length - 1 ? `1px solid ${COLORS.border}` : "none" }}>
@@ -4569,6 +4569,7 @@ function SpecialEventsTab({ data, canManageEvents, myUnit, session, notify }) {
   const [uploading, setUploading] = useState(false);
   const [showPast, setShowPast] = useState(false);
   const [newRoleName, setNewRoleName] = useState({});
+  const [newRoleDate, setNewRoleDate] = useState({});
 
   async function load() {
     const [{ data: ev }, { data: rl }] = await Promise.all([
@@ -4701,9 +4702,11 @@ function SpecialEventsTab({ data, canManageEvents, myUnit, session, notify }) {
   async function addRole(eventId) {
     const name = (newRoleName[eventId] || "").trim();
     if (!name) return;
-    const { error } = await supabase.from("special_event_roles").insert({ event_id: eventId, role_name: name });
+    const dateScope = newRoleDate[eventId] || null;
+    const { error } = await supabase.from("special_event_roles").insert({ event_id: eventId, role_name: name, event_date: dateScope || null });
     if (error) { notify?.(error.message, "error"); return; }
     setNewRoleName({ ...newRoleName, [eventId]: "" });
+    setNewRoleDate({ ...newRoleDate, [eventId]: "" });
     load();
   }
 
@@ -4768,7 +4771,12 @@ function SpecialEventsTab({ data, canManageEvents, myUnit, session, notify }) {
             const assignee = data.members.find((m) => m.id === r.assigned_member_id);
             return (
               <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: `1px solid ${COLORS.border}` }}>
-                <span style={{ flex: 1, fontSize: 13 }}>{r.role_name}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13 }}>{r.role_name}</div>
+                  {ev.event_dates.length > 1 && (
+                    <div style={{ fontSize: 10, color: COLORS.textMuted }}>{r.event_date ? formatDateShort(r.event_date) : "All dates"}</div>
+                  )}
+                </div>
                 {canManageRolesThis ? (
                   <select style={{ ...inputStyle, width: "auto", fontSize: 12, padding: "4px 8px" }} value={r.assigned_member_id || ""} onChange={(e) => assignRole(r.id, e.target.value)}>
                     <option value="">Unassigned</option>
@@ -4783,8 +4791,14 @@ function SpecialEventsTab({ data, canManageEvents, myUnit, session, notify }) {
           })
         )}
         {canManageRolesThis && (
-          <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-            <input style={{ ...inputStyle, flex: 1, fontSize: 12 }} placeholder="Add a role (e.g. ProPresenter Prayer 1)" value={newRoleName[ev.id] || ""} onChange={(e) => setNewRoleName({ ...newRoleName, [ev.id]: e.target.value })} onKeyDown={(e) => e.key === "Enter" && addRole(ev.id)} />
+          <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 6, marginTop: 10 }}>
+            <input style={{ ...inputStyle, flex: 1, fontSize: 12 }} placeholder="Add a role (e.g. ProPresenter Prayer 1)" value={newRoleName[ev.id] || ""} onChange={(e) => setNewRoleName({ ...newRoleName, [ev.id]: e.target.value })} onKeyDown={(e) => e.key === "Enter" && !ev.event_dates.length > 1 && addRole(ev.id)} />
+            {ev.event_dates.length > 1 && (
+              <select style={{ ...inputStyle, width: isMobile ? "100%" : "auto", fontSize: 12 }} value={newRoleDate[ev.id] || ""} onChange={(e) => setNewRoleDate({ ...newRoleDate, [ev.id]: e.target.value })}>
+                <option value="">All dates</option>
+                {[...ev.event_dates].sort((a, b) => a.date.localeCompare(b.date)).map((d) => <option key={d.date} value={d.date}>{formatDateShort(d.date)}</option>)}
+              </select>
+            )}
             <Btn small tone="ghost" onClick={() => addRole(ev.id)}><Plus size={12} /> Add role</Btn>
           </div>
         )}

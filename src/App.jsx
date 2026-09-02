@@ -1061,10 +1061,18 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 </div>
 
                 <div style={{ padding: 12, borderTop: `1px solid ${COLORS.border}` }}>
-                  <div style={{ fontSize: 12, color: COLORS.textPrimary, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profile.full_name || session.user.email}</div>
-                  <Badge tone={isAdmin ? "amber" : "gray"}>{profile.role}</Badge>
-                  <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-                    <Btn small tone="ghost" onClick={() => { setShowProfile(true); setShowAccountMenu(false); }}><User size={12} /> My Profile</Btn>
+                  <div
+                    className="hldt-row" data-clickable="true"
+                    onClick={() => { setShowProfile(true); setShowAccountMenu(false); }}
+                    style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "4px", borderRadius: 10, marginBottom: 10 }}
+                  >
+                    <Avatar label={(profile.full_name || session.user.email)?.[0]?.toUpperCase() || "?"} color={hashColor(session.user.id)} size={38} photoUrl={profile.avatar_url} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profile.full_name || session.user.email}</div>
+                      <Badge tone={isAdmin ? "amber" : "gray"}>{profile.role}</Badge>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <PushNotificationToggle session={session} />
                     {isAdmin && <Btn small tone="ghost" onClick={() => { exportAllData(); notify("Backup downloaded"); setShowAccountMenu(false); }}><Download size={12} /> Export data</Btn>}
                     <Btn small tone="ghost" onClick={() => supabase.auth.signOut()}><LogOut size={12} /> Sign out</Btn>
@@ -1121,15 +1129,18 @@ function Dashboard_Shell({ session, profile, setProfile }) {
             </div>
 
             <div style={{ padding: 12, borderTop: `1px solid ${COLORS.border}` }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                {isAdmin ? <Shield size={13} color={COLORS.amber} /> : <User size={13} color={COLORS.textMuted} />}
-                <div style={{ fontSize: 12, color: COLORS.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {profile.full_name || session.user.email}
+              <div
+                className="hldt-row" data-clickable="true"
+                onClick={() => setShowProfile(true)}
+                style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "4px", borderRadius: 10, marginBottom: 10 }}
+              >
+                <Avatar label={(profile.full_name || session.user.email)?.[0]?.toUpperCase() || "?"} color={hashColor(session.user.id)} size={38} photoUrl={profile.avatar_url} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profile.full_name || session.user.email}</div>
+                  <Badge tone={isAdmin ? "amber" : "gray"}>{profile.role}</Badge>
                 </div>
               </div>
-              <Badge tone={isAdmin ? "amber" : "gray"}>{profile.role}</Badge>
-              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-                <Btn small tone="ghost" onClick={() => setShowProfile(true)}><User size={12} /> My Profile</Btn>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <PushNotificationToggle session={session} />
                 {isAdmin && <Btn small tone="ghost" onClick={() => { exportAllData(); notify("Backup downloaded"); }}><Download size={12} /> Export data</Btn>}
                 <Btn small tone="ghost" onClick={() => supabase.auth.signOut()}><LogOut size={12} /> Sign out</Btn>
@@ -1312,12 +1323,12 @@ function GlobalSearch({ data, goToTab, isOperationsUser }) {
       >
         <SearchIcon size={14} />
       </button>
-      {open && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 2100 }} onClick={closeSearch}>
+      {open && createPortal(
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 2100, display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: isMobile ? 50 : 60 }} onClick={closeSearch}>
           <div
             className="hldt-modal hldt-glass"
             onClick={(e) => e.stopPropagation()}
-            style={{ position: "absolute", top: isMobile ? 50 : 60, left: "50%", transform: "translateX(-50%)", width: 480, maxWidth: "92vw", maxHeight: "70vh", overflowY: "auto", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 16, padding: 16, boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}
+            style={{ width: 480, maxWidth: "calc(100vw - 32px)", maxHeight: "70vh", overflowY: "auto", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 16, padding: 16, boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}
           >
             <input
               ref={inputRef}
@@ -1375,7 +1386,8 @@ function GlobalSearch({ data, goToTab, isOperationsUser }) {
               </>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -1572,39 +1584,43 @@ function NotificationBell({ notifications, readIds, onRead, onNavigate }) {
           </span>
         )}
       </button>
-      {open && (
-        <div
-          className="hldt-modal hldt-glass"
-          style={{ position: "absolute", top: 40, right: 0, width: isMobile ? "calc(100vw - 32px)" : 320, maxWidth: 320, maxHeight: 400, overflowY: "auto", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 14, padding: 8 }}
-        >
-          <div style={{ fontSize: 12, fontWeight: 500, color: COLORS.textSecondary, padding: "6px 8px" }}>Notifications</div>
-          {notifications.length === 0 ? (
-            <div style={{ padding: "16px 8px", fontSize: 12, color: COLORS.textMuted }}>Nothing yet.</div>
-          ) : (
-            notifications.slice(0, 20).map((n) => {
-              const isUnread = !readIds.includes(n.id);
-              return (
-                <div
-                  key={n.id}
-                  onClick={() => handleClick(n)}
-                  style={{
-                    padding: "8px 8px", borderRadius: 6, cursor: "pointer", marginBottom: 2,
-                    background: isUnread ? COLORS.surface2 : "transparent",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
-                    {isUnread && <span style={{ width: 6, height: 6, borderRadius: 999, background: COLORS.amber, marginTop: 5, flexShrink: 0 }} />}
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 12, color: COLORS.textPrimary, fontWeight: isUnread ? 500 : 400 }}>{n.title}</div>
-                      {n.body && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 2 }}>{n.body}</div>}
-                      <div style={{ fontSize: 10, color: COLORS.textMuted, marginTop: 3, fontFamily: "'JetBrains Mono', monospace" }}>{timeAgo(n.createdAt)}</div>
+      {open && createPortal(
+        <div style={{ position: "fixed", inset: 0, zIndex: 2100 }} onClick={() => setOpen(false)}>
+          <div
+            className="hldt-modal hldt-glass"
+            onClick={(e) => e.stopPropagation()}
+            style={{ position: "fixed", top: isMobile ? 46 : 58, right: isMobile ? 8 : 16, width: isMobile ? "calc(100vw - 16px)" : 320, maxWidth: 320, maxHeight: 400, overflowY: "auto", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 14, padding: 8, boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 500, color: COLORS.textSecondary, padding: "6px 8px" }}>Notifications</div>
+            {notifications.length === 0 ? (
+              <div style={{ padding: "16px 8px", fontSize: 12, color: COLORS.textMuted }}>Nothing yet.</div>
+            ) : (
+              notifications.slice(0, 20).map((n) => {
+                const isUnread = !readIds.includes(n.id);
+                return (
+                  <div
+                    key={n.id}
+                    onClick={() => handleClick(n)}
+                    style={{
+                      padding: "8px 8px", borderRadius: 6, cursor: "pointer", marginBottom: 2,
+                      background: isUnread ? COLORS.surface2 : "transparent",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+                      {isUnread && <span style={{ width: 6, height: 6, borderRadius: 999, background: COLORS.amber, marginTop: 5, flexShrink: 0 }} />}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 12, color: COLORS.textPrimary, fontWeight: isUnread ? 500 : 400 }}>{n.title}</div>
+                        {n.body && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 2 }}>{n.body}</div>}
+                        <div style={{ fontSize: 10, color: COLORS.textMuted, marginTop: 3, fontFamily: "'JetBrains Mono', monospace" }}>{timeAgo(n.createdAt)}</div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })
-          )}
-        </div>
+                );
+              })
+            )}
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

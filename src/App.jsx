@@ -4716,6 +4716,12 @@ function SpecialEventsTab({ data, canManageEvents, myUnit, session, notify }) {
     load();
   }
 
+  async function changeRoleDate(roleId, newDate) {
+    const { error } = await supabase.rpc("reassign_event_role_date", { p_role_id: roleId, p_new_date: newDate || null });
+    if (error) { notify?.(error.message, "error"); return; }
+    load();
+  }
+
   async function removeRole(roleId) {
     await supabase.from("special_event_roles").delete().eq("id", roleId);
     load();
@@ -4774,7 +4780,14 @@ function SpecialEventsTab({ data, canManageEvents, myUnit, session, notify }) {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13 }}>{r.role_name}</div>
                   {ev.event_dates.length > 1 && (
-                    <div style={{ fontSize: 10, color: COLORS.textMuted }}>{r.event_date ? formatDateShort(r.event_date) : "All dates"}</div>
+                    canManageRolesThis && (!r.event_date || r.event_date >= today) ? (
+                      <select style={{ ...inputStyle, width: "auto", fontSize: 10, padding: "2px 6px", marginTop: 2 }} value={r.event_date || ""} onChange={(e) => changeRoleDate(r.id, e.target.value)}>
+                        <option value="">All dates</option>
+                        {[...ev.event_dates].sort((a, b) => a.date.localeCompare(b.date)).map((d) => <option key={d.date} value={d.date}>{formatDateShort(d.date)}</option>)}
+                      </select>
+                    ) : (
+                      <div style={{ fontSize: 10, color: COLORS.textMuted }}>{r.event_date ? formatDateShort(r.event_date) : "All dates"}</div>
+                    )
                   )}
                 </div>
                 {canManageRolesThis ? (

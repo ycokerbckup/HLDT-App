@@ -4737,6 +4737,30 @@ function SpecialEventsTab({ data, canManageEvents, myUnit, session, notify }) {
     .filter((e) => e.event_dates.every((d) => d.date < today))
     .sort((a, b) => (b.event_dates.map((d) => d.date).sort().slice(-1)[0]).localeCompare(a.event_dates.map((d) => d.date).sort().slice(-1)[0]));
 
+  function exportEventRoster(ev) {
+    const eventRoles = roles.filter((r) => r.event_id === ev.id);
+    const rows = ["Event,Date,Time,Location,Role,Assigned To"];
+    if (eventRoles.length === 0) {
+      rows.push([ev.title, formatEventDates(ev.event_dates), "", ev.location || "", "", ""].map((v) => `"${v}"`).join(","));
+    } else {
+      eventRoles.forEach((r) => {
+        const assignee = data.members.find((m) => m.id === r.assigned_member_id);
+        const occurrence = r.event_date ? ev.event_dates.find((d) => d.date === r.event_date) : null;
+        const dateLabel = r.event_date ? formatDateShort(r.event_date) : "All dates";
+        const timeLabel = occurrence?.time ? formatTime12h(occurrence.time) : "";
+        rows.push([ev.title, dateLabel, timeLabel, ev.location || "", r.role_name, assignee?.name || "Unassigned"]
+          .map((v) => `"${String(v).replace(/"/g, "'")}"`).join(","));
+      });
+    }
+    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${ev.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-roster-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   function renderEvent(ev) {
     const eventRoles = roles.filter((r) => r.event_id === ev.id);
     const countdown = countdownLabel(ev.event_dates);
@@ -4763,6 +4787,7 @@ function SpecialEventsTab({ data, canManageEvents, myUnit, session, notify }) {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Badge tone={countdown.tone}>{countdown.text}</Badge>
+            <Download size={13} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => exportEventRoster(ev)} />
             {canEditDetails && <Pencil size={13} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => startEdit(ev)} />}
             {canDeleteThis && <Trash2 size={14} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => deleteEvent(ev.id)} />}
           </div>

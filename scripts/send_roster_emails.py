@@ -14,6 +14,7 @@ right tab (and, for DMs, the right conversation), built from the APP_URL
 environment variable / repo variable. Push notifications carry the same
 destination as JSON data the service worker reads on click.
 """
+import html
 import json
 import os
 import urllib.parse
@@ -180,8 +181,9 @@ def main():
                 to = [email_by_id.get(target)] if target else all_emails
                 to = [t for t in to if t]
                 url = build_url(n.get("link_tab"), n.get("dm_with_profile_id"), HIGHLIGHT_BY_TYPE.get(n["type"]))
-                html = f"<p>{n.get('body') or ''}</p>" + cta_button(url)
-                sent = send_email(to, n["title"], html)
+                email_html = f"<p>{html.escape(n.get('body') or '')}</p>" + cta_button(url)
+                safe_title = n["title"].replace("\r", " ").replace("\n", " ")
+                sent = send_email(to, safe_title, email_html)
                 patch["emailed"] = True
                 print(("sent email" if sent else "skipped/failed email") + ":", n["title"], "->", len(to), "recipients")
 

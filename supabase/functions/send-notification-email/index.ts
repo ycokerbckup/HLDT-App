@@ -32,6 +32,19 @@ function ctaButton(linkTab?: string, dmWith?: string, highlightId?: string): str
   return `<p><a href="${url}" style="display:inline-block;padding:10px 16px;background:#E8A33D;color:#14171C;text-decoration:none;border-radius:6px;font-weight:600;">Open in app</a></p>`;
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function sanitizeSubject(s: string): string {
+  return s.replace(/[\r\n]/g, " ");
+}
+
 const THREAD_ROOT_ID = `<hldt-notifications-root@${(GMAIL_ADDRESS || "display-team-ops").split("@").pop()}>`;
 
 async function sendEmail(to: string[], subject: string, html: string) {
@@ -124,9 +137,9 @@ serve(async (req) => {
     console.log("Final recipient count:", to.length);
 
     if (to.length > 0) {
-      const html = `<p>${record.body || ""}</p>` + ctaButton(record.link_tab, record.dm_with_profile_id, HIGHLIGHT_BY_TYPE[record.type]);
+      const html = `<p>${escapeHtml(record.body || "")}</p>` + ctaButton(record.link_tab, record.dm_with_profile_id, HIGHLIGHT_BY_TYPE[record.type]);
       try {
-        await sendEmail(to, record.title, html);
+        await sendEmail(to, sanitizeSubject(record.title), html);
         console.log("Email sent successfully to", to.length, "recipients");
       } catch (sendErr) {
         console.log("sendEmail threw:", String(sendErr));

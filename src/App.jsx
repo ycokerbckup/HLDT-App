@@ -174,7 +174,7 @@ function todayDDMM() {
 // Returns 'birthday' | 'graduation' | 'milestone' | null for a member, today.
 function getCelebrationForMember(member, onboardingList) {
   if (!member) return null;
-  if (member.dob === todayDDMM()) return "birthday";
+  if (member.dob === todayDDMM() || member.isBirthdayToday) return "birthday";
   const todayStr = todayStringWAT();
   const gradToday = (onboardingList || []).some((o) => {
     if (o.memberId !== member.id || o.status !== "Graduated" || !o.graduatedAt) return false;
@@ -787,6 +787,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
           homeAddress: source.home_address, sex: source.sex, dob: source.dob, occupation: source.occupation, kymCompletedAt: source.kym_completed_at,
           unavailable: m.unavailable, suspended: m.suspended,
           avatarUrl: avatarByProfileId[m.profile_id] || null,
+          isBirthdayToday: m.is_birthday_today === true,
         };
       }),
       onboarding: (onboardingRes.data || []).map((o) => ({

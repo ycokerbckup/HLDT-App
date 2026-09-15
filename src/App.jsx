@@ -5359,8 +5359,26 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef 
     URL.revokeObjectURL(url);
   }
 
+  const myOwnMember = data.members.find((m) => m.id === myMemberId);
+  const myCurrentMonth = currentMonthStringWAT();
+  const myOwnDue = myOwnMember ? getDue(myOwnMember, myCurrentMonth, data.duesPayments) : null;
+  const myOwnCanPay = myOwnMember && myOwnDue && myOwnDue.status !== "paid" && !duesExempt(myOwnMember);
+
   return (
     <div>
+      {myOwnMember && !duesExempt(myOwnMember) && (
+        <Panel style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 13, flex: 1 }}>Your dues for {myCurrentMonth} · {currency(rate(myOwnMember))}</span>
+            <Badge tone={myOwnDue.status === "paid" ? "green" : myOwnDue.status === "owing" ? "red" : "gray"}>{myOwnDue.status === "unset" ? "Not set" : myOwnDue.status}{myOwnDue.viaOnline ? " ✓" : ""}</Badge>
+            {myOwnCanPay && (
+              <Btn small tone="amber" disabled={payingMonth === myCurrentMonth} onClick={() => payNow(myCurrentMonth)}>
+                {payingMonth === myCurrentMonth ? "Redirecting..." : "Pay now"}
+              </Btn>
+            )}
+          </div>
+        </Panel>
+      )}
       <SectionHeader
         title="Dues"
         subtitle="Members ₦3,500 · Leaders ₦5,500 expected. Click a cell to record what was actually paid."

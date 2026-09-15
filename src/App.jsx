@@ -118,7 +118,12 @@ function rate(m) {
 
 // Reads a due entry for a given month, tolerant of the old string-only
 // format ("paid") as well as the current { status, amount } object shape.
-function getDue(m, month) {
+// A successful online (Paystack) payment always takes precedence over
+// whatever's in the manual entry — it's the tamper-proof source of truth
+// when one exists.
+function getDue(m, month, duesPayments) {
+  const onlinePayment = (duesPayments || []).find((p) => p.memberId === m.id && p.month === month && p.status === "success");
+  if (onlinePayment) return { status: "paid", amount: onlinePayment.amountKobo / 100, viaOnline: true };
   const raw = (m.dues || {})[month];
   if (!raw) return { status: "unset", amount: 0 };
   if (typeof raw === "string") return { status: raw, amount: raw === "paid" ? null : 0 };
@@ -719,7 +724,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
     const params = new URLSearchParams(window.location.search);
     return params.get("tab") || "dashboard";
   });
-  const [data, setData] = useState({ members: [], onboarding: [], tickets: [], feedback: [], announcements: [], notifications: [], readIds: [] });
+  const [data, setData] = useState({ members: [], onboarding: [], tickets: [], feedback: [], announcements: [], notifications: [], readIds: [], duesPayments: [] });
   const [loaded, setLoaded] = useState(false);
   const isAdmin = profile.role === "admin";
   const { toasts, notify } = useToasts();
@@ -739,6 +744,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
     const { data: avatarRows } = await supabase.from("profiles").select("id, avatar_url");
     const avatarByProfileId = {};
     (avatarRows || []).forEach((p) => { if (p.avatar_url) avatarByProfileId[p.id] = p.avatar_url; });
+    const { data: duesPaymentRows } = await supabase.from("dues_payments").select("*").order("created_at", { ascending: false });
 
     let ownMemberRow = null;
     if (!isAdmin) {
@@ -777,6 +783,10 @@ function Dashboard_Shell({ session, profile, setProfile }) {
     });
 
     setData({
+      duesPayments: (duesPaymentRows || []).map((p) => ({
+        id: p.id, memberId: p.member_id, month: p.month, amountKobo: p.amount_kobo,
+        reference: p.reference, status: p.status, channel: p.channel, paidAt: p.paid_at, createdAt: p.created_at,
+      })),
       members: (membersRes.data || []).map((m) => {
         const isSelf = ownMemberRow && m.id === ownMemberRow.id;
         const source = isSelf ? ownMemberRow : m;
@@ -2770,14 +2780,14 @@ function OwingDuesModal({ data, onClose }) {
     ? data.members
         .filter((m) => !duesExempt(m))
         .map((m) => {
-          const owingMonths = Object.keys(m.dues || {}).filter((mo) => getDue(m, mo).status === "owing");
-          const totalOwed = owingMonths.reduce((sum, mo) => sum + Math.max(0, rate(m) - (getDue(m, mo).amount || 0)), 0);
+          const owingMonths = Object.keys(m.dues || {}).filter((mo) => getDue(m, mo, data.duesPayments).status === "owing");
+          const totalOwed = owingMonths.reduce((sum, mo) => sum + Math.max(0, rate(m) - (getDue(m, mo, data.duesPayments).amount || 0)), 0);
           return { m, owingMonths, totalOwed };
         })
         .filter((x) => x.owingMonths.length > 0)
     : data.members
         .filter((m) => !duesExempt(m))
-        .map((m) => ({ m, due: getDue(m, month) }))
+        .map((m) => ({ m, due: getDue(m, month, data.duesPayments) }))
         .filter((x) => x.due.status === "owing")
         .map((x) => ({ m: x.m, owingMonths: [month], totalOwed: Math.max(0, rate(x.m) - (x.due.amount || 0)) }));
 
@@ -2838,7 +2848,7 @@ function WalletPanel({ data, isAdmin }) {
     if (mo === "all") {
       data.members.forEach((m) => {
         Object.keys(m.dues || {}).forEach((recordedMonth) => {
-          const due = getDue(m, recordedMonth);
+          const due = getDue(m, recordedMonth, data.duesPayments);
           if (due.status !== "free" && !duesExempt(m)) expected += rate(m);
           collected += due.amount || 0;
         });
@@ -2915,7 +2925,7 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWel
   const openTickets = data.tickets.filter((t) => t.status !== "Resolved");
   const inTraining = data.onboarding.filter((o) => o.status !== "Graduated");
   const readyToGraduate = data.onboarding.filter((o) => o.status === "Independently ready" || o.status === "Ready");
-  const owingCount = data.members.filter((m) => !duesExempt(m) && Object.keys(m.dues || {}).some((mo) => getDue(m, mo).status === "owing")).length;
+  const owingCount = data.members.filter((m) => !duesExempt(m) && Object.keys(m.dues || {}).some((mo) => getDue(m, mo, data.duesPayments).status === "owing")).length;
 
   const todayKey = (() => {
     const d = new Date();
@@ -5242,6 +5252,37 @@ function DueEditModal({ member, month, onClose, onSaved, notify }) {
 
 function DuesTab({ data, isAdmin, reload, myMemberId, notify }) {
   const [monthPage, setMonthPage] = useState(0);
+  const [payingMonth, setPayingMonth] = useState(null);
+  const [confirmingRef, setConfirmingRef] = useState(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("payment_ref");
+    if (!ref) return;
+    setConfirmingRef(ref);
+    let attempts = 0;
+    async function poll() {
+      attempts += 1;
+      const { data: result, error } = await supabase.functions.invoke("verify-dues-payment", { body: { reference: ref } });
+      if (error) { setConfirmingRef(null); notify?.("Couldn't confirm payment status — it'll update once the bank confirms.", "error"); return; }
+      if (result.status === "success") { setConfirmingRef(null); notify?.("Payment confirmed!"); reload(); }
+      else if (result.status === "failed" || result.status === "abandoned") { setConfirmingRef(null); notify?.("Payment wasn't completed.", "error"); }
+      else if (attempts < 6) { setTimeout(poll, 2000); }
+      else { setConfirmingRef(null); notify?.("Still processing — check back shortly, it'll update automatically once confirmed."); }
+    }
+    poll();
+    window.history.replaceState({}, "", window.location.pathname + "?tab=dues");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function payNow(month) {
+    setPayingMonth(month);
+    const { data: result, error } = await supabase.functions.invoke("initialize-dues-payment", { body: { month } });
+    setPayingMonth(null);
+    if (error || result?.error) { notify?.(result?.error || error.message, "error"); return; }
+    window.location.href = result.authorization_url;
+  }
+
   const months = useMemo(() => {
     const out = [];
     for (let i = -2 + monthPage * 5; i <= 2 + monthPage * 5; i++) {
@@ -5266,6 +5307,7 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify }) {
     return (
       <div>
         <SectionHeader title="Dues" subtitle="Your dues record" />
+        {confirmingRef && <Panel style={{ marginBottom: 12 }}><div style={{ fontSize: 13, color: COLORS.textSecondary }}><RefreshCw size={13} className="hldt-spin" style={{ marginRight: 6, verticalAlign: "middle" }} />Confirming your payment...</div></Panel>}
         {pageNav}
         <Panel>
           {!mine ? (
@@ -5274,13 +5316,19 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify }) {
             <>
               <div style={{ fontSize: 13, marginBottom: 10, color: COLORS.textSecondary }}>{mine.name} · {currency(rate(mine))}/month</div>
               {months.map((mo) => {
-                const due = getDue(mine, mo);
+                const due = getDue(mine, mo, data.duesPayments);
                 const tone = due.status === "paid" ? "green" : due.status === "owing" ? "red" : due.status === "free" ? "amber" : "gray";
+                const canPay = due.status !== "paid" && !duesExempt(mine);
                 return (
                   <RowLine key={mo}>
                     <span style={{ flex: 1 }}>{mo}</span>
                     {due.amount ? <span style={{ fontSize: 11, color: COLORS.textMuted, marginRight: 8 }}>{currency(due.amount)}</span> : null}
-                    <Badge tone={tone}>{due.status === "unset" ? "Not set" : due.status}</Badge>
+                    <Badge tone={tone}>{due.status === "unset" ? "Not set" : due.status}{due.viaOnline ? " ✓" : ""}</Badge>
+                    {canPay && (
+                      <Btn small tone="amber" style={{ marginLeft: 8 }} disabled={payingMonth === mo} onClick={() => payNow(mo)}>
+                        {payingMonth === mo ? "Redirecting..." : "Pay now"}
+                      </Btn>
+                    )}
                   </RowLine>
                 );
               })}
@@ -5291,9 +5339,50 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify }) {
     );
   }
 
+  const [showLedger, setShowLedger] = useState(false);
+
+  function exportLedgerCsv() {
+    const rows = ["Member,Month,Amount,Reference,Status,Channel,Paid At"];
+    data.duesPayments.forEach((p) => {
+      const member = data.members.find((m) => m.id === p.memberId);
+      rows.push([member?.name || "Unknown", p.month, currency(p.amountKobo / 100), p.reference, p.status, p.channel || "", p.paidAt || ""]
+        .map((v) => `"${String(v).replace(/"/g, "'")}"`).join(","));
+    });
+    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `dues-payment-ledger-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div>
-      <SectionHeader title="Dues" subtitle="Members ₦3,500 · Leaders ₦5,500 expected. Click a cell to record what was actually paid." />
+      <SectionHeader
+        title="Dues"
+        subtitle="Members ₦3,500 · Leaders ₦5,500 expected. Click a cell to record what was actually paid."
+        right={<Btn small tone="ghost" onClick={() => setShowLedger(!showLedger)}>{showLedger ? "Hide" : "Show"} payment ledger</Btn>}
+      />
+      {showLedger && (
+        <Panel title="Online payment ledger" style={{ marginBottom: 16 }} right={<Btn small tone="ghost" onClick={exportLedgerCsv}><Download size={12} /> Export CSV</Btn>}>
+          {data.duesPayments.length === 0 ? (
+            <EmptyRow text="No online payments yet." />
+          ) : (
+            data.duesPayments.map((p) => {
+              const member = data.members.find((m) => m.id === p.memberId);
+              const tone = p.status === "success" ? "green" : p.status === "pending" ? "amber" : "red";
+              return (
+                <RowLine key={p.id}>
+                  <span style={{ flex: 1 }}>{member?.name || "Unknown"} · {p.month}</span>
+                  <span style={{ fontSize: 11, color: COLORS.textMuted, marginRight: 8 }}>{currency(p.amountKobo / 100)}</span>
+                  <Badge tone={tone}>{p.status}</Badge>
+                </RowLine>
+              );
+            })
+          )}
+        </Panel>
+      )}
       {pageNav}
       <Panel>
         <div style={{ overflowX: "auto" }}>
@@ -5304,11 +5393,11 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify }) {
             <div key={m.id} style={{ display: "grid", gridTemplateColumns: `1.4fr repeat(${months.length}, 0.9fr)`, alignItems: "center", padding: "8px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 12 }}>
               <div>{m.name} <span style={{ color: COLORS.textMuted }}>· {duesExempt(m) ? (m.unavailable ? "not expected (unavailable)" : "no dues yet (trainee)") : currency(rate(m))}</span></div>
               {months.map((mo) => {
-                const due = getDue(m, mo);
+                const due = getDue(m, mo, data.duesPayments);
                 const tone = due.status === "paid" ? "green" : due.status === "owing" ? "red" : due.status === "free" ? "amber" : "gray";
                 return (
-                  <div key={mo} style={{ textAlign: "center", cursor: "pointer" }} onClick={() => setEditing({ member: m, month: mo })}>
-                    <Badge tone={tone}>{due.status === "unset" ? (duesExempt(m) ? (m.unavailable ? "Unavailable" : "Trainee") : "—") : due.amount ? currency(due.amount) : due.status}</Badge>
+                  <div key={mo} style={{ textAlign: "center", cursor: due.viaOnline ? "default" : "pointer" }} onClick={() => !due.viaOnline && setEditing({ member: m, month: mo })}>
+                    <Badge tone={tone}>{due.status === "unset" ? (duesExempt(m) ? (m.unavailable ? "Unavailable" : "Trainee") : "—") : due.amount ? currency(due.amount) : due.status}{due.viaOnline ? " ✓" : ""}</Badge>
                   </div>
                 );
               })}

@@ -1445,7 +1445,7 @@ function WithdrawalPhoneSection({ session, notify }) {
     const { error } = await supabase.rpc("confirm_phone_change", { p_verification_id: verificationId, p_code: code.trim() });
     setBusy(false);
     if (error) { notify?.(error.message, "error"); return; }
-    notify?.("Withdrawal OTP phone number updated");
+    notify?.("Withdrawal OTP email updated");
     setNewPhone("");
     setVerificationId(null);
     setCode("");
@@ -1453,10 +1453,10 @@ function WithdrawalPhoneSection({ session, notify }) {
 
   return (
     <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${COLORS.border}` }}>
-      <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 6 }}>Withdrawal OTP phone number</div>
+      <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 6 }}>Withdrawal OTP email</div>
       {!verificationId ? (
         <div style={{ display: "flex", gap: 6 }}>
-          <input style={{ ...inputStyle, flex: 1 }} placeholder="New phone number" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} />
+          <input style={{ ...inputStyle, flex: 1 }} placeholder="New OTP email address" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} />
           <Btn small tone="ghost" disabled={busy} onClick={requestCode}>{busy ? "Sending..." : "Request code"}</Btn>
         </div>
       ) : (
@@ -2876,6 +2876,32 @@ function OwingDuesModal({ data, onClose }) {
   );
 }
 
+function SetPinModal({ onClose, notify }) {
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    if (newPin.length < 4) { notify?.("PIN must be at least 4 digits", "error"); return; }
+    if (newPin !== confirmPin) { notify?.("PINs don't match", "error"); return; }
+    setBusy(true);
+    const { error } = await supabase.rpc("set_withdrawal_pin", { p_new_pin: newPin });
+    setBusy(false);
+    if (error) { notify?.(error.message, "error"); return; }
+    notify?.("Withdrawal PIN updated");
+    onClose();
+  }
+
+  return (
+    <Modal title="Set withdrawal PIN" onClose={onClose} width={340}>
+      <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12 }}>This PIN, along with an emailed OTP, is required to confirm any withdrawal. Choose something only Welfare/Operations leadership knows.</div>
+      <Field label="New PIN"><input type="password" style={inputStyle} value={newPin} onChange={(e) => setNewPin(e.target.value)} /></Field>
+      <Field label="Confirm PIN"><input type="password" style={inputStyle} value={confirmPin} onChange={(e) => setConfirmPin(e.target.value)} /></Field>
+      <Btn tone="amber" disabled={busy} onClick={save}>{busy ? "Saving..." : "Save PIN"}</Btn>
+    </Modal>
+  );
+}
+
 function WithdrawModal({ onClose, notify, reloadBalance }) {
   const [step, setStep] = useState("amount"); // amount | otp
   const [amount, setAmount] = useState("");
@@ -2893,7 +2919,7 @@ function WithdrawModal({ onClose, notify, reloadBalance }) {
     if (error) { notify?.(error.message, "error"); setBusy(false); return; }
     const { error: sendErr } = await supabase.functions.invoke("send-withdrawal-otp", { body: { request_id: newId } });
     setBusy(false);
-    if (sendErr) { notify?.("Withdrawal started, but the OTP couldn't be sent — check SMS provider setup.", "error"); }
+    if (sendErr) { notify?.("Withdrawal started, but the OTP couldn't be emailed — check the OTP email is configured.", "error"); }
     setRequestId(newId);
     setStep("otp");
   }
@@ -2919,7 +2945,7 @@ function WithdrawModal({ onClose, notify, reloadBalance }) {
         </>
       ) : (
         <>
-          <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12 }}>An OTP has been sent by SMS. Enter it along with the withdrawal PIN to complete this withdrawal.</div>
+          <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12 }}>An OTP has been emailed. Enter it along with the withdrawal PIN to complete this withdrawal.</div>
           <Field label="Withdrawal PIN"><input type="password" style={inputStyle} value={pin} onChange={(e) => setPin(e.target.value)} /></Field>
           <Field label="OTP"><input style={inputStyle} value={otp} onChange={(e) => setOtp(e.target.value)} /></Field>
           <Btn tone="amber" disabled={busy} onClick={submitConfirm}>{busy ? "Confirming..." : "Confirm withdrawal"}</Btn>
@@ -2933,6 +2959,7 @@ function WalletPanel({ data, isAdmin, myUnit, notify }) {
   const [month, setMonth] = useState(currentMonthStringWAT());
   const [totalBalance, setTotalBalance] = useState(0);
   const [showWithdraw, setShowWithdraw] = useState(false);
+  const [showSetPin, setShowSetPin] = useState(false);
 
   async function loadBalance() {
     const { data: row } = await supabase.from("wallet_balance").select("*").eq("id", 1).maybeSingle();
@@ -2992,6 +3019,7 @@ function WalletPanel({ data, isAdmin, myUnit, notify }) {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 22, color: COLORS.textPrimary }}>{currency(totalBalance)}</div>
             {canWithdraw && <Btn small tone="ghost" onClick={() => setShowWithdraw(true)}>Withdraw</Btn>}
+            {canWithdraw && <Btn small tone="ghost" onClick={() => setShowSetPin(true)}>Set PIN</Btn>}
           </div>
         </div>
         <Metric label={month === "all" ? "Expected (all time)" : "Expected balance"} value={current.expected} isCurrency tone="amber" />
@@ -3015,6 +3043,7 @@ function WalletPanel({ data, isAdmin, myUnit, notify }) {
       </div>
       {month !== "all" && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 8 }}>Chart always shows the last 6 months, regardless of the filter above.</div>}
       {showWithdraw && <WithdrawModal onClose={() => setShowWithdraw(false)} notify={notify} reloadBalance={loadBalance} />}
+      {showSetPin && <SetPinModal onClose={() => setShowSetPin(false)} notify={notify} />}
     </Panel>
   );
 }

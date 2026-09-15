@@ -48,9 +48,9 @@ serve(async (req) => {
       await client.send({
         from: `Display Team Ops <${GMAIL_ADDRESS}>`,
         to: profile_email,
-        subject: "Confirm your withdrawal OTP phone number change",
-        html: `<p>Your verification code is <strong>${code}</strong>.</p><p>This confirms changing the withdrawal OTP phone number to ${new_phone}. Valid for 10 minutes. If you didn't request this, ignore this email.</p>`,
-        content: `Your verification code is ${code}. This confirms changing the withdrawal OTP phone number to ${new_phone}. Valid for 10 minutes.`,
+        subject: "Confirm your withdrawal OTP email change",
+        html: `<p>Your verification code is <strong>${code}</strong>.</p><p>This confirms changing the withdrawal OTP recipient email to ${new_phone}. Valid for 10 minutes. If you didn't request this, ignore this email.</p>`,
+        content: `Your verification code is ${code}. This confirms changing the withdrawal OTP recipient email to ${new_phone}. Valid for 10 minutes.`,
       });
     } finally {
       await client.close();

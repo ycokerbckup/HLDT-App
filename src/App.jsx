@@ -5254,6 +5254,47 @@ function DueEditModal({ member, month, onClose, onSaved, notify }) {
   );
 }
 
+// Shared between the personal dues view and an admin's own-dues panel.
+// Lets someone select any combination of unpaid months (past-owed or
+// future) and pay for all of them in one transaction — the total is
+// always computed from the actual selection, never a typed-in amount,
+// so there's nothing to guess or split.
+function MultiMonthDuesPay({ member, months, duesPayments, onPay, paying }) {
+  const [selected, setSelected] = useState([]);
+
+  const payableMonths = months.filter((mo) => getDue(member, mo, duesPayments).status !== "paid");
+  const total = selected.length * rate(member);
+
+  function toggle(mo) {
+    setSelected((prev) => prev.includes(mo) ? prev.filter((m) => m !== mo) : [...prev, mo]);
+  }
+
+  if (payableMonths.length === 0) return null;
+
+  return (
+    <div>
+      {payableMonths.map((mo) => {
+        const due = getDue(member, mo, duesPayments);
+        return (
+          <label key={mo} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", cursor: "pointer" }}>
+            <input type="checkbox" checked={selected.includes(mo)} onChange={() => toggle(mo)} />
+            <span style={{ flex: 1, fontSize: 13 }}>{mo}</span>
+            <Badge tone={due.status === "owing" ? "red" : "gray"}>{due.status === "unset" ? "Not set" : due.status}</Badge>
+          </label>
+        );
+      })}
+      {selected.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${COLORS.border}` }}>
+          <span style={{ flex: 1, fontSize: 13, color: COLORS.textSecondary }}>{selected.length} month{selected.length > 1 ? "s" : ""} selected · {currency(total)}</span>
+          <Btn tone="amber" disabled={paying} onClick={() => onPay(selected)}>
+            {paying ? "Redirecting..." : `Pay ${currency(total)}`}
+          </Btn>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef }) {
   const [monthPage, setMonthPage] = useState(0);
   const [payingMonth, setPayingMonth] = useState(null);
@@ -5277,10 +5318,10 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingPaymentRef]);
 
-  async function payNow(month) {
-    setPayingMonth(month);
-    const { data: result, error } = await supabase.functions.invoke("initialize-dues-payment", { body: { month } });
-    setPayingMonth(null);
+  async function payNow(months) {
+    setPayingMonth(true);
+    const { data: result, error } = await supabase.functions.invoke("initialize-dues-payment", { body: { months } });
+    setPayingMonth(false);
     if (error || result?.error) { notify?.(result?.error || error.message, "error"); return; }
     window.location.href = result.authorization_url;
   }
@@ -5320,20 +5361,19 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef 
               {months.map((mo) => {
                 const due = getDue(mine, mo, data.duesPayments);
                 const tone = due.status === "paid" ? "green" : due.status === "owing" ? "red" : due.status === "free" ? "amber" : "gray";
-                const canPay = due.status !== "paid" && !duesExempt(mine);
                 return (
                   <RowLine key={mo}>
                     <span style={{ flex: 1 }}>{mo}</span>
                     {due.amount ? <span style={{ fontSize: 11, color: COLORS.textMuted, marginRight: 8 }}>{currency(due.amount)}</span> : null}
                     <Badge tone={tone}>{due.status === "unset" ? "Not set" : due.status}{due.viaOnline ? " ✓" : ""}</Badge>
-                    {canPay && (
-                      <Btn small tone="amber" style={{ marginLeft: 8 }} disabled={payingMonth === mo} onClick={() => payNow(mo)}>
-                        {payingMonth === mo ? "Redirecting..." : "Pay now"}
-                      </Btn>
-                    )}
                   </RowLine>
                 );
               })}
+              {!duesExempt(mine) && (
+                <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${COLORS.border}` }}>
+                  <MultiMonthDuesPay member={mine} months={months} duesPayments={data.duesPayments} onPay={payNow} paying={payingMonth} />
+                </div>
+              )}
             </>
           )}
         </Panel>
@@ -5360,23 +5400,12 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef 
   }
 
   const myOwnMember = data.members.find((m) => m.id === myMemberId);
-  const myCurrentMonth = currentMonthStringWAT();
-  const myOwnDue = myOwnMember ? getDue(myOwnMember, myCurrentMonth, data.duesPayments) : null;
-  const myOwnCanPay = myOwnMember && myOwnDue && myOwnDue.status !== "paid" && !duesExempt(myOwnMember);
 
   return (
     <div>
       {myOwnMember && !duesExempt(myOwnMember) && (
-        <Panel style={{ marginBottom: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 13, flex: 1 }}>Your dues for {myCurrentMonth} · {currency(rate(myOwnMember))}</span>
-            <Badge tone={myOwnDue.status === "paid" ? "green" : myOwnDue.status === "owing" ? "red" : "gray"}>{myOwnDue.status === "unset" ? "Not set" : myOwnDue.status}{myOwnDue.viaOnline ? " ✓" : ""}</Badge>
-            {myOwnCanPay && (
-              <Btn small tone="amber" disabled={payingMonth === myCurrentMonth} onClick={() => payNow(myCurrentMonth)}>
-                {payingMonth === myCurrentMonth ? "Redirecting..." : "Pay now"}
-              </Btn>
-            )}
-          </div>
+        <Panel title="Your own dues" style={{ marginBottom: 16 }}>
+          <MultiMonthDuesPay member={myOwnMember} months={months} duesPayments={data.duesPayments} onPay={payNow} paying={payingMonth} />
         </Panel>
       )}
       <SectionHeader

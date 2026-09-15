@@ -1,7 +1,8 @@
-// Starts a dues payment. The amount is ALWAYS computed here from the
-// caller's actual tier (Leader/HOD = ₦5,500, everyone else ₦3,500) —
-// never taken from the client — so there is no path where a modified
-// request could pay less than the real amount due.
+// Starts a dues payment covering one or more months. The amount for
+// each month is ALWAYS computed here from the caller's actual tier —
+// never taken from the client — and the total charged is always the
+// exact sum of the selected months, never a guessed or arbitrary
+// figure. One Paystack reference, one row per month, all linked.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -33,21 +34,22 @@ serve(async (req) => {
     const { data: { user } } = await userClient.auth.getUser();
     if (!user) return new Response(JSON.stringify({ error: "Not authenticated." }), { status: 401, headers: CORS_HEADERS });
 
-    const { month } = await req.json();
-    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
-      return new Response(JSON.stringify({ error: "Invalid month." }), { status: 400, headers: CORS_HEADERS });
+    const { months } = await req.json();
+    if (!Array.isArray(months) || months.length === 0 || !months.every((m: string) => /^\d{4}-\d{2}$/.test(m))) {
+      return new Response(JSON.stringify({ error: "Invalid months." }), { status: 400, headers: CORS_HEADERS });
     }
+    const uniqueMonths = [...new Set(months)];
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
     const { data: member } = await admin.from("members").select("id, tier, email, name").eq("profile_id", user.id).single();
     if (!member) return new Response(JSON.stringify({ error: "No member record linked to your account." }), { status: 400, headers: CORS_HEADERS });
 
-    const amountKobo = rateFor(member.tier) * 100;
-    const reference = `DUES-${member.id}-${month}-${Date.now()}`;
+    const perMonthKobo = rateFor(member.tier) * 100;
+    const totalKobo = perMonthKobo * uniqueMonths.length;
+    const reference = `DUES-${member.id}-${Date.now()}`;
 
-    const { error: insertErr } = await admin.from("dues_payments").insert({
-      member_id: member.id, month, amount_kobo: amountKobo, reference, status: "pending",
-    });
+    const rows = uniqueMonths.map((month) => ({ member_id: member.id, month, amount_kobo: perMonthKobo, reference, status: "pending" }));
+    const { error: insertErr } = await admin.from("dues_payments").insert(rows);
     if (insertErr) return new Response(JSON.stringify({ error: insertErr.message }), { status: 500, headers: CORS_HEADERS });
 
     const paystackRes = await fetch("https://api.paystack.co/transaction/initialize", {
@@ -55,11 +57,11 @@ serve(async (req) => {
       headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         email: member.email || `${user.id}@placeholder.local`,
-        amount: amountKobo,
+        amount: totalKobo,
         reference,
         channels: ["card", "bank_transfer", "ussd"],
         callback_url: `${APP_URL}/?tab=dues&payment_ref=${reference}`,
-        metadata: { member_id: member.id, member_name: member.name, month },
+        metadata: { member_id: member.id, member_name: member.name, months: uniqueMonths },
       }),
     });
     const paystackData = await paystackRes.json();

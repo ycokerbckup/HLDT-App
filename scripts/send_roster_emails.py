@@ -44,7 +44,7 @@ NOTIFICATION_TYPES = (
     "attendance_suspension,monthly_digest,suspension_action_needed,mention,"
     "attendance_marking_reminder,suspension_lifted,special_event_reminder,"
     "special_event_assignee_reminder,new_special_event,event_personal_reminder,"
-    "dues_payment_confirmed"
+    "dues_payment_confirmed,dues_payment_mismatch"
 )
 
 

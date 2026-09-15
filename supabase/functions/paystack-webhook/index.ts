@@ -7,11 +7,11 @@
 // trusted. After the signature passes, it still re-confirms with
 // Paystack's own verify endpoint before updating anything.
 //
-// A reference can cover several months (one row each) — all rows for
-// that reference are confirmed or rejected together. If the amount
-// doesn't match what those months add up to, nothing is credited on
-// a guess; every row is flagged 'amount_mismatch' and both the member
-// and Welfare/Operations are notified to resolve it by hand.
+// A reference can cover several months (one row each). If the
+// confirmed amount exactly matches what they all add up to, every row
+// is marked fully paid. If it's short (or over), the actual amount
+// received is divided EQUALLY across the covered months — each row's
+// paid/owed amounts reflect its real share, never a guess.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -32,11 +32,38 @@ async function computeHmacSha512(secret: string, body: string): Promise<string> 
   return Array.from(new Uint8Array(signature)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function notifyAdmins(admin: any, title: string, body: string) {
-  const { data: adminMembers } = await admin.from("members").select("profile_id").in("unit", ["Welfare", "Operations"]);
-  for (const m of adminMembers || []) {
-    if (m.profile_id) {
-      await admin.from("notifications").insert({ type: "dues_payment_mismatch", title, body, link_tab: "dues", target_role: "all", target_profile_id: m.profile_id });
+async function applySplitAndNotify(admin: any, rows: any[], verifyData: any) {
+  const actualTotal = verifyData.amount;
+  const numMonths = rows.length;
+  const baseShare = Math.floor(actualTotal / numMonths);
+  const remainder = actualTotal - baseShare * numMonths;
+
+  for (let i = 0; i < rows.length; i++) {
+    const paidForThisRow = baseShare + (i === rows.length - 1 ? remainder : 0);
+    const owedForThisRow = Math.max(0, rows[i].amount_kobo - paidForThisRow);
+    const rowStatus = owedForThisRow > 0 ? "partial" : "success";
+    await admin.from("dues_payments").update({
+      status: rowStatus, paid_kobo: paidForThisRow, owed_kobo: owedForThisRow,
+      channel: verifyData.channel, paid_at: verifyData.paid_at, raw_event: verifyData,
+    }).eq("id", rows[i].id);
+  }
+
+  const months = rows.map((r: any) => r.month).sort();
+  const isFullyPaid = rows.every((r: any) => Math.max(0, r.amount_kobo - baseShare) <= 0);
+  const { data: memberRow } = await admin.from("members").select("profile_id, name").eq("id", rows[0].member_id).single();
+  if (memberRow?.profile_id) {
+    if (isFullyPaid) {
+      await admin.from("notifications").insert({
+        type: "dues_payment_confirmed", title: "Payment received",
+        body: `Your dues payment of ₦${(actualTotal / 100).toLocaleString()} for ${months.join(", ")} was confirmed.`,
+        link_tab: "dues", target_role: "all", target_profile_id: memberRow.profile_id,
+      });
+    } else {
+      await admin.from("notifications").insert({
+        type: "dues_payment_confirmed", title: "Partial payment received",
+        body: `Your payment of ₦${(actualTotal / 100).toLocaleString()} was applied evenly across ${months.join(", ")} — there's still a balance owing on these months.`,
+        link_tab: "dues", target_role: "all", target_profile_id: memberRow.profile_id,
+      });
     }
   }
 }
@@ -75,42 +102,16 @@ serve(async (req) => {
       return new Response("ok", { status: 200 });
     }
 
-    const expectedTotal = rows.reduce((sum: number, r: any) => sum + r.amount_kobo, 0);
-    const months = rows.map((r: any) => r.month).sort();
-
     const verifyRes = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
       headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` },
     });
-    const verifyData = await verifyRes.json();
-    const paystackStatus = verifyData?.data?.status;
+    const verifyJson = await verifyRes.json();
+    const paystackStatus = verifyJson?.data?.status;
 
-    if (paystackStatus === "success" && verifyData.data.amount === expectedTotal) {
-      await admin.from("dues_payments").update({
-        status: "success", channel: verifyData.data.channel, paid_at: verifyData.data.paid_at, raw_event: verifyData.data,
-      }).eq("reference", reference).eq("status", "pending");
-
-      const { data: memberRow } = await admin.from("members").select("profile_id, name").eq("id", rows[0].member_id).single();
-      if (memberRow?.profile_id) {
-        await admin.from("notifications").insert({
-          type: "dues_payment_confirmed", title: "Payment received",
-          body: `Your dues payment of ₦${(expectedTotal / 100).toLocaleString()} for ${months.join(", ")} was confirmed.`,
-          link_tab: "dues", target_role: "all", target_profile_id: memberRow.profile_id,
-        });
-      }
+    if (paystackStatus === "success") {
+      await applySplitAndNotify(admin, rows, verifyJson.data);
     } else if (paystackStatus === "failed" || paystackStatus === "abandoned") {
-      await admin.from("dues_payments").update({ status: paystackStatus, raw_event: verifyData.data }).eq("reference", reference).eq("status", "pending");
-    } else if (paystackStatus === "success") {
-      await admin.from("dues_payments").update({ status: "amount_mismatch", raw_event: verifyData.data }).eq("reference", reference).eq("status", "pending");
-      const { data: memberRow } = await admin.from("members").select("profile_id, name").eq("id", rows[0].member_id).single();
-      if (memberRow?.profile_id) {
-        await admin.from("notifications").insert({
-          type: "dues_payment_mismatch", title: "We need to check your payment",
-          body: `Your payment for ${months.join(", ")} completed, but the amount doesn't match what's expected — Welfare/Operations will follow up.`,
-          link_tab: "dues", target_role: "all", target_profile_id: memberRow.profile_id,
-        });
-        await notifyAdmins(admin, "Dues payment amount mismatch",
-          `${memberRow.name}'s payment for ${months.join(", ")} (ref ${reference}) doesn't match the expected total — needs manual review.`);
-      }
+      await admin.from("dues_payments").update({ status: paystackStatus, raw_event: verifyJson.data }).eq("reference", reference).eq("status", "pending");
     }
 
     return new Response("ok", { status: 200 });

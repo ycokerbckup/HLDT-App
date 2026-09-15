@@ -64,7 +64,7 @@ const TIERS = ["Trainee", "Member", "Leader", "HOD"];
 const RATING_WORDS = ["Poor", "Average", "Good", "Very good"];
 const TICKET_STATUSES = ["Open", "Assigned", "In progress", "Resolved"];
 const SYSTEMS = ["proPresenter", "vmix", "resolume", "monitors", "screens", "network"];
-const DUES_START_MONTH = "2026-06";
+const DUES_START_MONTH = "2026-09"; // reset point — dues before this are archived, not tracked in-app
 
 // The team operates on West Africa Time (UTC+1, no daylight saving).
 // Pin all business-date calculations to this explicitly rather than
@@ -118,12 +118,17 @@ function rate(m) {
 
 // Reads a due entry for a given month, tolerant of the old string-only
 // format ("paid") as well as the current { status, amount } object shape.
-// A successful online (Paystack) payment always takes precedence over
-// whatever's in the manual entry — it's the tamper-proof source of truth
-// when one exists.
+// A successful (or partial) online (Paystack) payment always takes
+// precedence over whatever's in the manual entry — it's the
+// tamper-proof source of truth when one exists.
 function getDue(m, month, duesPayments) {
-  const onlinePayment = (duesPayments || []).find((p) => p.memberId === m.id && p.month === month && p.status === "success");
-  if (onlinePayment) return { status: "paid", amount: onlinePayment.amountKobo / 100, viaOnline: true };
+  const onlinePayment = (duesPayments || []).find((p) => p.memberId === m.id && p.month === month && (p.status === "success" || p.status === "partial"));
+  if (onlinePayment) {
+    if (onlinePayment.status === "partial") {
+      return { status: "owing", amount: onlinePayment.paidKobo / 100, owedAmount: onlinePayment.owedKobo / 100, viaOnline: true, partial: true };
+    }
+    return { status: "paid", amount: (onlinePayment.paidKobo ?? onlinePayment.amountKobo) / 100, viaOnline: true };
+  }
   const raw = (m.dues || {})[month];
   if (!raw) return { status: "unset", amount: 0 };
   if (typeof raw === "string") return { status: raw, amount: raw === "paid" ? null : 0 };
@@ -785,6 +790,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
     setData({
       duesPayments: (duesPaymentRows || []).map((p) => ({
         id: p.id, memberId: p.member_id, month: p.month, amountKobo: p.amount_kobo,
+        paidKobo: p.paid_kobo, owedKobo: p.owed_kobo,
         reference: p.reference, status: p.status, channel: p.channel, paidAt: p.paid_at, createdAt: p.created_at,
       })),
       members: (membersRes.data || []).map((m) => {
@@ -1102,7 +1108,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
               <SkeletonLoader />
             ) : (
               <div key={tab} className="hldt-tab-content">
-                {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} />}
+                {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} notify={notify} />}
                 {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} pendingMemberDetailId={pendingMemberDetailId} onPendingMemberDetailConsumed={() => setPendingMemberDetailId(null)} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
                 {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
@@ -1168,7 +1174,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
               <SkeletonLoader />
             ) : (
               <div key={tab} className="hldt-tab-content">
-                {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} />}
+                {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} notify={notify} />}
                 {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} pendingMemberDetailId={pendingMemberDetailId} onPendingMemberDetailConsumed={() => setPendingMemberDetailId(null)} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
                 {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
@@ -1415,6 +1421,54 @@ function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
 }
 
+function WithdrawalPhoneSection({ session, notify }) {
+  const [newPhone, setNewPhone] = useState("");
+  const [verificationId, setVerificationId] = useState(null);
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function requestCode() {
+    if (!newPhone.trim()) { notify?.("Enter the new phone number", "error"); return; }
+    setBusy(true);
+    const { data: newId, error } = await supabase.rpc("request_phone_change_code", { p_new_phone: newPhone.trim() });
+    if (error) { notify?.(error.message, "error"); setBusy(false); return; }
+    const { error: sendErr } = await supabase.functions.invoke("send-phone-change-code", { body: { verification_id: newId } });
+    setBusy(false);
+    if (sendErr) { notify?.("Couldn't send the verification email — try again.", "error"); return; }
+    setVerificationId(newId);
+    notify?.("Check your email for a verification code");
+  }
+
+  async function confirmCode() {
+    if (!code.trim()) { notify?.("Enter the code", "error"); return; }
+    setBusy(true);
+    const { error } = await supabase.rpc("confirm_phone_change", { p_verification_id: verificationId, p_code: code.trim() });
+    setBusy(false);
+    if (error) { notify?.(error.message, "error"); return; }
+    notify?.("Withdrawal OTP phone number updated");
+    setNewPhone("");
+    setVerificationId(null);
+    setCode("");
+  }
+
+  return (
+    <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${COLORS.border}` }}>
+      <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 6 }}>Withdrawal OTP phone number</div>
+      {!verificationId ? (
+        <div style={{ display: "flex", gap: 6 }}>
+          <input style={{ ...inputStyle, flex: 1 }} placeholder="New phone number" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} />
+          <Btn small tone="ghost" disabled={busy} onClick={requestCode}>{busy ? "Sending..." : "Request code"}</Btn>
+        </div>
+      ) : (
+        <div style={{ display: "flex", gap: 6 }}>
+          <input style={{ ...inputStyle, flex: 1 }} placeholder="Code from your email" value={code} onChange={(e) => setCode(e.target.value)} />
+          <Btn small tone="amber" disabled={busy} onClick={confirmCode}>{busy ? "Confirming..." : "Confirm"}</Btn>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProfileModal({ session, profile, setProfile, myMember, onClose, reload, notify }) {
   const [fullName, setFullName] = useState(profile.full_name || "");
   const [phone, setPhone] = useState(myMember?.phone || "");
@@ -1486,6 +1540,8 @@ function ProfileModal({ session, profile, setProfile, myMember, onClose, reload,
           </div>
         </>
       )}
+
+      {profile.can_manage_withdrawal_otp && <WithdrawalPhoneSection session={session} notify={notify} />}
 
       <div style={{ marginTop: 16 }}>
         <Btn tone="amber" onClick={save} disabled={saving}>{saving ? "Saving..." : <><Save size={13} /> Save profile</>}</Btn>
@@ -2820,11 +2876,63 @@ function OwingDuesModal({ data, onClose }) {
   );
 }
 
-function WalletPanel({ data, isAdmin }) {
+function WithdrawModal({ onClose, notify, reloadBalance }) {
+  const [step, setStep] = useState("amount"); // amount | otp
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("");
+  const [requestId, setRequestId] = useState(null);
+  const [pin, setPin] = useState("");
+  const [otp, setOtp] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submitAmount() {
+    const value = Number(amount);
+    if (!value || value <= 0) { notify?.("Enter a valid amount", "error"); return; }
+    setBusy(true);
+    const { data: newId, error } = await supabase.rpc("initiate_withdrawal", { p_amount: value, p_reason: reason || null });
+    if (error) { notify?.(error.message, "error"); setBusy(false); return; }
+    const { error: sendErr } = await supabase.functions.invoke("send-withdrawal-otp", { body: { request_id: newId } });
+    setBusy(false);
+    if (sendErr) { notify?.("Withdrawal started, but the OTP couldn't be sent — check SMS provider setup.", "error"); }
+    setRequestId(newId);
+    setStep("otp");
+  }
+
+  async function submitConfirm() {
+    if (!pin || !otp) { notify?.("Enter both the PIN and OTP", "error"); return; }
+    setBusy(true);
+    const { error } = await supabase.rpc("confirm_withdrawal", { p_request_id: requestId, p_pin: pin, p_otp: otp });
+    setBusy(false);
+    if (error) { notify?.(error.message, "error"); return; }
+    notify?.("Withdrawal completed");
+    reloadBalance();
+    onClose();
+  }
+
+  return (
+    <Modal title="Withdraw funds" onClose={onClose} width={380}>
+      {step === "amount" ? (
+        <>
+          <Field label="Amount"><input type="number" style={inputStyle} value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+          <Field label="Reason (optional)"><textarea style={{ ...inputStyle, minHeight: 60 }} value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
+          <Btn tone="amber" disabled={busy} onClick={submitAmount}>{busy ? "Starting..." : "Continue"}</Btn>
+        </>
+      ) : (
+        <>
+          <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12 }}>An OTP has been sent by SMS. Enter it along with the withdrawal PIN to complete this withdrawal.</div>
+          <Field label="Withdrawal PIN"><input type="password" style={inputStyle} value={pin} onChange={(e) => setPin(e.target.value)} /></Field>
+          <Field label="OTP"><input style={inputStyle} value={otp} onChange={(e) => setOtp(e.target.value)} /></Field>
+          <Btn tone="amber" disabled={busy} onClick={submitConfirm}>{busy ? "Confirming..." : "Confirm withdrawal"}</Btn>
+        </>
+      )}
+    </Modal>
+  );
+}
+
+function WalletPanel({ data, isAdmin, myUnit, notify }) {
   const [month, setMonth] = useState(currentMonthStringWAT());
   const [totalBalance, setTotalBalance] = useState(0);
-  const [editingBalance, setEditingBalance] = useState(false);
-  const [balanceInput, setBalanceInput] = useState("");
+  const [showWithdraw, setShowWithdraw] = useState(false);
 
   async function loadBalance() {
     const { data: row } = await supabase.from("wallet_balance").select("*").eq("id", 1).maybeSingle();
@@ -2840,12 +2948,7 @@ function WalletPanel({ data, isAdmin }) {
     return () => supabase.removeChannel(channel);
   }, []);
 
-  async function saveBalance() {
-    const value = Number(balanceInput);
-    if (Number.isNaN(value)) return;
-    await supabase.from("wallet_balance").update({ balance: value, updated_by: null, updated_at: new Date().toISOString() }).eq("id", 1);
-    setEditingBalance(false);
-  }
+  const canWithdraw = isAdmin && (myUnit === "Welfare" || myUnit === "Operations");
 
   function statsFor(mo) {
     let expected = 0, collected = 0;
@@ -2884,20 +2987,12 @@ function WalletPanel({ data, isAdmin }) {
       }
     >
       <div style={{ display: "flex", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
-        <div
-          onClick={() => isAdmin && !editingBalance && (setBalanceInput(String(totalBalance)), setEditingBalance(true))}
-          style={{ background: COLORS.surface2, borderRadius: 8, padding: "14px 16px", flex: 1, minWidth: 140, cursor: isAdmin ? "pointer" : "default" }}
-        >
-          <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>Total balance {isAdmin && !editingBalance && <span style={{ opacity: 0.6 }}>· click to edit</span>}</div>
-          {editingBalance ? (
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }} onClick={(e) => e.stopPropagation()}>
-              <input type="number" autoFocus style={{ ...inputStyle, width: 110, padding: "4px 8px" }} value={balanceInput} onChange={(e) => setBalanceInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveBalance()} />
-              <Btn small tone="amber" onClick={saveBalance}>Save</Btn>
-              <Btn small tone="ghost" onClick={() => setEditingBalance(false)}>Cancel</Btn>
-            </div>
-          ) : (
+        <div style={{ background: COLORS.surface2, borderRadius: 8, padding: "14px 16px", flex: 1, minWidth: 140 }}>
+          <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>Total balance</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 22, color: COLORS.textPrimary }}>{currency(totalBalance)}</div>
-          )}
+            {canWithdraw && <Btn small tone="ghost" onClick={() => setShowWithdraw(true)}>Withdraw</Btn>}
+          </div>
         </div>
         <Metric label={month === "all" ? "Expected (all time)" : "Expected balance"} value={current.expected} isCurrency tone="amber" />
         <Metric label={month === "all" ? "Collected (all time)" : "Total collected"} value={current.collected} isCurrency tone="green" />
@@ -2919,11 +3014,12 @@ function WalletPanel({ data, isAdmin }) {
         </ResponsiveContainer>
       </div>
       {month !== "all" && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 8 }}>Chart always shows the last 6 months, regardless of the filter above.</div>}
+      {showWithdraw && <WithdrawModal onClose={() => setShowWithdraw(false)} notify={notify} reloadBalance={loadBalance} />}
     </Panel>
   );
 }
 
-function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWelfareInfo }) {
+function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWelfareInfo, notify }) {
   const [showOwingModal, setShowOwingModal] = useState(false);
   const currentMonth = currentMonthStringWAT();
   const openTickets = data.tickets.filter((t) => t.status !== "Resolved");
@@ -3006,7 +3102,7 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWel
         )}
       </div>
 
-      {isAdmin && <WalletPanel data={data} isAdmin={isAdmin} />}
+      {isAdmin && <WalletPanel data={data} isAdmin={isAdmin} myUnit={myMember?.unit} notify={notify} />}
 
       {canSeeWelfareInfo && (
         <Panel
@@ -5279,7 +5375,7 @@ function MultiMonthDuesPay({ member, months, duesPayments, onPay, paying }) {
           <label key={mo} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", cursor: "pointer" }}>
             <input type="checkbox" checked={selected.includes(mo)} onChange={() => toggle(mo)} />
             <span style={{ flex: 1, fontSize: 13 }}>{mo}</span>
-            <Badge tone={due.status === "owing" ? "red" : "gray"}>{due.status === "unset" ? "Not set" : due.status}</Badge>
+            <Badge tone={due.status === "owing" ? "red" : "gray"}>{due.status === "unset" ? "Not set" : due.partial ? `Owing ${currency(due.owedAmount)}` : due.status}</Badge>
           </label>
         );
       })}
@@ -5365,7 +5461,7 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef 
                   <RowLine key={mo}>
                     <span style={{ flex: 1 }}>{mo}</span>
                     {due.amount ? <span style={{ fontSize: 11, color: COLORS.textMuted, marginRight: 8 }}>{currency(due.amount)}</span> : null}
-                    <Badge tone={tone}>{due.status === "unset" ? "Not set" : due.status}{due.viaOnline ? " ✓" : ""}</Badge>
+                    <Badge tone={tone}>{due.status === "unset" ? "Not set" : due.partial ? `Owing ${currency(due.owedAmount)}` : due.status}{due.viaOnline ? " ✓" : ""}</Badge>
                   </RowLine>
                 );
               })}
@@ -5446,7 +5542,7 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef 
                 const tone = due.status === "paid" ? "green" : due.status === "owing" ? "red" : due.status === "free" ? "amber" : "gray";
                 return (
                   <div key={mo} style={{ textAlign: "center", cursor: due.viaOnline ? "default" : "pointer" }} onClick={() => !due.viaOnline && setEditing({ member: m, month: mo })}>
-                    <Badge tone={tone}>{due.status === "unset" ? (duesExempt(m) ? (m.unavailable ? "Unavailable" : "Trainee") : "—") : due.amount ? currency(due.amount) : due.status}{due.viaOnline ? " ✓" : ""}</Badge>
+                    <Badge tone={tone}>{due.status === "unset" ? (duesExempt(m) ? (m.unavailable ? "Unavailable" : "Trainee") : "—") : due.partial ? `Owing ${currency(due.owedAmount)}` : due.amount ? currency(due.amount) : due.status}{due.viaOnline ? " ✓" : ""}</Badge>
                   </div>
                 );
               })}

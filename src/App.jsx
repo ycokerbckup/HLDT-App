@@ -864,6 +864,10 @@ function Dashboard_Shell({ session, profile, setProfile }) {
     if (typeof window === "undefined") return null;
     return new URLSearchParams(window.location.search).get("dm") || null;
   });
+  const [pendingPaymentRef] = useState(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("payment_ref") || null;
+  });
   const [pendingHighlight, setPendingHighlight] = useState(() => {
     if (typeof window === "undefined") return null;
     const params = new URLSearchParams(window.location.search);
@@ -1105,7 +1109,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} myMember={myMember} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "attendance" && <AttendanceTab data={data} canManageRosters={canManageRosters} myMember={myMember} notify={notify} />}
                 {tab === "events" && <SpecialEventsTab data={data} canManageEvents={canManageEvents} myUnit={myUnit} session={session} notify={notify} />}
-                {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
+                {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} pendingPaymentRef={pendingPaymentRef} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} canSeeReadReceipts={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
                 {tab === "chat" && <ChatTab session={session} profile={profile} members={data.members} onboarding={data.onboarding} notify={notify} pendingDmProfileId={pendingDm} onPendingDmConsumed={() => setPendingDm(null)} />}
@@ -1171,7 +1175,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} myMember={myMember} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "attendance" && <AttendanceTab data={data} canManageRosters={canManageRosters} myMember={myMember} notify={notify} />}
                 {tab === "events" && <SpecialEventsTab data={data} canManageEvents={canManageEvents} myUnit={myUnit} session={session} notify={notify} />}
-                {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
+                {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} pendingPaymentRef={pendingPaymentRef} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
                 {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} canSeeReadReceipts={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
                 {tab === "chat" && <ChatTab session={session} profile={profile} members={data.members} onboarding={data.onboarding} notify={notify} pendingDmProfileId={pendingDm} onPendingDmConsumed={() => setPendingDm(null)} />}
@@ -5250,14 +5254,13 @@ function DueEditModal({ member, month, onClose, onSaved, notify }) {
   );
 }
 
-function DuesTab({ data, isAdmin, reload, myMemberId, notify }) {
+function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef }) {
   const [monthPage, setMonthPage] = useState(0);
   const [payingMonth, setPayingMonth] = useState(null);
   const [confirmingRef, setConfirmingRef] = useState(null);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const ref = params.get("payment_ref");
+    const ref = pendingPaymentRef;
     if (!ref) return;
     setConfirmingRef(ref);
     let attempts = 0;
@@ -5271,9 +5274,8 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify }) {
       else { setConfirmingRef(null); notify?.("Still processing — check back shortly, it'll update automatically once confirmed."); }
     }
     poll();
-    window.history.replaceState({}, "", window.location.pathname + "?tab=dues");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [pendingPaymentRef]);
 
   async function payNow(month) {
     setPayingMonth(month);

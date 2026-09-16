@@ -1533,7 +1533,7 @@ function ProfileModal({ session, profile, setProfile, myMember, onClose, reload,
       {myMember && (
         <>
           <div style={{ fontSize: 12, color: COLORS.textSecondary, margin: "10px 0 6px" }}>Self-reported proficiency (1-5)</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(70px, 1fr))", gap: 10 }}>
             {["proPresenter", "vmix", "resolume", "technical"].map((k) => (
               <Field key={k} label={k}><input type="number" min={1} max={5} style={inputStyle} value={skills[k]} onChange={(e) => setSkills({ ...skills, [k]: Number(e.target.value) })} /></Field>
             ))}
@@ -2876,7 +2876,7 @@ function OwingDuesModal({ data, onClose }) {
   );
 }
 
-function SetPinModal({ onClose, notify }) {
+function SetPinModal({ onClose, notify, onSaved }) {
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [busy, setBusy] = useState(false);
@@ -2889,6 +2889,7 @@ function SetPinModal({ onClose, notify }) {
     setBusy(false);
     if (error) { notify?.(error.message, "error"); return; }
     notify?.("Withdrawal PIN updated");
+    onSaved?.();
     onClose();
   }
 
@@ -2902,7 +2903,7 @@ function SetPinModal({ onClose, notify }) {
   );
 }
 
-function WithdrawModal({ onClose, notify, reloadBalance }) {
+function WithdrawModal({ onClose, notify, reloadBalance, onResetPin }) {
   const [step, setStep] = useState("amount"); // amount | otp
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
@@ -2949,6 +2950,11 @@ function WithdrawModal({ onClose, notify, reloadBalance }) {
           <Field label="Withdrawal PIN"><input type="password" style={inputStyle} value={pin} onChange={(e) => setPin(e.target.value)} /></Field>
           <Field label="OTP"><input style={inputStyle} value={otp} onChange={(e) => setOtp(e.target.value)} /></Field>
           <Btn tone="amber" disabled={busy} onClick={submitConfirm}>{busy ? "Confirming..." : "Confirm withdrawal"}</Btn>
+          {onResetPin && (
+            <div style={{ marginTop: 10, fontSize: 12, color: COLORS.textMuted, cursor: "pointer", textDecoration: "underline" }} onClick={onResetPin}>
+              Forgot the PIN? Reset it
+            </div>
+          )}
         </>
       )}
     </Modal>
@@ -2960,6 +2966,12 @@ function WalletPanel({ data, isAdmin, myUnit, notify }) {
   const [totalBalance, setTotalBalance] = useState(0);
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [showSetPin, setShowSetPin] = useState(false);
+  const [hasPin, setHasPin] = useState(null);
+
+  async function loadPinStatus() {
+    const { data: row } = await supabase.from("withdrawal_pin_status").select("*").maybeSingle();
+    setHasPin(row?.has_pin === true);
+  }
 
   async function loadBalance() {
     const { data: row } = await supabase.from("wallet_balance").select("*").eq("id", 1).maybeSingle();
@@ -2968,6 +2980,7 @@ function WalletPanel({ data, isAdmin, myUnit, notify }) {
 
   useEffect(() => {
     loadBalance();
+    loadPinStatus();
     const channel = supabase
       .channel("wallet-balance-live")
       .on("postgres_changes", { event: "*", schema: "public", table: "wallet_balance" }, loadBalance)
@@ -3019,7 +3032,7 @@ function WalletPanel({ data, isAdmin, myUnit, notify }) {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 22, color: COLORS.textPrimary }}>{currency(totalBalance)}</div>
             {canWithdraw && <Btn small tone="ghost" onClick={() => setShowWithdraw(true)}>Withdraw</Btn>}
-            {canWithdraw && <Btn small tone="ghost" onClick={() => setShowSetPin(true)}>Set PIN</Btn>}
+            {canWithdraw && hasPin === false && <Btn small tone="ghost" onClick={() => setShowSetPin(true)}>Set PIN</Btn>}
           </div>
         </div>
         <Metric label={month === "all" ? "Expected (all time)" : "Expected balance"} value={current.expected} isCurrency tone="amber" />
@@ -3042,8 +3055,8 @@ function WalletPanel({ data, isAdmin, myUnit, notify }) {
         </ResponsiveContainer>
       </div>
       {month !== "all" && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 8 }}>Chart always shows the last 6 months, regardless of the filter above.</div>}
-      {showWithdraw && <WithdrawModal onClose={() => setShowWithdraw(false)} notify={notify} reloadBalance={loadBalance} />}
-      {showSetPin && <SetPinModal onClose={() => setShowSetPin(false)} notify={notify} />}
+      {showWithdraw && <WithdrawModal onClose={() => setShowWithdraw(false)} notify={notify} reloadBalance={loadBalance} onResetPin={() => { setShowWithdraw(false); setShowSetPin(true); }} />}
+      {showSetPin && <SetPinModal onClose={() => setShowSetPin(false)} notify={notify} onSaved={loadPinStatus} />}
     </Panel>
   );
 }
@@ -3272,7 +3285,7 @@ function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify, p
 
       {showForm && (
         <Panel title="Member record" style={{ marginBottom: 16 }} right={<X size={16} style={{ cursor: "pointer" }} onClick={() => setShowForm(false)} />}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
             <Field label="Full name"><input style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
             <Field label="Phone"><input style={inputStyle} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
             <Field label="Email"><input style={inputStyle} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
@@ -3315,7 +3328,7 @@ function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify, p
             </Field>
           </div>
           <div style={{ fontSize: 12, color: COLORS.textSecondary, margin: "10px 0 6px" }}>Self-reported proficiency (1-5)</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(70px, 1fr))", gap: 12 }}>
             {["proPresenter", "vmix", "resolume", "technical"].map((k) => (
               <Field key={k} label={k}><input type="number" min={1} max={5} style={inputStyle} value={form.skills[k]} onChange={(e) => setForm({ ...form, skills: { ...form.skills, [k]: Number(e.target.value) } })} /></Field>
             ))}
@@ -3455,7 +3468,7 @@ function OnboardingTab({ data, isAdmin, canManage, reload, adminName, notify }) 
 
       {showForm && (
         <Panel title="New trainee" style={{ marginBottom: 16 }} right={<X size={16} style={{ cursor: "pointer" }} onClick={() => setShowForm(false)} />}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
             <Field label="Member"><select style={inputStyle} value={form.memberId} onChange={(e) => setForm({ ...form, memberId: e.target.value })}><option value="">Select a member</option>{data.members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>
             <Field label="Start date"><input type="date" style={inputStyle} value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} /></Field>
           </div>
@@ -3734,7 +3747,7 @@ function InventoryPanel({ notify }) {
 
       {showForm && (
         <Panel title={form.id ? "Edit item" : "New item"} style={{ marginBottom: 16 }} right={<X size={16} style={{ cursor: "pointer" }} onClick={() => setShowForm(false)} />}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
             <Field label="Name"><input style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
             <Field label="Category">
               <select style={inputStyle} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
@@ -3929,7 +3942,7 @@ function EquipmentTab({ data, isAdmin, myMember, canAccessInventory, canDeleteTi
       <>
       {showForm && (
         <Panel title="System check" style={{ marginBottom: 16 }} right={<X size={16} style={{ cursor: "pointer" }} onClick={() => setShowForm(false)} />}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
             <Field label="Reporting as">
               <div style={{ ...inputStyle, display: "flex", alignItems: "center", color: myMember ? COLORS.textPrimary : COLORS.red }}>
                 {myMember ? myMember.name : "No member record linked"}
@@ -3937,7 +3950,7 @@ function EquipmentTab({ data, isAdmin, myMember, canAccessInventory, canDeleteTi
             </Field>
             <Field label="Date"><input type="date" style={inputStyle} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, margin: "6px 0" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 12, margin: "6px 0" }}>
             {SYSTEMS.map((s) => (
               <Field key={s} label={s}>
                 <select style={inputStyle} value={form.systems[s]} onChange={(e) => setForm({ ...form, systems: { ...form.systems, [s]: e.target.value } })}>
@@ -4102,7 +4115,7 @@ function SaturdayRosterEditor({ existing, members, onClose, onSaved, notify }) {
   return (
     <Modal title={existing ? "Edit Saturday roster" : "New Saturday roster"} onClose={onClose} width={460} footer={<><Btn tone="ghost" onClick={onClose}>Cancel</Btn><Btn tone="amber" onClick={save}><Save size={13} /> Save</Btn></>}>
       <Field label="Date"><input type="date" style={inputStyle} value={eventDate} onChange={(e) => setEventDate(e.target.value)} /></Field>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
         <Field label="Call time"><input style={inputStyle} value={callTime} onChange={(e) => setCallTime(e.target.value)} /></Field>
         <Field label="Duration (minutes)"><input type="number" style={inputStyle} value={duration} onChange={(e) => setDuration(e.target.value)} /></Field>
       </div>
@@ -4131,6 +4144,7 @@ function SaturdayRosterEditor({ existing, members, onClose, onSaved, notify }) {
 const EVENT_TYPE_LABELS = { sunday: "Sunday service", midweek: "Wednesday midweek", tuesday: "Tuesday meeting", saturday: "Saturday training" };
 
 function AttendanceTab({ data, canManageRosters, myMember, notify }) {
+  const isMobile = useIsMobile();
   const [records, setRecords] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [eventType, setEventType] = useState("sunday");
@@ -4303,7 +4317,7 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
 
       {showMark && (
         <Panel title="Mark attendance" style={{ marginBottom: 16 }} right={<X size={16} style={{ cursor: "pointer" }} onClick={() => setShowMark(false)} />}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 12 }}>
             <Field label="Event">
               <select style={inputStyle} value={eventType} onChange={(e) => setEventType(e.target.value)}>
                 {Object.entries(EVENT_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -4330,12 +4344,13 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
         </Panel>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 16, alignItems: "start" }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.3fr 1fr", gap: 16, alignItems: "start" }}>
         <Panel title="Attendance summary">
           {summary.length === 0 ? (
             <EmptyRow text="No attendance recorded yet." />
           ) : (
-            <>
+            <div style={{ overflowX: "auto" }}>
+            <div style={{ minWidth: 380 }}>
               <div style={{ display: "grid", gridTemplateColumns: "1.6fr 0.7fr 0.7fr 0.7fr", fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", padding: "0 4px 8px" }}>
                 <div>Name</div><div>Present</div><div>Absent</div><div>Excused</div>
               </div>
@@ -4352,7 +4367,8 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
                   <div style={{ color: COLORS.textMuted }}>{counts.excused}</div>
                 </div>
               ))}
-            </>
+            </div>
+            </div>
           )}
         </Panel>
         <Panel title="Recently marked">
@@ -5204,7 +5220,7 @@ function RosterTab({ data, isAdmin, canManageRosters, myMember, reload, notify, 
 
       {showCoverForm && (
         <Panel title="Post a cover request" style={{ marginBottom: 16 }} right={<X size={16} style={{ cursor: "pointer" }} onClick={() => setShowCoverForm(false)} />}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
             <Field label="Event">
               <select style={inputStyle} value={coverForm.eventType} onChange={(e) => setCoverForm({ ...coverForm, eventType: e.target.value })}>
                 {Object.entries(EVENT_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -5560,11 +5576,11 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef 
       {pageNav}
       <Panel>
         <div style={{ overflowX: "auto" }}>
-          <div style={{ display: "grid", gridTemplateColumns: `1.4fr repeat(${months.length}, 0.9fr)`, fontSize: 11, color: COLORS.textMuted, padding: "0 4px 8px", textTransform: "uppercase" }}>
+          <div style={{ display: "grid", gridTemplateColumns: `1.4fr repeat(${months.length}, minmax(70px, 0.9fr))`, fontSize: 11, color: COLORS.textMuted, padding: "0 4px 8px", textTransform: "uppercase" }}>
             <div>Member</div>{months.map((mo) => <div key={mo} style={{ textAlign: "center" }}>{mo}</div>)}
           </div>
           {data.members.length === 0 ? <EmptyRow text="No members yet." /> : data.members.map((m) => (
-            <div key={m.id} style={{ display: "grid", gridTemplateColumns: `1.4fr repeat(${months.length}, 0.9fr)`, alignItems: "center", padding: "8px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 12 }}>
+            <div key={m.id} style={{ display: "grid", gridTemplateColumns: `1.4fr repeat(${months.length}, minmax(70px, 0.9fr))`, alignItems: "center", padding: "8px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 12 }}>
               <div>{m.name} <span style={{ color: COLORS.textMuted }}>· {duesExempt(m) ? (m.unavailable ? "not expected (unavailable)" : "no dues yet (trainee)") : currency(rate(m))}</span></div>
               {months.map((mo) => {
                 const due = getDue(m, mo, data.duesPayments);
@@ -5615,7 +5631,7 @@ function FeedbackTab({ data, isAdmin, canReadFeedback, reload, notify }) {
       {showForm && (
         <Panel title="Submit feedback" style={{ marginBottom: 16 }} right={<X size={16} style={{ cursor: "pointer" }} onClick={() => setShowForm(false)} />}>
           <Field label="Name (optional)"><input style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: 12 }}>
             {[["engagement", "Engagement"], ["impact", "Department impact"], ["atmosphere", "Atmosphere"]].map(([k, label]) => (
               <Field key={k} label={`${label} (1-5)`}><input type="number" min={1} max={5} style={inputStyle} value={form[k]} onChange={(e) => setForm({ ...form, [k]: Number(e.target.value) })} /></Field>
             ))}

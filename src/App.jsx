@@ -603,6 +603,34 @@ function AuthScreen() {
   );
 }
 
+function MaintenanceScreen() {
+  return (
+    <div className="hldt-app" style={{ minHeight: "100vh", position: "relative", display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.bg, padding: 20, overflow: "hidden" }}>
+      <div className="hldt-glow-field">
+        <div className="hldt-glow-orb hldt-glow-warm" />
+        <div className="hldt-glow-orb hldt-glow-cool" />
+      </div>
+      <div className="hldt-glass" style={{ position: "relative", zIndex: 1, maxWidth: 420, width: "100%", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 20, padding: "40px 32px", textAlign: "center", boxShadow: "0 24px 60px rgba(0,0,0,0.35)" }}>
+        <div style={{ width: 72, height: 72, borderRadius: 999, background: COLORS.amberDim, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+          <Wrench size={30} color={COLORS.amber} className="hldt-wrench-turn" />
+        </div>
+        <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 20, color: COLORS.textPrimary, marginBottom: 10 }}>
+          We're building something better
+        </div>
+        <div style={{ fontSize: 14, color: COLORS.textSecondary, lineHeight: 1.6, marginBottom: 22 }}>
+          The Display Team app is offline for a bit while we put the finishing touches on some upgrades behind the scenes — nothing you've done is lost, and everything will be exactly as you left it once we're back.
+        </div>
+        <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 18 }}>
+          {[0, 1, 2].map((i) => (
+            <span key={i} className="hldt-pulse-dot" style={{ width: 8, height: 8, borderRadius: 999, background: COLORS.amber, animationDelay: `${i * 0.25}s` }} />
+          ))}
+        </div>
+        <div style={{ fontSize: 12, color: COLORS.textMuted }}>We'll be back online shortly. Thanks for your patience!</div>
+      </div>
+    </div>
+  );
+}
+
 function ResetPasswordScreen() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -661,6 +689,7 @@ export default function App() {
   const [profile, setProfile] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [recoveryMode, setRecoveryMode] = useState(false);
+  const [maintenanceMode, setMaintenanceMode] = useState(null); // null = still checking
   const [themeMode, setThemeMode] = useState(() => {
     if (typeof window === "undefined") return "dark";
     const saved = localStorage.getItem("hldt-theme");
@@ -673,6 +702,12 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("hldt-theme", themeMode);
   }, [themeMode]);
+
+  useEffect(() => {
+    supabase.from("app_status").select("maintenance_mode").eq("id", 1).maybeSingle().then(({ data }) => {
+      setMaintenanceMode(data?.maintenance_mode === true);
+    });
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -701,7 +736,11 @@ export default function App() {
   const toggle = <ThemeToggle mode={themeMode} onToggle={() => setThemeMode((m) => (m === "dark" ? "light" : "dark"))} />;
 
   let content;
-  if (authLoading) {
+  if (maintenanceMode === null) {
+    content = <div className="hldt-app" style={{ minHeight: "100vh", background: COLORS.bg }} />;
+  } else if (maintenanceMode === true) {
+    content = <MaintenanceScreen />;
+  } else if (authLoading) {
     content = <div className="hldt-app" style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.textMuted, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Inter, sans-serif", fontSize: 13 }}><RefreshCw size={14} className="hldt-spin" style={{ marginRight: 8 }} /> Loading...</div>;
   } else if (recoveryMode) {
     content = <ResetPasswordScreen />;

@@ -57,6 +57,21 @@ body {
 @keyframes hldt-spin {
   to { transform: rotate(360deg); }
 }
+@keyframes hldt-wrench-turn {
+  0%, 100% { transform: rotate(-18deg); }
+  50% { transform: rotate(18deg); }
+}
+.hldt-wrench-turn {
+  animation: hldt-wrench-turn 2.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  transform-origin: 70% 30%;
+}
+@keyframes hldt-pulse-dot {
+  0%, 100% { opacity: 0.25; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+.hldt-pulse-dot {
+  animation: hldt-pulse-dot 1.4s ease-in-out infinite;
+}
 @keyframes hldt-drift-a {
   0%, 100% { transform: translate(-8%, -6%) scale(1); }
   50% { transform: translate(6%, 8%) scale(1.15); }

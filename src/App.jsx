@@ -5493,24 +5493,6 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef 
     </div>
   );
 
-  if (duesMaintenance === true) {
-    return (
-      <div>
-        <SectionHeader title="Dues" />
-        <Panel style={{ textAlign: "center", padding: "36px 24px" }}>
-          <div style={{ width: 60, height: 60, borderRadius: 999, background: COLORS.amberDim, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
-            <Wrench size={26} color={COLORS.amber} className="hldt-wrench-turn" />
-          </div>
-          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 17, color: COLORS.textPrimary, marginBottom: 8 }}>
-            Dues is temporarily unavailable
-          </div>
-          <div style={{ fontSize: 13, color: COLORS.textSecondary, lineHeight: 1.6, maxWidth: 340, margin: "0 auto" }}>
-            We're putting the finishing touches on some upgrades to how dues work. This section will be back shortly — everything else in the app is working normally.
-          </div>
-        </Panel>
-      </div>
-    );
-  }
 
   if (!isAdmin) {
     const mine = data.members.find((m) => m.id === myMemberId);
@@ -5549,6 +5531,35 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef 
   }
 
   const [showLedger, setShowLedger] = useState(false);
+
+  if (duesMaintenance === true) {
+    return (
+      <div>
+        <SectionHeader title="Dues" />
+        <Panel style={{ textAlign: "center", padding: "48px 24px" }}>
+          <div style={{ display: "flex", justifyContent: "center", gap: 14, marginBottom: 20 }}>
+            <div style={{ width: 56, height: 56, borderRadius: 999, background: COLORS.amberDim, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Wrench size={24} color={COLORS.amber} className="hldt-wrench-turn" />
+            </div>
+            <div style={{ width: 56, height: 56, borderRadius: 999, background: COLORS.greenDim, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <DollarSign size={24} color={COLORS.green} className="hldt-coin-flip" />
+            </div>
+          </div>
+          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 18, color: COLORS.textPrimary, marginBottom: 8 }}>
+            Balancing the books
+          </div>
+          <div style={{ fontSize: 13, color: COLORS.textSecondary, lineHeight: 1.6, maxWidth: 360, margin: "0 auto 16px" }}>
+            We're polishing up how dues work behind the scenes — this section will be back shortly. Everything else in the app, chat, roster, events, attendance, is working exactly as normal.
+          </div>
+          <div style={{ display: "flex", justifyContent: "center", gap: 8 }}>
+            {[0, 1, 2].map((i) => (
+              <span key={i} className="hldt-pulse-dot" style={{ width: 7, height: 7, borderRadius: 999, background: COLORS.green, animationDelay: `${i * 0.25}s` }} />
+            ))}
+          </div>
+        </Panel>
+      </div>
+    );
+  }
 
   function exportLedgerCsv() {
     const rows = ["Member,Month,Amount,Reference,Status,Channel,Paid At"];

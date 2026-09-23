@@ -4142,12 +4142,18 @@ function SaturdayRosterEditor({ existing, members, onClose, onSaved, notify }) {
 }
 
 const EVENT_TYPE_LABELS = { sunday: "Sunday service", midweek: "Wednesday midweek", tuesday: "Tuesday meeting", saturday: "Saturday training" };
+// Falls back to showing the raw value for a custom event name that
+// isn't one of the 4 presets.
+function eventLabel(type) {
+  return EVENT_TYPE_LABELS[type] || type;
+}
 
 function AttendanceTab({ data, canManageRosters, myMember, notify }) {
   const isMobile = useIsMobile();
   const [records, setRecords] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [eventType, setEventType] = useState("sunday");
+  const [customEventType, setCustomEventType] = useState("");
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
   const [showMark, setShowMark] = useState(false);
   const [draft, setDraft] = useState({});
@@ -4226,17 +4232,21 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
 
   const [editingBatch, setEditingBatch] = useState(null);
   const [editForm, setEditForm] = useState({ eventType: "sunday", eventDate: "" });
+  const [customEditEventType, setCustomEditEventType] = useState("");
 
   function openEditBatch(batch) {
     setEditingBatch(batch);
     setEditForm({ eventType: batch.eventType, eventDate: batch.eventDate });
+    setCustomEditEventType("");
   }
 
   async function saveEditBatch() {
+    const newEventType = editForm.eventType === "__custom__" ? customEditEventType.trim() : editForm.eventType;
+    if (!newEventType) { notify?.("Enter a name for this event", "error"); return; }
     const { error } = await supabase.rpc("edit_attendance_event", {
       p_old_event_type: editingBatch.eventType,
       p_old_event_date: editingBatch.eventDate,
-      p_new_event_type: editForm.eventType,
+      p_new_event_type: newEventType,
       p_new_event_date: editForm.eventDate,
     });
     if (error) { notify?.(error.message, "error"); return; }
@@ -4260,24 +4270,24 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
     return () => supabase.removeChannel(channel);
   }, []);
 
-  function openMarking() {
-    const existing = {};
-    records
-      .filter((r) => r.event_type === eventType && r.event_date === eventDate)
-      .forEach((r) => { existing[r.member_id] = r.status; });
-    setDraft(existing);
-    setShowMark(true);
-  }
+  const effectiveEventType = eventType === "__custom__" ? customEventType.trim() : eventType;
+  const alreadyMarkedRecords = useMemo(
+    () => records.filter((r) => r.event_type === effectiveEventType && r.event_date === eventDate),
+    [records, effectiveEventType, eventDate]
+  );
 
   async function saveMarking() {
+    if (alreadyMarkedRecords.length > 0) { notify?.("This event is already marked — use Recently Marked below to correct it.", "error"); return; }
+    if (!effectiveEventType) { notify?.("Enter a name for this event", "error"); return; }
     const rows = Object.entries(draft).map(([member_id, status]) => ({
-      event_type: eventType, event_date: eventDate, member_id, status,
+      event_type: effectiveEventType, event_date: eventDate, member_id, status,
     }));
     if (rows.length === 0) { setShowMark(false); return; }
     const { error } = await supabase.from("attendance_records").upsert(rows, { onConflict: "event_type,event_date,member_id" });
     if (error) { notify?.(error.message, "error"); return; }
     notify?.("Attendance saved");
     setShowMark(false);
+    setDraft({});
     load();
   }
 
@@ -4312,7 +4322,7 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
       <SectionHeader
         title="Attendance"
         subtitle="Who actually showed up, separate from who was scheduled. Click a name for their summary."
-        right={canManageRosters && <Btn tone="amber" onClick={() => setShowMark(true)}><Plus size={14} /> Mark attendance</Btn>}
+        right={canManageRosters && <Btn tone="amber" onClick={() => { setDraft({}); setCustomEventType(""); setShowMark(true); }}><Plus size={14} /> Mark attendance</Btn>}
       />
 
       {showMark && (
@@ -4321,26 +4331,42 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
             <Field label="Event">
               <select style={inputStyle} value={eventType} onChange={(e) => setEventType(e.target.value)}>
                 {Object.entries(EVENT_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                <option value="__custom__">Other — write a custom name</option>
               </select>
             </Field>
             <Field label="Date"><input type="date" style={inputStyle} value={eventDate} onChange={(e) => setEventDate(e.target.value)} /></Field>
           </div>
-          <Btn small tone="ghost" onClick={openMarking}><RefreshCw size={12} /> Load existing marks for this date</Btn>
-          <div style={{ marginTop: 14, maxHeight: 340, overflowY: "auto" }}>
-            {data.members.filter((m) => !m.unavailable && !m.suspended).map((m) => (
-              <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: `1px solid ${COLORS.border}` }}>
-                <span style={{ flex: 1, fontSize: 13 }}>{m.name}</span>
-                {["present", "absent", "excused"].map((s) => (
-                  <Btn key={s} small tone={draft[m.id] === s ? (s === "present" ? "amber" : s === "absent" ? "danger" : "default") : "ghost"} onClick={() => setDraft({ ...draft, [m.id]: s })}>
-                    {s === "present" ? "Present" : s === "absent" ? "Absent" : "Excused"}
-                  </Btn>
+          {eventType === "__custom__" && (
+            <Field label="Custom event name">
+              <input style={inputStyle} placeholder="e.g. Youth Retreat" value={customEventType} onChange={(e) => setCustomEventType(e.target.value)} />
+            </Field>
+          )}
+          {alreadyMarkedRecords.length > 0 ? (
+            <div style={{ marginTop: 14, padding: "14px 16px", borderRadius: 10, background: COLORS.redDim, border: `1px solid ${COLORS.red}` }}>
+              <div style={{ fontSize: 13, color: COLORS.textPrimary, fontWeight: 600, marginBottom: 4 }}>Already marked</div>
+              <div style={{ fontSize: 12, color: COLORS.textSecondary }}>
+                {eventLabel(effectiveEventType)} on {eventDate} already has {alreadyMarkedRecords.length} record{alreadyMarkedRecords.length > 1 ? "s" : ""}. To correct it, close this and use <strong>Recently marked</strong> below instead of marking it again here.
+              </div>
+            </div>
+          ) : (
+            <>
+              <div style={{ marginTop: 14, maxHeight: 340, overflowY: "auto" }}>
+                {data.members.filter((m) => !m.unavailable && !m.suspended).map((m) => (
+                  <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: `1px solid ${COLORS.border}` }}>
+                    <span style={{ flex: 1, fontSize: 13 }}>{m.name}</span>
+                    {["present", "absent", "excused"].map((s) => (
+                      <Btn key={s} small tone={draft[m.id] === s ? (s === "present" ? "amber" : s === "absent" ? "danger" : "default") : "ghost"} onClick={() => setDraft({ ...draft, [m.id]: s })}>
+                        {s === "present" ? "Present" : s === "absent" ? "Absent" : "Excused"}
+                      </Btn>
+                    ))}
+                  </div>
                 ))}
               </div>
-            ))}
-          </div>
-          <div style={{ marginTop: 14 }}>
-            <Btn tone="amber" onClick={saveMarking}><Save size={13} /> Save attendance</Btn>
-          </div>
+              <div style={{ marginTop: 14 }}>
+                <Btn tone="amber" onClick={saveMarking}><Save size={13} /> Save attendance</Btn>
+              </div>
+            </>
+          )}
         </Panel>
       )}
 
@@ -4379,7 +4405,7 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
               const editable = canManageRosters;
               return (
                 <RowLine key={i}>
-                  <span style={{ flex: 1 }}>{EVENT_TYPE_LABELS[d.eventType]}</span>
+                  <span style={{ flex: 1 }}>{eventLabel(d.eventType)}</span>
                   <span style={{ fontSize: 11, color: COLORS.textMuted, marginRight: editable ? 8 : 0 }}>{d.eventDate} · {d.count} marked</span>
                   {editable && (
                     <Pencil size={13} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => openEditBatch(d)} />
@@ -4394,13 +4420,19 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
       {editingBatch && (
         <Modal title="Fix the event" onClose={() => setEditingBatch(null)} width={340}>
           <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 12 }}>
-            Corrects all {editingBatch.count} marks currently filed under {EVENT_TYPE_LABELS[editingBatch.eventType]} · {editingBatch.eventDate}.
+            Corrects all {editingBatch.count} marks currently filed under {eventLabel(editingBatch.eventType)} · {editingBatch.eventDate}.
           </div>
           <Field label="Event">
             <select style={inputStyle} value={editForm.eventType} onChange={(e) => setEditForm({ ...editForm, eventType: e.target.value })}>
               {Object.entries(EVENT_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              <option value="__custom__">Other — write a custom name</option>
             </select>
           </Field>
+          {editForm.eventType === "__custom__" && (
+            <Field label="Custom event name">
+              <input style={inputStyle} placeholder="e.g. Youth Retreat" value={customEditEventType} onChange={(e) => setCustomEditEventType(e.target.value)} />
+            </Field>
+          )}
           <Field label="Date"><input type="date" style={inputStyle} value={editForm.eventDate} onChange={(e) => setEditForm({ ...editForm, eventDate: e.target.value })} /></Field>
           <Btn tone="amber" onClick={saveEditBatch}><Save size={13} /> Save correction</Btn>
         </Modal>
@@ -4428,7 +4460,7 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
               <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>Absences this month (can be pardoned)</div>
               {summaryResult.stats.excusableAbsences.map((r) => (
                 <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: `1px solid ${COLORS.border}` }}>
-                  <span style={{ flex: 1, fontSize: 12 }}>{EVENT_TYPE_LABELS[r.event_type]} · {r.event_date}</span>
+                  <span style={{ flex: 1, fontSize: 12 }}>{eventLabel(r.event_type)} · {r.event_date}</span>
                   <Btn small tone="ghost" onClick={() => excuseAbsence(r.id)}>Pardon</Btn>
                 </div>
               ))}

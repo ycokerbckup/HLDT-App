@@ -4255,8 +4255,26 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
   }
 
   async function load() {
-    const { data: rows } = await supabase.from("attendance_records").select("*").order("event_date", { ascending: false });
-    setRecords(rows || []);
+    // A single unfiltered select() is subject to the API's default
+    // row cap (1000) — as this table grows across many members and
+    // weekly events, that cap gets crossed, and rows silently go
+    // missing with no error. Page through explicitly so nothing is
+    // ever dropped, however large this table gets.
+    let allRows = [];
+    let from = 0;
+    const pageSize = 1000;
+    while (true) {
+      const { data: page, error } = await supabase
+        .from("attendance_records")
+        .select("*")
+        .order("event_date", { ascending: false })
+        .range(from, from + pageSize - 1);
+      if (error) { notify?.(error.message, "error"); break; }
+      allRows = allRows.concat(page || []);
+      if (!page || page.length < pageSize) break;
+      from += pageSize;
+    }
+    setRecords(allRows);
     setLoaded(true);
   }
 
@@ -4291,9 +4309,8 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
   }
 
   const summary = useMemo(() => {
-    const thisMonth = currentMonthStringWAT();
     const byMember = {};
-    records.filter((r) => r.event_date.slice(0, 7) === thisMonth).forEach((r) => {
+    records.forEach((r) => {
       if (!byMember[r.member_id]) byMember[r.member_id] = { present: 0, absent: 0, excused: 0 };
       byMember[r.member_id][r.status]++;
     });
@@ -4371,7 +4388,7 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.3fr 1fr", gap: 16, alignItems: "start" }}>
-        <Panel title="Attendance summary — this month">
+        <Panel title="Attendance summary">
           {summary.length === 0 ? (
             <EmptyRow text="No attendance recorded yet." />
           ) : (

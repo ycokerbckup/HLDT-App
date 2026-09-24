@@ -4291,8 +4291,9 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
   }
 
   const summary = useMemo(() => {
+    const thisMonth = currentMonthStringWAT();
     const byMember = {};
-    records.forEach((r) => {
+    records.filter((r) => r.event_date.slice(0, 7) === thisMonth).forEach((r) => {
       if (!byMember[r.member_id]) byMember[r.member_id] = { present: 0, absent: 0, excused: 0 };
       byMember[r.member_id][r.status]++;
     });
@@ -4370,7 +4371,7 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.3fr 1fr", gap: 16, alignItems: "start" }}>
-        <Panel title="Attendance summary">
+        <Panel title="Attendance summary — this month">
           {summary.length === 0 ? (
             <EmptyRow text="No attendance recorded yet." />
           ) : (

@@ -4164,8 +4164,7 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
   const MIN_PRESENT_TARGET = 8;
 
   function computeStats(member) {
-    const now = new Date();
-    const thisMonth = now.toISOString().slice(0, 7);
+    const thisMonth = currentMonthStringWAT();
     const memberRecords = records.filter((r) => r.member_id === member.id && r.event_date.slice(0, 7) === thisMonth);
     const allThisMonth = records.filter((r) => r.event_date.slice(0, 7) === thisMonth);
 

@@ -58,10 +58,13 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Member not found." }), { status: 404, headers: CORS_HEADERS });
     }
 
-    const now = new Date();
-    const thisMonth = now.toISOString().slice(0, 7);
+    // WAT is UTC+1 — shift the timestamp once, then use only UTC
+    // getters/constructors so this is correct regardless of the
+    // server runtime's own local timezone setting.
+    const watNow = new Date(Date.now() + 60 * 60 * 1000);
+    const thisMonth = watNow.toISOString().slice(0, 7);
     const monthStart = `${thisMonth}-01`;
-    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString().slice(0, 10);
+    const nextMonth = new Date(Date.UTC(watNow.getUTCFullYear(), watNow.getUTCMonth() + 1, 1)).toISOString().slice(0, 10);
 
     const { data: memberRecords } = await supabase
       .from("attendance_records")

@@ -15,7 +15,7 @@ const DARK_COLORS = {
   surface2: "#242933",
   glass1: "rgba(28, 32, 39, 0.66)",
   glass2: "rgba(36, 41, 51, 0.55)",
-  glassBorder: "rgba(255, 255, 255, 0.14)",
+  glassBorder: "rgba(255, 255, 255, 0.09)",
   border: "#2E3440",
   borderStrong: "#3A4150",
   textPrimary: "#EDEEF2",
@@ -297,7 +297,7 @@ function Badge({ children, tone = "gray" }) {
 
 function Panel({ title, right, children, style }) {
   return (
-    <div className="hldt-panel hldt-panel-hover hldt-glass" style={{ background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 20, boxShadow: "0 8px 30px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.16)", overflow: "hidden", ...style }}>
+    <div className="hldt-panel hldt-panel-hover hldt-glass" style={{ background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 14, overflow: "hidden", ...style }}>
       {title && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderBottom: `1px solid ${COLORS.border}`, background: COLORS.glass2 }}>
           <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 15, letterSpacing: "0.02em", textTransform: "uppercase", color: COLORS.textPrimary }}>{title}</h3>
@@ -326,7 +326,7 @@ function Btn({ children, onClick, tone = "default", small, type = "button", disa
     danger: { background: hexToRgba(COLORS.red, 0.12), color: COLORS.red, border: `1px solid ${hexToRgba(COLORS.red, 0.3)}` },
   };
   return (
-    <button className={`hldt-btn hldt-glass${tone === "amber" ? " hldt-shine" : ""}`} type={type} onClick={onClick} disabled={disabled} style={{ ...toneStyles[tone], borderRadius: 10, overflow: "hidden", padding: small ? "5px 10px" : "8px 14px", fontSize: small ? 12 : 13, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 6, ...style }}>
+    <button className={`hldt-btn hldt-glass${tone === "amber" ? " hldt-shine" : ""}`} type={type} onClick={onClick} disabled={disabled} style={{ ...toneStyles[tone], borderRadius: 10, padding: small ? "5px 10px" : "8px 14px", fontSize: small ? 12 : 13, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 6, ...style }}>
       {children}
     </button>
   );
@@ -456,8 +456,8 @@ function Modal({ title, onClose, children, width = 480, footer, dismissable = tr
       onClick={dismissable ? onClose : undefined}
     >
       <div
-        className="hldt-modal hldt-glass hldt-glass-warp"
-        style={{ width, maxWidth: "100%", maxHeight: "85vh", display: "flex", flexDirection: "column", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 24, boxShadow: "0 8px 30px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.18)", overflow: "hidden" }}
+        className="hldt-modal hldt-glass"
+        style={{ width, maxWidth: "100%", maxHeight: "85vh", display: "flex", flexDirection: "column", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 16, overflow: "hidden" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 20px 12px", flexShrink: 0 }}>
@@ -1051,9 +1051,9 @@ function Dashboard_Shell({ session, profile, setProfile }) {
           {showAccountMenu && (
             <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 1600 }} onClick={() => setShowAccountMenu(false)}>
               <div
-                className="hldt-modal hldt-glass hldt-glass-warp"
+                className="hldt-modal hldt-glass"
                 onClick={(e) => e.stopPropagation()}
-                style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 250, background: COLORS.glass1, borderRight: `1px solid ${COLORS.glassBorder}`, display: "flex", flexDirection: "column", overflow: "hidden", overflowY: "auto" }}
+                style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 250, background: COLORS.glass1, borderRight: `1px solid ${COLORS.glassBorder}`, display: "flex", flexDirection: "column", overflowY: "auto" }}
               >
                 <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${COLORS.border}` }}>
                   <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 17 }}>DISPLAY TEAM</div>
@@ -1126,7 +1126,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
         </>
       ) : (
         <>
-          <div data-tour="nav" className="hldt-glass" style={{ width: 190, flexShrink: 0, background: COLORS.glass1, borderRight: `1px solid ${COLORS.glassBorder}`, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <div data-tour="nav" className="hldt-glass" style={{ width: 190, flexShrink: 0, background: COLORS.glass1, borderRight: `1px solid ${COLORS.glassBorder}`, display: "flex", flexDirection: "column" }}>
             <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${COLORS.border}` }}>
               <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 19, letterSpacing: "0.02em", lineHeight: 1.1 }}>DISPLAY TEAM</div>
               <div style={{ fontSize: 11, color: COLORS.textMuted, fontFamily: "'JetBrains Mono', monospace", marginTop: 4 }}>OPS CONSOLE</div>
@@ -1347,9 +1347,9 @@ function GlobalSearch({ data, goToTab, isOperationsUser }) {
       {open && createPortal(
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 2100, display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: isMobile ? 50 : 60 }} onClick={closeSearch}>
           <div
-            className="hldt-modal hldt-glass hldt-glass-warp"
+            className="hldt-modal hldt-glass"
             onClick={(e) => e.stopPropagation()}
-            style={{ width: 480, maxWidth: "calc(100vw - 32px)", maxHeight: "70vh", overflow: "hidden", overflowY: "auto", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 16, padding: 16, boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}
+            style={{ width: 480, maxWidth: "calc(100vw - 32px)", maxHeight: "70vh", overflowY: "auto", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 16, padding: 16, boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}
           >
             <input
               ref={inputRef}
@@ -1658,9 +1658,9 @@ function NotificationBell({ notifications, readIds, onRead, onNavigate }) {
       {open && createPortal(
         <div style={{ position: "fixed", inset: 0, zIndex: 2100 }} onClick={() => setOpen(false)}>
           <div
-            className="hldt-modal hldt-glass hldt-glass-warp"
+            className="hldt-modal hldt-glass"
             onClick={(e) => e.stopPropagation()}
-            style={{ position: "fixed", top: isMobile ? 46 : 58, right: isMobile ? 8 : 16, width: isMobile ? "calc(100vw - 16px)" : 320, maxWidth: 320, maxHeight: 400, overflow: "hidden", overflowY: "auto", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 14, padding: 8, boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}
+            style={{ position: "fixed", top: isMobile ? 46 : 58, right: isMobile ? 8 : 16, width: isMobile ? "calc(100vw - 16px)" : 320, maxWidth: 320, maxHeight: 400, overflowY: "auto", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 14, padding: 8, boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}
           >
             <div style={{ fontSize: 12, fontWeight: 500, color: COLORS.textSecondary, padding: "6px 8px" }}>Notifications</div>
             {notifications.length === 0 ? (
@@ -2355,7 +2355,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                               📌
                             </button>
                             {showPinPickerFor === m.id && (
-                              <div className="hldt-modal hldt-glass hldt-glass-warp" style={{ position: "absolute", top: 0, [mine ? "right" : "left"]: "100%", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 6, display: "flex", flexDirection: "column", gap: 4, zIndex: 60, minWidth: 90, overflow: "hidden" }}>
+                              <div className="hldt-modal hldt-glass" style={{ position: "absolute", top: 0, [mine ? "right" : "left"]: "100%", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 6, display: "flex", flexDirection: "column", gap: 4, zIndex: 60, minWidth: 90 }}>
                                 <div style={{ fontSize: 10, color: COLORS.textMuted, padding: "0 4px" }}>Pin for...</div>
                                 {PIN_DURATIONS.map((d) => (
                                   <Btn key={d.label} small tone="ghost" onClick={() => pinMessage(m.id, d.hours)}>{d.label}</Btn>
@@ -2384,7 +2384,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                             🙂
                           </button>
                           {showReactionPickerFor === m.id && (
-                            <div className="hldt-modal hldt-glass hldt-glass-warp" style={{ position: "absolute", bottom: "100%", [mine ? "right" : "left"]: 0, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 6, display: "flex", gap: 4, zIndex: 60, marginBottom: 4, overflow: "hidden" }}>
+                            <div className="hldt-modal hldt-glass" style={{ position: "absolute", bottom: "100%", [mine ? "right" : "left"]: 0, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 6, display: "flex", gap: 4, zIndex: 60, marginBottom: 4 }}>
                               {REACTION_EMOJIS.map((e) => (
                                 <span key={e} onClick={() => toggleReaction(m.id, e)} style={{ cursor: "pointer", fontSize: 16, padding: 2 }}>{e}</span>
                               ))}
@@ -2421,7 +2421,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                           </span>
                         )}
                         {showReceiptsFor === m.id && readerNames.length > 0 && (
-                          <div className="hldt-modal hldt-glass hldt-glass-warp" style={{ position: "absolute", bottom: 18, [mine ? "right" : "left"]: 0, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 8, minWidth: 120, zIndex: 50, overflow: "hidden" }}>
+                          <div className="hldt-modal hldt-glass" style={{ position: "absolute", bottom: 18, [mine ? "right" : "left"]: 0, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 8, minWidth: 120, zIndex: 50 }}>
                             {readerNames.map((n, i) => (
                               <div key={i} style={{ fontSize: 11, color: COLORS.textSecondary, padding: "2px 4px", whiteSpace: "nowrap" }}>{n}</div>
                             ))}
@@ -2448,7 +2448,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
           )}
           <div style={{ padding: 12, borderTop: `1px solid ${COLORS.border}`, position: "relative" }}>
             {tagSuggestions.length > 0 && (
-              <div className="hldt-modal hldt-glass hldt-glass-warp" style={{ position: "absolute", bottom: "100%", left: 12, marginBottom: 4, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 6, zIndex: 60, minWidth: 160, overflow: "hidden" }}>
+              <div className="hldt-modal hldt-glass" style={{ position: "absolute", bottom: "100%", left: 12, marginBottom: 4, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 6, zIndex: 60, minWidth: 160 }}>
                 {tagSuggestions.map((m) => (
                   <div key={m.id} className="hldt-row" data-clickable="true" onClick={() => selectTag(m)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>
                     {m.isEveryone ? (
@@ -2799,8 +2799,8 @@ function TourGuide({ onDone }) {
     <>
       <div className="hldt-tour-spotlight" style={{ top: rect.top - pad, left: rect.left - pad, width: rect.width + pad * 2, height: rect.height + pad * 2 }} />
       <div
-        className="hldt-glass hldt-glass-warp"
-        style={{ position: "fixed", top: tooltipTop, left: tooltipLeft, width: 240, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 14, padding: 14, zIndex: 3001, boxShadow: "0 16px 40px rgba(0,0,0,0.4)", overflow: "hidden" }}
+        className="hldt-glass"
+        style={{ position: "fixed", top: tooltipTop, left: tooltipLeft, width: 240, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 14, padding: 14, zIndex: 3001, boxShadow: "0 16px 40px rgba(0,0,0,0.4)" }}
       >
         <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.textPrimary, marginBottom: 4 }}>{stepData.title}</div>
         <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12, lineHeight: 1.4 }}>{stepData.body}</div>
@@ -4142,18 +4142,12 @@ function SaturdayRosterEditor({ existing, members, onClose, onSaved, notify }) {
 }
 
 const EVENT_TYPE_LABELS = { sunday: "Sunday service", midweek: "Wednesday midweek", tuesday: "Tuesday meeting", saturday: "Saturday training" };
-// Falls back to showing the raw value for a custom event name that
-// isn't one of the 4 presets.
-function eventLabel(type) {
-  return EVENT_TYPE_LABELS[type] || type;
-}
 
 function AttendanceTab({ data, canManageRosters, myMember, notify }) {
   const isMobile = useIsMobile();
   const [records, setRecords] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [eventType, setEventType] = useState("sunday");
-  const [customEventType, setCustomEventType] = useState("");
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
   const [showMark, setShowMark] = useState(false);
   const [draft, setDraft] = useState({});
@@ -4164,7 +4158,8 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
   const MIN_PRESENT_TARGET = 8;
 
   function computeStats(member) {
-    const thisMonth = currentMonthStringWAT();
+    const now = new Date();
+    const thisMonth = now.toISOString().slice(0, 7);
     const memberRecords = records.filter((r) => r.member_id === member.id && r.event_date.slice(0, 7) === thisMonth);
     const allThisMonth = records.filter((r) => r.event_date.slice(0, 7) === thisMonth);
 
@@ -4231,21 +4226,17 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
 
   const [editingBatch, setEditingBatch] = useState(null);
   const [editForm, setEditForm] = useState({ eventType: "sunday", eventDate: "" });
-  const [customEditEventType, setCustomEditEventType] = useState("");
 
   function openEditBatch(batch) {
     setEditingBatch(batch);
     setEditForm({ eventType: batch.eventType, eventDate: batch.eventDate });
-    setCustomEditEventType("");
   }
 
   async function saveEditBatch() {
-    const newEventType = editForm.eventType === "__custom__" ? customEditEventType.trim() : editForm.eventType;
-    if (!newEventType) { notify?.("Enter a name for this event", "error"); return; }
     const { error } = await supabase.rpc("edit_attendance_event", {
       p_old_event_type: editingBatch.eventType,
       p_old_event_date: editingBatch.eventDate,
-      p_new_event_type: newEventType,
+      p_new_event_type: editForm.eventType,
       p_new_event_date: editForm.eventDate,
     });
     if (error) { notify?.(error.message, "error"); return; }
@@ -4255,26 +4246,8 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
   }
 
   async function load() {
-    // A single unfiltered select() is subject to the API's default
-    // row cap (1000) — as this table grows across many members and
-    // weekly events, that cap gets crossed, and rows silently go
-    // missing with no error. Page through explicitly so nothing is
-    // ever dropped, however large this table gets.
-    let allRows = [];
-    let from = 0;
-    const pageSize = 1000;
-    while (true) {
-      const { data: page, error } = await supabase
-        .from("attendance_records")
-        .select("*")
-        .order("event_date", { ascending: false })
-        .range(from, from + pageSize - 1);
-      if (error) { notify?.(error.message, "error"); break; }
-      allRows = allRows.concat(page || []);
-      if (!page || page.length < pageSize) break;
-      from += pageSize;
-    }
-    setRecords(allRows);
+    const { data: rows } = await supabase.from("attendance_records").select("*").order("event_date", { ascending: false });
+    setRecords(rows || []);
     setLoaded(true);
   }
 
@@ -4287,24 +4260,24 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
     return () => supabase.removeChannel(channel);
   }, []);
 
-  const effectiveEventType = eventType === "__custom__" ? customEventType.trim() : eventType;
-  const alreadyMarkedRecords = useMemo(
-    () => records.filter((r) => r.event_type === effectiveEventType && r.event_date === eventDate),
-    [records, effectiveEventType, eventDate]
-  );
+  function openMarking() {
+    const existing = {};
+    records
+      .filter((r) => r.event_type === eventType && r.event_date === eventDate)
+      .forEach((r) => { existing[r.member_id] = r.status; });
+    setDraft(existing);
+    setShowMark(true);
+  }
 
   async function saveMarking() {
-    if (alreadyMarkedRecords.length > 0) { notify?.("This event is already marked — use Recently Marked below to correct it.", "error"); return; }
-    if (!effectiveEventType) { notify?.("Enter a name for this event", "error"); return; }
     const rows = Object.entries(draft).map(([member_id, status]) => ({
-      event_type: effectiveEventType, event_date: eventDate, member_id, status,
+      event_type: eventType, event_date: eventDate, member_id, status,
     }));
     if (rows.length === 0) { setShowMark(false); return; }
     const { error } = await supabase.from("attendance_records").upsert(rows, { onConflict: "event_type,event_date,member_id" });
     if (error) { notify?.(error.message, "error"); return; }
     notify?.("Attendance saved");
     setShowMark(false);
-    setDraft({});
     load();
   }
 
@@ -4339,7 +4312,7 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
       <SectionHeader
         title="Attendance"
         subtitle="Who actually showed up, separate from who was scheduled. Click a name for their summary."
-        right={canManageRosters && <Btn tone="amber" onClick={() => { setDraft({}); setCustomEventType(""); setShowMark(true); }}><Plus size={14} /> Mark attendance</Btn>}
+        right={canManageRosters && <Btn tone="amber" onClick={() => setShowMark(true)}><Plus size={14} /> Mark attendance</Btn>}
       />
 
       {showMark && (
@@ -4348,42 +4321,26 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
             <Field label="Event">
               <select style={inputStyle} value={eventType} onChange={(e) => setEventType(e.target.value)}>
                 {Object.entries(EVENT_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                <option value="__custom__">Other — write a custom name</option>
               </select>
             </Field>
             <Field label="Date"><input type="date" style={inputStyle} value={eventDate} onChange={(e) => setEventDate(e.target.value)} /></Field>
           </div>
-          {eventType === "__custom__" && (
-            <Field label="Custom event name">
-              <input style={inputStyle} placeholder="e.g. Youth Retreat" value={customEventType} onChange={(e) => setCustomEventType(e.target.value)} />
-            </Field>
-          )}
-          {alreadyMarkedRecords.length > 0 ? (
-            <div style={{ marginTop: 14, padding: "14px 16px", borderRadius: 10, background: COLORS.redDim, border: `1px solid ${COLORS.red}` }}>
-              <div style={{ fontSize: 13, color: COLORS.textPrimary, fontWeight: 600, marginBottom: 4 }}>Already marked</div>
-              <div style={{ fontSize: 12, color: COLORS.textSecondary }}>
-                {eventLabel(effectiveEventType)} on {eventDate} already has {alreadyMarkedRecords.length} record{alreadyMarkedRecords.length > 1 ? "s" : ""}. To correct it, close this and use <strong>Recently marked</strong> below instead of marking it again here.
-              </div>
-            </div>
-          ) : (
-            <>
-              <div style={{ marginTop: 14, maxHeight: 340, overflowY: "auto" }}>
-                {data.members.filter((m) => !m.unavailable && !m.suspended).map((m) => (
-                  <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: `1px solid ${COLORS.border}` }}>
-                    <span style={{ flex: 1, fontSize: 13 }}>{m.name}</span>
-                    {["present", "absent", "excused"].map((s) => (
-                      <Btn key={s} small tone={draft[m.id] === s ? (s === "present" ? "amber" : s === "absent" ? "danger" : "default") : "ghost"} onClick={() => setDraft({ ...draft, [m.id]: s })}>
-                        {s === "present" ? "Present" : s === "absent" ? "Absent" : "Excused"}
-                      </Btn>
-                    ))}
-                  </div>
+          <Btn small tone="ghost" onClick={openMarking}><RefreshCw size={12} /> Load existing marks for this date</Btn>
+          <div style={{ marginTop: 14, maxHeight: 340, overflowY: "auto" }}>
+            {data.members.filter((m) => !m.unavailable && !m.suspended).map((m) => (
+              <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: `1px solid ${COLORS.border}` }}>
+                <span style={{ flex: 1, fontSize: 13 }}>{m.name}</span>
+                {["present", "absent", "excused"].map((s) => (
+                  <Btn key={s} small tone={draft[m.id] === s ? (s === "present" ? "amber" : s === "absent" ? "danger" : "default") : "ghost"} onClick={() => setDraft({ ...draft, [m.id]: s })}>
+                    {s === "present" ? "Present" : s === "absent" ? "Absent" : "Excused"}
+                  </Btn>
                 ))}
               </div>
-              <div style={{ marginTop: 14 }}>
-                <Btn tone="amber" onClick={saveMarking}><Save size={13} /> Save attendance</Btn>
-              </div>
-            </>
-          )}
+            ))}
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <Btn tone="amber" onClick={saveMarking}><Save size={13} /> Save attendance</Btn>
+          </div>
         </Panel>
       )}
 
@@ -4422,7 +4379,7 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
               const editable = canManageRosters;
               return (
                 <RowLine key={i}>
-                  <span style={{ flex: 1 }}>{eventLabel(d.eventType)}</span>
+                  <span style={{ flex: 1 }}>{EVENT_TYPE_LABELS[d.eventType]}</span>
                   <span style={{ fontSize: 11, color: COLORS.textMuted, marginRight: editable ? 8 : 0 }}>{d.eventDate} · {d.count} marked</span>
                   {editable && (
                     <Pencil size={13} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => openEditBatch(d)} />
@@ -4437,19 +4394,13 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
       {editingBatch && (
         <Modal title="Fix the event" onClose={() => setEditingBatch(null)} width={340}>
           <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 12 }}>
-            Corrects all {editingBatch.count} marks currently filed under {eventLabel(editingBatch.eventType)} · {editingBatch.eventDate}.
+            Corrects all {editingBatch.count} marks currently filed under {EVENT_TYPE_LABELS[editingBatch.eventType]} · {editingBatch.eventDate}.
           </div>
           <Field label="Event">
             <select style={inputStyle} value={editForm.eventType} onChange={(e) => setEditForm({ ...editForm, eventType: e.target.value })}>
               {Object.entries(EVENT_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              <option value="__custom__">Other — write a custom name</option>
             </select>
           </Field>
-          {editForm.eventType === "__custom__" && (
-            <Field label="Custom event name">
-              <input style={inputStyle} placeholder="e.g. Youth Retreat" value={customEditEventType} onChange={(e) => setCustomEditEventType(e.target.value)} />
-            </Field>
-          )}
           <Field label="Date"><input type="date" style={inputStyle} value={editForm.eventDate} onChange={(e) => setEditForm({ ...editForm, eventDate: e.target.value })} /></Field>
           <Btn tone="amber" onClick={saveEditBatch}><Save size={13} /> Save correction</Btn>
         </Modal>
@@ -4477,7 +4428,7 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
               <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>Absences this month (can be pardoned)</div>
               {summaryResult.stats.excusableAbsences.map((r) => (
                 <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: `1px solid ${COLORS.border}` }}>
-                  <span style={{ flex: 1, fontSize: 12 }}>{eventLabel(r.event_type)} · {r.event_date}</span>
+                  <span style={{ flex: 1, fontSize: 12 }}>{EVENT_TYPE_LABELS[r.event_type]} · {r.event_date}</span>
                   <Btn small tone="ghost" onClick={() => excuseAbsence(r.id)}>Pardon</Btn>
                 </div>
               ))}

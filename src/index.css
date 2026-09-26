@@ -219,32 +219,76 @@ body {
   opacity: 0.16;
 }
 
+/* The real fixed background lines the glass effect bends. Same 112deg
+   angle and spacing as .hldt-glass::before below — the glass shows a
+   warped slice of this exact pattern, which is what makes it read as
+   "this surface is bending real lines behind it" rather than a random
+   overlay. Slowly drifting, theme-aware (dark mode = light lines,
+   light mode = dark lines, since white-on-white was invisible). */
+#root {
+  position: relative;
+  z-index: 1;
+}
+.hldt-stripes {
+  position: fixed;
+  inset: -20%;
+  z-index: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    112deg,
+    rgba(255, 255, 255, 0) 0px, rgba(255, 255, 255, 0) 26px,
+    rgba(255, 255, 255, 0.05) 27px, rgba(255, 255, 255, 0.05) 30px
+  );
+  animation: hldt-stripe-drift 40s linear infinite;
+}
+[data-theme="light"] .hldt-stripes {
+  background: repeating-linear-gradient(
+    112deg,
+    rgba(20, 23, 28, 0) 0px, rgba(20, 23, 28, 0) 26px,
+    rgba(20, 23, 28, 0.045) 27px, rgba(20, 23, 28, 0.045) 30px
+  );
+}
+@keyframes hldt-stripe-drift {
+  from { transform: translateY(0); }
+  to { transform: translateY(-120px); }
+}
+
 .hldt-glass {
   position: relative;
   backdrop-filter: blur(22px) saturate(160%) brightness(1.08);
   -webkit-backdrop-filter: blur(22px) saturate(160%) brightness(1.08);
 }
-/* The "bend" — a warped stripe pattern clipped to the glass surface's
-   own shape (via its overflow:hidden + border-radius), simulating
-   light refracting through liquid glass. Implemented as a
+/* The "bend" — a warped copy of the SAME stripe pattern above, clipped
+   to the glass surface's own shape (its overflow:hidden + border-
+   radius). A fixed-pixel inset rather than a percentage means this
+   stays proportionate whether it's a small button or a wide desktop
+   panel, instead of ballooning on large surfaces. Implemented as a
    pseudo-element with z-index:-1 rather than an extra child, so this
-   applies to every glass surface in the app with zero JSX changes —
-   real content (which is all normal-flow, non-positioned) always
-   stacks above it automatically. */
+   reaches every glass surface in the app with zero JSX changes — real
+   content (all normal-flow, non-positioned) always stacks above it. */
 .hldt-glass::before {
   content: "";
   position: absolute;
-  inset: -30%;
+  inset: -40px;
   z-index: -1;
   pointer-events: none;
   background: repeating-linear-gradient(
     112deg,
-    rgba(255, 255, 255, 0) 0px, rgba(255, 255, 255, 0) 22px,
-    rgba(255, 255, 255, 0.22) 23px, rgba(255, 255, 255, 0.22) 26px
+    rgba(255, 255, 255, 0) 0px, rgba(255, 255, 255, 0) 26px,
+    rgba(255, 255, 255, 0.28) 27px, rgba(255, 255, 255, 0.28) 30px
   );
   filter: url(#hldt-liquid-warp);
-  opacity: 0.5;
+  opacity: 0.6;
   mix-blend-mode: overlay;
+}
+[data-theme="light"] .hldt-glass::before {
+  background: repeating-linear-gradient(
+    112deg,
+    rgba(20, 23, 28, 0) 0px, rgba(20, 23, 28, 0) 26px,
+    rgba(20, 23, 28, 0.22) 27px, rgba(20, 23, 28, 0.22) 30px
+  );
+  mix-blend-mode: multiply;
+  opacity: 0.35;
 }
 
 .hldt-auth-card {

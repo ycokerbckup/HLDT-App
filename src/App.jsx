@@ -326,7 +326,7 @@ function Btn({ children, onClick, tone = "default", small, type = "button", disa
     danger: { background: hexToRgba(COLORS.red, 0.12), color: COLORS.red, border: `1px solid ${hexToRgba(COLORS.red, 0.3)}` },
   };
   return (
-    <button className={`hldt-btn hldt-glass${tone === "amber" ? " hldt-shine" : ""}`} type={type} onClick={onClick} disabled={disabled} style={{ ...toneStyles[tone], borderRadius: 10, padding: small ? "5px 10px" : "8px 14px", fontSize: small ? 12 : 13, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 6, ...style }}>
+    <button className={`hldt-btn hldt-glass${tone === "amber" ? " hldt-shine" : ""}`} type={type} onClick={onClick} disabled={disabled} style={{ ...toneStyles[tone], borderRadius: 10, overflow: "hidden", padding: small ? "5px 10px" : "8px 14px", fontSize: small ? 12 : 13, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 6, ...style }}>
       {children}
     </button>
   );
@@ -1053,7 +1053,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
               <div
                 className="hldt-modal hldt-glass"
                 onClick={(e) => e.stopPropagation()}
-                style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 250, background: COLORS.glass1, borderRight: `1px solid ${COLORS.glassBorder}`, display: "flex", flexDirection: "column", overflowY: "auto" }}
+                style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 250, background: COLORS.glass1, borderRight: `1px solid ${COLORS.glassBorder}`, display: "flex", flexDirection: "column", overflow: "hidden", overflowY: "auto" }}
               >
                 <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${COLORS.border}` }}>
                   <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 17 }}>DISPLAY TEAM</div>
@@ -1126,7 +1126,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
         </>
       ) : (
         <>
-          <div data-tour="nav" className="hldt-glass" style={{ width: 190, flexShrink: 0, background: COLORS.glass1, borderRight: `1px solid ${COLORS.glassBorder}`, display: "flex", flexDirection: "column" }}>
+          <div data-tour="nav" className="hldt-glass" style={{ width: 190, flexShrink: 0, background: COLORS.glass1, borderRight: `1px solid ${COLORS.glassBorder}`, display: "flex", flexDirection: "column", overflow: "hidden" }}>
             <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${COLORS.border}` }}>
               <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 19, letterSpacing: "0.02em", lineHeight: 1.1 }}>DISPLAY TEAM</div>
               <div style={{ fontSize: 11, color: COLORS.textMuted, fontFamily: "'JetBrains Mono', monospace", marginTop: 4 }}>OPS CONSOLE</div>
@@ -2355,7 +2355,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                               📌
                             </button>
                             {showPinPickerFor === m.id && (
-                              <div className="hldt-modal hldt-glass" style={{ position: "absolute", top: 0, [mine ? "right" : "left"]: "100%", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 6, display: "flex", flexDirection: "column", gap: 4, zIndex: 60, minWidth: 90 }}>
+                              <div className="hldt-modal hldt-glass" style={{ position: "absolute", top: 0, [mine ? "right" : "left"]: "100%", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 6, display: "flex", flexDirection: "column", gap: 4, zIndex: 60, minWidth: 90, overflow: "hidden" }}>
                                 <div style={{ fontSize: 10, color: COLORS.textMuted, padding: "0 4px" }}>Pin for...</div>
                                 {PIN_DURATIONS.map((d) => (
                                   <Btn key={d.label} small tone="ghost" onClick={() => pinMessage(m.id, d.hours)}>{d.label}</Btn>
@@ -2384,7 +2384,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                             🙂
                           </button>
                           {showReactionPickerFor === m.id && (
-                            <div className="hldt-modal hldt-glass" style={{ position: "absolute", bottom: "100%", [mine ? "right" : "left"]: 0, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 6, display: "flex", gap: 4, zIndex: 60, marginBottom: 4 }}>
+                            <div className="hldt-modal hldt-glass" style={{ position: "absolute", bottom: "100%", [mine ? "right" : "left"]: 0, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 6, display: "flex", gap: 4, zIndex: 60, marginBottom: 4, overflow: "hidden" }}>
                               {REACTION_EMOJIS.map((e) => (
                                 <span key={e} onClick={() => toggleReaction(m.id, e)} style={{ cursor: "pointer", fontSize: 16, padding: 2 }}>{e}</span>
                               ))}
@@ -2421,7 +2421,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                           </span>
                         )}
                         {showReceiptsFor === m.id && readerNames.length > 0 && (
-                          <div className="hldt-modal hldt-glass" style={{ position: "absolute", bottom: 18, [mine ? "right" : "left"]: 0, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 8, minWidth: 120, zIndex: 50 }}>
+                          <div className="hldt-modal hldt-glass" style={{ position: "absolute", bottom: 18, [mine ? "right" : "left"]: 0, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 8, minWidth: 120, zIndex: 50, overflow: "hidden" }}>
                             {readerNames.map((n, i) => (
                               <div key={i} style={{ fontSize: 11, color: COLORS.textSecondary, padding: "2px 4px", whiteSpace: "nowrap" }}>{n}</div>
                             ))}
@@ -2448,7 +2448,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
           )}
           <div style={{ padding: 12, borderTop: `1px solid ${COLORS.border}`, position: "relative" }}>
             {tagSuggestions.length > 0 && (
-              <div className="hldt-modal hldt-glass" style={{ position: "absolute", bottom: "100%", left: 12, marginBottom: 4, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 6, zIndex: 60, minWidth: 160 }}>
+              <div className="hldt-modal hldt-glass" style={{ position: "absolute", bottom: "100%", left: 12, marginBottom: 4, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 6, zIndex: 60, minWidth: 160, overflow: "hidden" }}>
                 {tagSuggestions.map((m) => (
                   <div key={m.id} className="hldt-row" data-clickable="true" onClick={() => selectTag(m)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>
                     {m.isEveryone ? (
@@ -2800,7 +2800,7 @@ function TourGuide({ onDone }) {
       <div className="hldt-tour-spotlight" style={{ top: rect.top - pad, left: rect.left - pad, width: rect.width + pad * 2, height: rect.height + pad * 2 }} />
       <div
         className="hldt-glass"
-        style={{ position: "fixed", top: tooltipTop, left: tooltipLeft, width: 240, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 14, padding: 14, zIndex: 3001, boxShadow: "0 16px 40px rgba(0,0,0,0.4)" }}
+        style={{ position: "fixed", top: tooltipTop, left: tooltipLeft, width: 240, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 14, padding: 14, zIndex: 3001, boxShadow: "0 16px 40px rgba(0,0,0,0.4)", overflow: "hidden" }}
       >
         <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.textPrimary, marginBottom: 4 }}>{stepData.title}</div>
         <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12, lineHeight: 1.4 }}>{stepData.body}</div>

@@ -220,8 +220,31 @@ body {
 }
 
 .hldt-glass {
-  backdrop-filter: blur(18px) saturate(150%);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  position: relative;
+  backdrop-filter: blur(22px) saturate(160%) brightness(1.08);
+  -webkit-backdrop-filter: blur(22px) saturate(160%) brightness(1.08);
+}
+/* The "bend" — a warped stripe pattern clipped to the glass surface's
+   own shape (via its overflow:hidden + border-radius), simulating
+   light refracting through liquid glass. Implemented as a
+   pseudo-element with z-index:-1 rather than an extra child, so this
+   applies to every glass surface in the app with zero JSX changes —
+   real content (which is all normal-flow, non-positioned) always
+   stacks above it automatically. */
+.hldt-glass::before {
+  content: "";
+  position: absolute;
+  inset: -30%;
+  z-index: -1;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    112deg,
+    rgba(255, 255, 255, 0) 0px, rgba(255, 255, 255, 0) 22px,
+    rgba(255, 255, 255, 0.22) 23px, rgba(255, 255, 255, 0.22) 26px
+  );
+  filter: url(#hldt-liquid-warp);
+  opacity: 0.5;
+  mix-blend-mode: overlay;
 }
 
 .hldt-auth-card {

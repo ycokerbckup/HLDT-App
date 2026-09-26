@@ -15,7 +15,7 @@ const DARK_COLORS = {
   surface2: "#242933",
   glass1: "rgba(28, 32, 39, 0.66)",
   glass2: "rgba(36, 41, 51, 0.55)",
-  glassBorder: "rgba(255, 255, 255, 0.09)",
+  glassBorder: "rgba(255, 255, 255, 0.14)",
   border: "#2E3440",
   borderStrong: "#3A4150",
   textPrimary: "#EDEEF2",
@@ -297,7 +297,7 @@ function Badge({ children, tone = "gray" }) {
 
 function Panel({ title, right, children, style }) {
   return (
-    <div className="hldt-panel hldt-panel-hover hldt-glass" style={{ background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 14, overflow: "hidden", ...style }}>
+    <div className="hldt-panel hldt-panel-hover hldt-glass" style={{ background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 20, boxShadow: "0 8px 30px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.16)", overflow: "hidden", ...style }}>
       {title && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderBottom: `1px solid ${COLORS.border}`, background: COLORS.glass2 }}>
           <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 15, letterSpacing: "0.02em", textTransform: "uppercase", color: COLORS.textPrimary }}>{title}</h3>
@@ -457,7 +457,7 @@ function Modal({ title, onClose, children, width = 480, footer, dismissable = tr
     >
       <div
         className="hldt-modal hldt-glass"
-        style={{ width, maxWidth: "100%", maxHeight: "85vh", display: "flex", flexDirection: "column", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 16, overflow: "hidden" }}
+        style={{ width, maxWidth: "100%", maxHeight: "85vh", display: "flex", flexDirection: "column", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 24, boxShadow: "0 8px 30px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.18)", overflow: "hidden" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 20px 12px", flexShrink: 0 }}>

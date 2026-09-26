@@ -220,11 +220,11 @@ body {
 }
 
 /* The real fixed background lines the glass effect bends. Same 112deg
-   angle and spacing as .hldt-glass::before below — the glass shows a
-   warped slice of this exact pattern, which is what makes it read as
-   "this surface is bending real lines behind it" rather than a random
-   overlay. Slowly drifting, theme-aware (dark mode = light lines,
-   light mode = dark lines, since white-on-white was invisible). */
+   angle and spacing as .hldt-glass-warp::before below — the glass
+   shows a warped slice of this exact pattern, which is what makes it
+   read as "this surface is bending real lines behind it" rather than
+   a random overlay. Slowly drifting, theme-aware (dark mode = light
+   lines, light mode = dark lines, since white-on-white was invisible). */
 #root {
   position: relative;
   z-index: 1;
@@ -237,36 +237,48 @@ body {
   background: repeating-linear-gradient(
     112deg,
     rgba(255, 255, 255, 0) 0px, rgba(255, 255, 255, 0) 26px,
-    rgba(255, 255, 255, 0.05) 27px, rgba(255, 255, 255, 0.05) 30px
+    rgba(255, 255, 255, 0.035) 27px, rgba(255, 255, 255, 0.035) 30px
   );
-  animation: hldt-stripe-drift 40s linear infinite;
+  animation: hldt-stripe-drift 70s linear infinite;
 }
 [data-theme="light"] .hldt-stripes {
   background: repeating-linear-gradient(
     112deg,
     rgba(20, 23, 28, 0) 0px, rgba(20, 23, 28, 0) 26px,
-    rgba(20, 23, 28, 0.045) 27px, rgba(20, 23, 28, 0.045) 30px
+    rgba(20, 23, 28, 0.03) 27px, rgba(20, 23, 28, 0.03) 30px
   );
 }
 @keyframes hldt-stripe-drift {
   from { transform: translateY(0); }
   to { transform: translateY(-120px); }
 }
+@media (prefers-reduced-motion: reduce) {
+  .hldt-stripes { animation: none; }
+}
 
+/* Base glass look — used everywhere (panels, buttons, nav). Cheap:
+   just a backdrop-filter, no animated overlay, so it costs nothing
+   extra whether one of these is on screen or fifty. */
 .hldt-glass {
   position: relative;
   backdrop-filter: blur(22px) saturate(160%) brightness(1.08);
   -webkit-backdrop-filter: blur(22px) saturate(160%) brightness(1.08);
 }
-/* The "bend" — a warped copy of the SAME stripe pattern above, clipped
-   to the glass surface's own shape (its overflow:hidden + border-
-   radius). A fixed-pixel inset rather than a percentage means this
-   stays proportionate whether it's a small button or a wide desktop
-   panel, instead of ballooning on large surfaces. Implemented as a
-   pseudo-element with z-index:-1 rather than an extra child, so this
-   reaches every glass surface in the app with zero JSX changes — real
-   content (all normal-flow, non-positioned) always stacks above it. */
-.hldt-glass::before {
+
+/* The animated "bend" — added ONLY to transient popups and dropdowns
+   (modals, popovers, the tour tooltip), never to always-on-screen
+   surfaces like panels, buttons or the sidebar. Since these only
+   exist in the DOM while actually open, the animated SVG filter is
+   only ever running for however long a popup is on screen, not
+   continuously for the whole session — the main lever for device
+   friendliness here. A warped copy of the same stripe pattern above,
+   clipped to the surface's own shape (its overflow:hidden + border-
+   radius). Fixed-pixel inset rather than a percentage keeps this
+   proportionate on a wide desktop modal instead of ballooning.
+   Implemented as a pseudo-element with z-index:-1 so real content
+   (all normal-flow, non-positioned) always stacks above it with no
+   extra markup needed at any usage site. */
+.hldt-glass-warp::before {
   content: "";
   position: absolute;
   inset: -40px;
@@ -275,20 +287,23 @@ body {
   background: repeating-linear-gradient(
     112deg,
     rgba(255, 255, 255, 0) 0px, rgba(255, 255, 255, 0) 26px,
-    rgba(255, 255, 255, 0.28) 27px, rgba(255, 255, 255, 0.28) 30px
+    rgba(255, 255, 255, 0.16) 27px, rgba(255, 255, 255, 0.16) 30px
   );
   filter: url(#hldt-liquid-warp);
-  opacity: 0.6;
+  opacity: 0.35;
   mix-blend-mode: overlay;
 }
-[data-theme="light"] .hldt-glass::before {
+[data-theme="light"] .hldt-glass-warp::before {
   background: repeating-linear-gradient(
     112deg,
     rgba(20, 23, 28, 0) 0px, rgba(20, 23, 28, 0) 26px,
-    rgba(20, 23, 28, 0.22) 27px, rgba(20, 23, 28, 0.22) 30px
+    rgba(20, 23, 28, 0.12) 27px, rgba(20, 23, 28, 0.12) 30px
   );
   mix-blend-mode: multiply;
-  opacity: 0.35;
+  opacity: 0.2;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hldt-glass-warp::before { filter: none; }
 }
 
 .hldt-auth-card {

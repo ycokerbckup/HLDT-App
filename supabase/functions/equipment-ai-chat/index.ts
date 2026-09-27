@@ -79,8 +79,6 @@ ${JSON.stringify(tickets || [], null, 2)}
 The user will describe what they need — an upcoming event, a requirement, a problem — in their own words. Have a natural conversation: ask clarifying questions if genuinely useful, but default to giving concrete, actionable suggestions (what to buy, approximate cost, why) grounded in the inventory and tickets above. Keep replies concise — a few short paragraphs or a short list, not an essay.`;
 
     const contents = [
-      { role: "user", parts: [{ text: systemContext }] },
-      { role: "model", parts: [{ text: "Understood — I have the current inventory and open tickets. What do you need help with?" }] },
       ...history.map((h) => ({ role: h.role, parts: [{ text: h.text }] })),
       { role: "user", parts: [{ text: userMessage }] },
     ];
@@ -91,6 +89,7 @@ The user will describe what they need — an upcoming event, a requirement, a pr
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemContext }] },
           contents,
           tools: [{ google_search: {} }],
         }),

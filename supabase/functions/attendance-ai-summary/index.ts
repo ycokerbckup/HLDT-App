@@ -131,14 +131,18 @@ Respond with ONLY a JSON object, no markdown fences, no other text:
 {"summary": "2-3 sentence plain-language summary of how they're doing this month, referencing the actual numbers", "recommendation": "one of: No action needed / Informal check-in recommended / Formal warning already triggered / Suspension already triggered / Suspension warranted", "reasoning": "1 sentence tying the recommendation to the specific numbers above"}`;
 
       try {
+        const timeoutController = new AbortController();
+        const timeoutId = setTimeout(() => timeoutController.abort(), 1300);
         const geminiRes = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+            signal: timeoutController.signal,
           }
         );
+        clearTimeout(timeoutId);
         if (geminiRes.ok) {
           const geminiData = await geminiRes.json();
           const rawText = geminiData?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || "").join("") || "{}";
@@ -151,7 +155,10 @@ Respond with ONLY a JSON object, no markdown fences, no other text:
           console.error("Gemini error:", geminiRes.status, await geminiRes.text());
         }
       } catch (e) {
-        console.error("Gemini call failed:", e);
+        // Includes the abort from the timeout above — either way, the
+        // rule-based fallback below covers it, so a slow or unreachable
+        // Gemini never holds up the response past ~1.3s here.
+        console.error("Gemini call failed or timed out:", e);
       }
     }
 

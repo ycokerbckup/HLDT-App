@@ -41,7 +41,7 @@ const LIGHT_COLORS = {
   textPrimary: "#191A1C",
   textSecondary: "#5B5D62",
   textMuted: "#6B6D71",
-  amber: "#9B5F08",
+  amber: "#945B08",
   amberDim: "#FBEAD2",
   green: "#147C52",
   greenDim: "#E1F5EB",
@@ -4209,10 +4209,20 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
       isAi: false,
     });
     setAiPending(true);
-    const { data: result, error } = await supabase.functions.invoke("attendance-ai-summary", { body: { memberId: member.id } });
+    // The edge function bounds its own Gemini call to ~1.3s, but this
+    // call still has to survive network/cold-start time on top of that
+    // — race it against a hard client-side timeout so the UI is never
+    // stuck waiting regardless of what happens on the way there.
+    const timeout = new Promise((resolve) => setTimeout(() => resolve({ timedOut: true }), 2500));
+    const result = await Promise.race([
+      supabase.functions.invoke("attendance-ai-summary", { body: { memberId: member.id } }),
+      timeout,
+    ]);
     setAiPending(false);
-    if (!error && result && !result.error && result.summary) {
-      setSummaryResult((prev) => (prev && prev.stats === stats ? { stats: result.stats, summary: result.summary, recommendation: result.recommendation, reasoning: result.reasoning, isAi: true, excusableAbsences: stats.excusableAbsences } : prev));
+    if (result?.timedOut) return;
+    const { data, error } = result;
+    if (!error && data && !data.error && data.summary) {
+      setSummaryResult((prev) => (prev && prev.stats === stats ? { stats: data.stats, summary: data.summary, recommendation: data.recommendation, reasoning: data.reasoning, isAi: true, excusableAbsences: stats.excusableAbsences } : prev));
     }
   }
 

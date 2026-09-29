@@ -874,6 +874,10 @@ function Dashboard_Shell({ session, profile, setProfile }) {
     if (typeof window === "undefined") return null;
     return new URLSearchParams(window.location.search).get("payment_ref") || null;
   });
+  const [pendingPoolPaymentRef] = useState(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("pool_payment_ref") || null;
+  });
   const [pendingHighlight, setPendingHighlight] = useState(() => {
     if (typeof window === "undefined") return null;
     const params = new URLSearchParams(window.location.search);
@@ -1108,7 +1112,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
               <SkeletonLoader />
             ) : (
               <div key={tab} className="hldt-tab-content">
-                {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} notify={notify} />}
+                {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} notify={notify} pendingPoolPaymentRef={pendingPoolPaymentRef} />}
                 {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} pendingMemberDetailId={pendingMemberDetailId} onPendingMemberDetailConsumed={() => setPendingMemberDetailId(null)} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
                 {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
@@ -1174,7 +1178,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
               <SkeletonLoader />
             ) : (
               <div key={tab} className="hldt-tab-content">
-                {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} notify={notify} />}
+                {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} notify={notify} pendingPoolPaymentRef={pendingPoolPaymentRef} />}
                 {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} pendingMemberDetailId={pendingMemberDetailId} onPendingMemberDetailConsumed={() => setPendingMemberDetailId(null)} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
                 {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
@@ -2961,12 +2965,44 @@ function WithdrawModal({ onClose, notify, reloadBalance, onResetPin }) {
   );
 }
 
-function WalletPanel({ data, isAdmin, myUnit, notify }) {
+function FundPoolModal({ onClose, notify }) {
+  const [contributorName, setContributorName] = useState("");
+  const [note, setNote] = useState("");
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    if (!contributorName.trim()) { notify?.("Enter who this contribution is from", "error"); return; }
+    const value = Number(amount);
+    if (!value || value <= 0) { notify?.("Enter a valid amount", "error"); return; }
+    setBusy(true);
+    const { data: result, error } = await supabase.functions.invoke("initialize-pool-payment", { body: { amount: value, contributor_name: contributorName.trim(), note: note.trim() || undefined } });
+    setBusy(false);
+    if (error || !result?.authorization_url) { notify?.(result?.error || error?.message || "Could not start payment", "error"); return; }
+    window.location.href = result.authorization_url;
+  }
+
+  return (
+    <Modal title="Fund pool" onClose={onClose} width={380}>
+      <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12 }}>For funding the wallet directly — sponsor or donor contributions, or catching up on funds outside the dues channel. Goes through the same Paystack checkout as dues.</div>
+      <Field label="Contributor name"><input style={inputStyle} placeholder="Who this is from" value={contributorName} onChange={(e) => setContributorName(e.target.value)} /></Field>
+      <Field label="Note (optional)"><textarea style={{ ...inputStyle, minHeight: 60 }} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+      <Field label="Amount"><input type="number" style={inputStyle} value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+      <Btn tone="amber" disabled={busy} onClick={submit}>{busy ? "Starting..." : "Continue to Paystack"}</Btn>
+    </Modal>
+  );
+}
+
+function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
   const [month, setMonth] = useState(currentMonthStringWAT());
   const [totalBalance, setTotalBalance] = useState(0);
+  const [duesTotal, setDuesTotal] = useState(0);
+  const [poolTotal, setPoolTotal] = useState(0);
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [showSetPin, setShowSetPin] = useState(false);
+  const [showFundPool, setShowFundPool] = useState(false);
   const [hasPin, setHasPin] = useState(null);
+  const [confirmingPoolRef, setConfirmingPoolRef] = useState(null);
 
   async function loadPinStatus() {
     const { data: row } = await supabase.from("withdrawal_pin_status").select("*").maybeSingle();
@@ -2975,7 +3011,11 @@ function WalletPanel({ data, isAdmin, myUnit, notify }) {
 
   async function loadBalance() {
     const { data: row } = await supabase.from("wallet_balance").select("*").eq("id", 1).maybeSingle();
-    if (row) setTotalBalance(row.balance);
+    if (row) {
+      setTotalBalance(row.balance);
+      setDuesTotal(row.dues_total ?? 0);
+      setPoolTotal(row.pool_total ?? 0);
+    }
   }
 
   useEffect(() => {
@@ -2987,6 +3027,23 @@ function WalletPanel({ data, isAdmin, myUnit, notify }) {
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, []);
+
+  useEffect(() => {
+    const ref = pendingPoolPaymentRef;
+    if (!ref) return;
+    setConfirmingPoolRef(ref);
+    let attempts = 0;
+    async function poll() {
+      attempts += 1;
+      const { data: result, error } = await supabase.functions.invoke("verify-pool-payment", { body: { reference: ref } });
+      if (error) { setConfirmingPoolRef(null); notify?.("Couldn't confirm payment status — it'll update once the bank confirms.", "error"); return; }
+      if (result.status === "success") { setConfirmingPoolRef(null); notify?.("Pool funding confirmed"); loadBalance(); return; }
+      if (result.status === "failed" || result.status === "abandoned") { setConfirmingPoolRef(null); notify?.("Payment was not completed", "error"); return; }
+      if (attempts < 8) setTimeout(poll, 2500);
+      else setConfirmingPoolRef(null);
+    }
+    poll();
+  }, [pendingPoolPaymentRef]);
 
   const canWithdraw = isAdmin && (myUnit === "Welfare" || myUnit === "Operations");
 
@@ -3026,13 +3083,19 @@ function WalletPanel({ data, isAdmin, myUnit, notify }) {
         </select>
       }
     >
+      {confirmingPoolRef && <div style={{ fontSize: 12, color: COLORS.amber, marginBottom: 10 }}>Confirming pool payment…</div>}
       <div style={{ display: "flex", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
-        <div style={{ background: COLORS.surface2, borderRadius: 8, padding: "14px 16px", flex: 1, minWidth: 140 }}>
+        <div style={{ background: COLORS.surface2, borderRadius: 8, padding: "14px 16px", flex: 1, minWidth: 160 }}>
           <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>Total balance</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
             <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 22, color: COLORS.textPrimary }}>{currency(totalBalance)}</div>
             {canWithdraw && <Btn small tone="ghost" onClick={() => setShowWithdraw(true)}>Withdraw</Btn>}
+            {canWithdraw && <Btn small tone="ghost" onClick={() => setShowFundPool(true)}>Fund pool</Btn>}
             {canWithdraw && hasPin === false && <Btn small tone="ghost" onClick={() => setShowSetPin(true)}>Set PIN</Btn>}
+          </div>
+          <div style={{ display: "flex", gap: 14, fontSize: 12, color: COLORS.textSecondary }}>
+            <span>Dues: <strong style={{ color: COLORS.textPrimary }}>{currency(duesTotal)}</strong></span>
+            <span>Pool: <strong style={{ color: COLORS.textPrimary }}>{currency(poolTotal)}</strong></span>
           </div>
         </div>
         <Metric label={month === "all" ? "Expected (all time)" : "Expected balance"} value={current.expected} isCurrency tone="amber" />
@@ -3057,11 +3120,12 @@ function WalletPanel({ data, isAdmin, myUnit, notify }) {
       {month !== "all" && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 8 }}>Chart always shows the last 6 months, regardless of the filter above.</div>}
       {showWithdraw && <WithdrawModal onClose={() => setShowWithdraw(false)} notify={notify} reloadBalance={loadBalance} onResetPin={() => { setShowWithdraw(false); setShowSetPin(true); }} />}
       {showSetPin && <SetPinModal onClose={() => setShowSetPin(false)} notify={notify} onSaved={loadPinStatus} />}
+      {showFundPool && <FundPoolModal onClose={() => setShowFundPool(false)} notify={notify} />}
     </Panel>
   );
 }
 
-function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWelfareInfo, notify }) {
+function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWelfareInfo, notify, pendingPoolPaymentRef }) {
   const [showOwingModal, setShowOwingModal] = useState(false);
   const currentMonth = currentMonthStringWAT();
   const openTickets = data.tickets.filter((t) => t.status !== "Resolved");
@@ -3144,7 +3208,7 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWel
         )}
       </div>
 
-      {isAdmin && <WalletPanel data={data} isAdmin={isAdmin} myUnit={myMember?.unit} notify={notify} />}
+      {isAdmin && <WalletPanel data={data} isAdmin={isAdmin} myUnit={myMember?.unit} notify={notify} pendingPoolPaymentRef={pendingPoolPaymentRef} />}
 
       {canSeeWelfareInfo && (
         <Panel

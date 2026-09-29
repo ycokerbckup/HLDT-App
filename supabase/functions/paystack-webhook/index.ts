@@ -95,6 +95,24 @@ serve(async (req) => {
     if (!reference) return new Response("ok", { status: 200 });
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+
+    if (reference.startsWith("POOL-")) {
+      const { data: row } = await admin.from("pool_payments").select("*").eq("reference", reference).maybeSingle();
+      if (!row || row.status !== "pending") return new Response("ok", { status: 200 });
+
+      const verifyRes = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+        headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` },
+      });
+      const verifyJson = await verifyRes.json();
+      const paystackStatus = verifyJson?.data?.status;
+      if (paystackStatus === "success" || paystackStatus === "failed" || paystackStatus === "abandoned") {
+        await admin.from("pool_payments").update({
+          status: paystackStatus, channel: verifyJson.data.channel, paid_at: verifyJson.data.paid_at, raw_event: verifyJson.data,
+        }).eq("reference", reference).eq("status", "pending");
+      }
+      return new Response("ok", { status: 200 });
+    }
+
     const { data: rows } = await admin.from("dues_payments").select("*").eq("reference", reference);
     if (!rows || rows.length === 0 || rows.every((r: any) => r.status !== "pending")) {
       // Already processed (e.g. by verify-dues-payment on redirect) —

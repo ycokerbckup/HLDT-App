@@ -11,8 +11,8 @@
 do $$
 declare
   new_user_id uuid := gen_random_uuid();
-  demo_email text := 'paystack-review@example.com';
-  demo_password text := 'ChangeThisPassword123!';
+  demo_email text := 'paystack@review.com';
+  demo_password text := 'ABCefg123@';
 begin
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,

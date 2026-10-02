@@ -3005,8 +3005,8 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
   const [confirmingPoolRef, setConfirmingPoolRef] = useState(null);
 
   async function loadPinStatus() {
-    const { data: row } = await supabase.from("withdrawal_pin_status").select("*").maybeSingle();
-    setHasPin(row?.has_pin === true);
+    const { data } = await supabase.rpc("get_withdrawal_pin_status");
+    setHasPin(data === true);
   }
 
   async function loadBalance() {
@@ -3045,7 +3045,7 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
     poll();
   }, [pendingPoolPaymentRef]);
 
-  const canWithdraw = isAdmin && (myUnit === "Welfare" || myUnit === "Operations");
+  const canWithdraw = isAdmin && myUnit === "Operations";
 
   function statsFor(mo) {
     let expected = 0, collected = 0;
@@ -3090,7 +3090,7 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
             <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 22, color: COLORS.textPrimary }}>{currency(totalBalance)}</div>
             {canWithdraw && <Btn small tone="ghost" onClick={() => setShowWithdraw(true)}>Withdraw</Btn>}
-            {canWithdraw && <Btn small tone="ghost" onClick={() => setShowFundPool(true)}>Fund pool</Btn>}
+            <Btn small tone="ghost" onClick={() => setShowFundPool(true)}>Fund pool</Btn>
             {canWithdraw && <Btn small tone="ghost" onClick={() => setShowSetPin(true)}>{hasPin === true ? "Change PIN" : "Set PIN"}</Btn>}
           </div>
           <div style={{ display: "flex", gap: 14, fontSize: 12, color: COLORS.textSecondary }}>

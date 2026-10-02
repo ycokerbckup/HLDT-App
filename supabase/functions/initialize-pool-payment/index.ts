@@ -1,9 +1,10 @@
 // Starts a "Pool funder" payment — a wallet top-up that's separate
 // from dues (sponsor/donor contributions, catching up on historically
 // unrecorded funds, etc). Unlike dues, there's no per-member rate to
-// validate the amount against — the initiating admin deliberately
-// chooses it, so the client-supplied amount is trusted here (but
-// still Welfare/Ops/Admin-only, checked server-side).
+// validate the amount against — whoever initiates it deliberately
+// chooses the amount, so the client-supplied amount is trusted here.
+// Open to any signed-in member, unlike withdrawal — this only adds
+// money, never removes it.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -32,13 +33,6 @@ serve(async (req) => {
     if (!user) return new Response(JSON.stringify({ error: "Not authenticated." }), { status: 401, headers: CORS_HEADERS });
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-
-    const { data: callerMember } = await admin.from("members").select("unit").eq("profile_id", user.id).maybeSingle();
-    const { data: callerProfile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
-    const isAuthorized = callerProfile?.role === "admin" && (callerMember?.unit === "Welfare" || callerMember?.unit === "Operations");
-    if (!isAuthorized) {
-      return new Response(JSON.stringify({ error: "Only Welfare/Operations admins can initiate pool funding." }), { status: 403, headers: CORS_HEADERS });
-    }
 
     const { amount, contributor_name, note } = await req.json();
     const amountNaira = Number(amount);

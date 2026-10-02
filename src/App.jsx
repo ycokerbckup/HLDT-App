@@ -2880,7 +2880,7 @@ function OwingDuesModal({ data, onClose }) {
   );
 }
 
-function SetPinModal({ onClose, notify, onSaved }) {
+function SetPinModal({ onClose, notify, onSaved, hasPin }) {
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [busy, setBusy] = useState(false);
@@ -2898,7 +2898,7 @@ function SetPinModal({ onClose, notify, onSaved }) {
   }
 
   return (
-    <Modal title="Set withdrawal PIN" onClose={onClose} width={340}>
+    <Modal title={hasPin === true ? "Change withdrawal PIN" : "Set withdrawal PIN"} onClose={onClose} width={340}>
       <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12 }}>This PIN, along with an emailed OTP, is required to confirm any withdrawal. Choose something only Welfare/Operations leadership knows.</div>
       <Field label="New PIN"><input type="password" style={inputStyle} value={newPin} onChange={(e) => setNewPin(e.target.value)} /></Field>
       <Field label="Confirm PIN"><input type="password" style={inputStyle} value={confirmPin} onChange={(e) => setConfirmPin(e.target.value)} /></Field>
@@ -3091,7 +3091,7 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
             <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 22, color: COLORS.textPrimary }}>{currency(totalBalance)}</div>
             {canWithdraw && <Btn small tone="ghost" onClick={() => setShowWithdraw(true)}>Withdraw</Btn>}
             {canWithdraw && <Btn small tone="ghost" onClick={() => setShowFundPool(true)}>Fund pool</Btn>}
-            {canWithdraw && hasPin === false && <Btn small tone="ghost" onClick={() => setShowSetPin(true)}>Set PIN</Btn>}
+            {canWithdraw && <Btn small tone="ghost" onClick={() => setShowSetPin(true)}>{hasPin === true ? "Change PIN" : "Set PIN"}</Btn>}
           </div>
           <div style={{ display: "flex", gap: 14, fontSize: 12, color: COLORS.textSecondary }}>
             <span>Dues: <strong style={{ color: COLORS.textPrimary }}>{currency(duesTotal)}</strong></span>
@@ -3119,7 +3119,7 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
       </div>
       {month !== "all" && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 8 }}>Chart always shows the last 6 months, regardless of the filter above.</div>}
       {showWithdraw && <WithdrawModal onClose={() => setShowWithdraw(false)} notify={notify} reloadBalance={loadBalance} onResetPin={() => { setShowWithdraw(false); setShowSetPin(true); }} />}
-      {showSetPin && <SetPinModal onClose={() => setShowSetPin(false)} notify={notify} onSaved={loadPinStatus} />}
+      {showSetPin && <SetPinModal onClose={() => setShowSetPin(false)} notify={notify} onSaved={loadPinStatus} hasPin={hasPin} />}
       {showFundPool && <FundPoolModal onClose={() => setShowFundPool(false)} notify={notify} />}
     </Panel>
   );

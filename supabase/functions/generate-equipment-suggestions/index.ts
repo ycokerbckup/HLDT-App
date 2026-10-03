@@ -87,7 +87,7 @@ Suggest up to 6 items, ranked by priority. Respond with ONLY a JSON array (no ma
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
           tools: [{ google_search: {} }],
         }),
       }

@@ -1113,7 +1113,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
             ) : (
               <div key={tab} className="hldt-tab-content">
                 {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} notify={notify} pendingPoolPaymentRef={pendingPoolPaymentRef} />}
-                {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} pendingMemberDetailId={pendingMemberDetailId} onPendingMemberDetailConsumed={() => setPendingMemberDetailId(null)} />}
+                {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} myUnit={myMember?.unit} reload={load} currentUserId={session.user.id} notify={notify} pendingMemberDetailId={pendingMemberDetailId} onPendingMemberDetailConsumed={() => setPendingMemberDetailId(null)} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
                 {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} myMember={myMember} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
@@ -1179,7 +1179,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
             ) : (
               <div key={tab} className="hldt-tab-content">
                 {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} notify={notify} pendingPoolPaymentRef={pendingPoolPaymentRef} />}
-                {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} reload={load} currentUserId={session.user.id} notify={notify} pendingMemberDetailId={pendingMemberDetailId} onPendingMemberDetailConsumed={() => setPendingMemberDetailId(null)} />}
+                {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} myUnit={myMember?.unit} reload={load} currentUserId={session.user.id} notify={notify} pendingMemberDetailId={pendingMemberDetailId} onPendingMemberDetailConsumed={() => setPendingMemberDetailId(null)} />}
                 {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
                 {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
                 {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} myMember={myMember} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
@@ -2881,15 +2881,30 @@ function OwingDuesModal({ data, onClose }) {
 }
 
 function SetPinModal({ onClose, notify, onSaved, hasPin }) {
+  const [step, setStep] = useState("enter"); // enter | otp
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
+  const [otp, setOtp] = useState("");
+  const [requestId, setRequestId] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  async function save() {
+  async function requestChange() {
     if (newPin.length < 4) { notify?.("PIN must be at least 4 digits", "error"); return; }
     if (newPin !== confirmPin) { notify?.("PINs don't match", "error"); return; }
     setBusy(true);
-    const { error } = await supabase.rpc("set_withdrawal_pin", { p_new_pin: newPin });
+    const { data: newId, error } = await supabase.rpc("request_pin_change", { p_new_pin: newPin });
+    if (error) { notify?.(error.message, "error"); setBusy(false); return; }
+    const { error: sendErr } = await supabase.functions.invoke("send-pin-change-otp", { body: { request_id: newId } });
+    setBusy(false);
+    if (sendErr) { notify?.("Request started, but the OTP couldn't be emailed — check the OTP email is configured.", "error"); }
+    setRequestId(newId);
+    setStep("otp");
+  }
+
+  async function confirmChange() {
+    if (!otp.trim()) { notify?.("Enter the OTP", "error"); return; }
+    setBusy(true);
+    const { error } = await supabase.rpc("confirm_pin_change", { p_request_id: requestId, p_otp: otp.trim() });
     setBusy(false);
     if (error) { notify?.(error.message, "error"); return; }
     notify?.("Withdrawal PIN updated");
@@ -2899,10 +2914,20 @@ function SetPinModal({ onClose, notify, onSaved, hasPin }) {
 
   return (
     <Modal title={hasPin === true ? "Change withdrawal PIN" : "Set withdrawal PIN"} onClose={onClose} width={340}>
-      <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12 }}>This PIN, along with an emailed OTP, is required to confirm any withdrawal. Choose something only Welfare/Operations leadership knows.</div>
-      <Field label="New PIN"><input type="password" style={inputStyle} value={newPin} onChange={(e) => setNewPin(e.target.value)} /></Field>
-      <Field label="Confirm PIN"><input type="password" style={inputStyle} value={confirmPin} onChange={(e) => setConfirmPin(e.target.value)} /></Field>
-      <Btn tone="amber" disabled={busy} onClick={save}>{busy ? "Saving..." : "Save PIN"}</Btn>
+      {step === "enter" ? (
+        <>
+          <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12 }}>This PIN, along with an emailed OTP, is required to confirm any withdrawal. Choose something only Operations leadership knows.</div>
+          <Field label="New PIN"><input type="password" style={inputStyle} value={newPin} onChange={(e) => setNewPin(e.target.value)} /></Field>
+          <Field label="Confirm PIN"><input type="password" style={inputStyle} value={confirmPin} onChange={(e) => setConfirmPin(e.target.value)} /></Field>
+          <Btn tone="amber" disabled={busy} onClick={requestChange}>{busy ? "Starting..." : "Continue"}</Btn>
+        </>
+      ) : (
+        <>
+          <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12 }}>An OTP has been emailed — enter it to confirm this PIN change.</div>
+          <Field label="OTP"><input style={inputStyle} value={otp} onChange={(e) => setOtp(e.target.value)} /></Field>
+          <Btn tone="amber" disabled={busy} onClick={confirmChange}>{busy ? "Confirming..." : "Confirm PIN change"}</Btn>
+        </>
+      )}
     </Modal>
   );
 }
@@ -3262,7 +3287,7 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWel
 
 /* ---------------- members ---------------- */
 
-function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify, pendingMemberDetailId, onPendingMemberDetailConsumed }) {
+function MembersTab({ data, isAdmin, canManage, myUnit, reload, currentUserId, notify, pendingMemberDetailId, onPendingMemberDetailConsumed }) {
   const [showForm, setShowForm] = useState(false);
   const [showRoles, setShowRoles] = useState(false);
   const [profiles, setProfiles] = useState([]);
@@ -3272,6 +3297,27 @@ function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify, p
   const [filterUnit, setFilterUnit] = useState("all");
   const [filterSkill, setFilterSkill] = useState("any");
   const [filterSkillMin, setFilterSkillMin] = useState(3);
+
+  const canExportMembers = isAdmin && (myUnit === "Operations" || myUnit === "Welfare" || myUnit === "Admin");
+
+  function exportMemberDb() {
+    const headers = ["Name", "Email", "Phone", "Tier", "Team", "Join Date", "Sex", "Date of Birth", "Occupation", "Home Address", "Status", "KYC Completed"];
+    const rows = [headers.join(",")];
+    data.members.forEach((m) => {
+      const status = m.suspended ? "Suspended" : m.unavailable ? "Unavailable" : "Active";
+      rows.push([
+        m.name || "", m.email || "", m.phone || "", m.tier || "", m.team || "", m.joinDate || "",
+        m.sex || "", m.dob || "", m.occupation || "", m.homeAddress || "", status, m.kymCompletedAt ? "Yes" : "No",
+      ].map((v) => `"${String(v).replace(/"/g, "'")}"`).join(","));
+    });
+    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `members-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   useEffect(() => {
     if (!pendingMemberDetailId) return;
@@ -3322,12 +3368,13 @@ function MembersTab({ data, isAdmin, canManage, reload, currentUserId, notify, p
       <SectionHeader
         title="Members"
         subtitle={`${data.members.length} on record`}
-        right={canManage && (
+        right={
           <div style={{ display: "flex", gap: 8 }}>
-            <Btn tone="ghost" onClick={() => { setShowRoles(!showRoles); if (!showRoles) loadProfiles(); }}><Shield size={14} /> Manage admins</Btn>
-            <Btn tone="amber" onClick={() => { setForm(blank()); setShowForm(true); }}><Plus size={14} /> Add member</Btn>
+            {canExportMembers && <Btn tone="ghost" onClick={exportMemberDb}><Download size={14} /> Export member DB</Btn>}
+            {canManage && <Btn tone="ghost" onClick={() => { setShowRoles(!showRoles); if (!showRoles) loadProfiles(); }}><Shield size={14} /> Manage admins</Btn>}
+            {canManage && <Btn tone="amber" onClick={() => { setForm(blank()); setShowForm(true); }}><Plus size={14} /> Add member</Btn>}
           </div>
-        )}
+        }
       />
 
       {showRoles && (

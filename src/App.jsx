@@ -4320,11 +4320,13 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
       isAi: false,
     });
     setAiPending(true);
-    // The edge function bounds its own Gemini call to ~1.3s, but this
-    // call still has to survive network/cold-start time on top of that
-    // — race it against a hard client-side timeout so the UI is never
-    // stuck waiting regardless of what happens on the way there.
-    const timeout = new Promise((resolve) => setTimeout(() => resolve({ timedOut: true }), 2500));
+    // The edge function bounds its own Gemini call to ~3.5s (and
+    // returns instantly from cache when the stats haven't changed),
+    // but this call still has to survive network/cold-start time on
+    // top of that — race it against a hard client-side cap so the UI
+    // is never stuck waiting. The instant rule-based summary above is
+    // already on screen the whole time.
+    const timeout = new Promise((resolve) => setTimeout(() => resolve({ timedOut: true }), 5000));
     const result = await Promise.race([
       supabase.functions.invoke("attendance-ai-summary", { body: { memberId: member.id } }),
       timeout,

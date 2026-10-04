@@ -21,6 +21,30 @@ const CORS_HEADERS = {
 
 const MIN_PRESENT_TARGET = 8;
 
+// Hard cap on the Gemini call (including one possible retry). 1.3s was
+// too tight — logs showed it aborting every time, so the AI text never
+// arrived. This leaves room for a real response while still bounding
+// the wait; the client shows instant rule-based stats meanwhile.
+const GEMINI_BUDGET_MS = 3500;
+
+// Gemini 3.x models think dynamically by default, which is the main
+// source of latency on a task this simple (summarising a handful of
+// numbers) — pin it to minimal. responseMimeType keeps the output as
+// clean JSON with no markdown fences.
+function callGemini(prompt: string, withThinkingConfig: boolean, signal: AbortSignal) {
+  const generationConfig: Record<string, unknown> = { responseMimeType: "application/json" };
+  if (withThinkingConfig) generationConfig.thinkingConfig = { thinkingLevel: "minimal" };
+  return fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig }),
+      signal,
+    }
+  );
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: CORS_HEADERS });
@@ -110,9 +134,31 @@ serve(async (req) => {
       currentConsecutiveAbsences: currentStreak,
     };
 
+    // If the numbers haven't changed since the last AI summary for this
+    // member this month, that summary is still correct — return it
+    // straight from the database instead of calling Gemini again. Any
+    // new attendance record changes the stats, which changes the key
+    // and invalidates the cache automatically. (If the cache table
+    // doesn't exist yet, this read just comes back empty and the
+    // function carries on as normal.)
+    const statsKey = JSON.stringify({ name: member.name, stats });
+    const { data: cached } = await supabase
+      .from("attendance_ai_cache")
+      .select("stats_key,summary,recommendation,reasoning")
+      .eq("member_id", memberId)
+      .eq("month", thisMonth)
+      .maybeSingle();
+    if (cached && cached.stats_key === statsKey) {
+      return new Response(
+        JSON.stringify({ stats, summary: cached.summary, recommendation: cached.recommendation, reasoning: cached.reasoning, cached: true }),
+        { headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
+      );
+    }
+
     let summary = "";
     let recommendation = "";
     let reasoning = "";
+    let fromAi = false;
 
     if (GEMINI_API_KEY) {
       const prompt = `You are reviewing attendance for a church AV/Display team volunteer. Be direct, fair, and brief.
@@ -130,35 +176,43 @@ Team policy:
 Respond with ONLY a JSON object, no markdown fences, no other text:
 {"summary": "2-3 sentence plain-language summary of how they're doing this month, referencing the actual numbers", "recommendation": "one of: No action needed / Informal check-in recommended / Formal warning already triggered / Suspension already triggered / Suspension warranted", "reasoning": "1 sentence tying the recommendation to the specific numbers above"}`;
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), GEMINI_BUDGET_MS);
       try {
-        const timeoutController = new AbortController();
-        const timeoutId = setTimeout(() => timeoutController.abort(), 1300);
-        const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }] }),
-            signal: timeoutController.signal,
-          }
-        );
-        clearTimeout(timeoutId);
+        const startedAt = Date.now();
+        let geminiRes = await callGemini(prompt, true, controller.signal);
+        if (geminiRes.status === 400) {
+          // If the API ever rejects the thinking config, don't let that
+          // silently turn into "AI never works" — log the real reason
+          // and retry once without it, within the same time budget.
+          console.error("Gemini rejected thinkingConfig, retrying without it:", await geminiRes.text());
+          geminiRes = await callGemini(prompt, false, controller.signal);
+        }
+        console.log("Gemini latency ms:", Date.now() - startedAt, "status:", geminiRes.status);
         if (geminiRes.ok) {
           const geminiData = await geminiRes.json();
           const rawText = geminiData?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || "").join("") || "{}";
           const match = rawText.match(/\{[\s\S]*\}/);
           const parsed = match ? JSON.parse(match[0]) : {};
-          summary = parsed.summary || "";
-          recommendation = parsed.recommendation || "";
-          reasoning = parsed.reasoning || "";
+          // Only accept a complete response — a half-filled one would
+          // show a blank recommendation in the UI.
+          if (parsed.summary && parsed.recommendation && parsed.reasoning) {
+            summary = parsed.summary;
+            recommendation = parsed.recommendation;
+            reasoning = parsed.reasoning;
+            fromAi = true;
+          } else {
+            console.error("Gemini returned an incomplete response:", rawText);
+          }
         } else {
           console.error("Gemini error:", geminiRes.status, await geminiRes.text());
         }
       } catch (e) {
-        // Includes the abort from the timeout above — either way, the
-        // rule-based fallback below covers it, so a slow or unreachable
-        // Gemini never holds up the response past ~1.3s here.
+        // Includes the abort from the time budget — either way, the
+        // rule-based fallback below covers it.
         console.error("Gemini call failed or timed out:", e);
+      } finally {
+        clearTimeout(timeoutId);
       }
     }
 
@@ -168,6 +222,17 @@ Respond with ONLY a JSON object, no markdown fences, no other text:
       summary = `${member.name}: ${present} present, ${absent} absent, ${excused} excused this month (target: ${proratedMin}+ present).`;
       recommendation = absent >= 4 ? "Suspension already triggered" : absent >= 3 ? "Formal warning already triggered" : currentStreak >= 2 ? "Formal warning already triggered" : stats.metMinimum ? "No action needed" : "Informal check-in recommended";
       reasoning = "Rule-based fallback (AI summary unavailable right now).";
+    }
+
+    // Only genuine AI output gets cached — never the rule-based
+    // fallback, so a temporary Gemini hiccup can't get frozen in as
+    // "the summary" until the stats next change.
+    if (fromAi) {
+      const { error: cacheErr } = await supabase.from("attendance_ai_cache").upsert(
+        { member_id: memberId, month: thisMonth, stats_key: statsKey, summary, recommendation, reasoning, created_at: new Date().toISOString() },
+        { onConflict: "member_id,month" }
+      );
+      if (cacheErr) console.error("Cache write failed:", cacheErr.message);
     }
 
     return new Response(

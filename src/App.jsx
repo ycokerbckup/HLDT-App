@@ -215,10 +215,10 @@ const AVATAR_PALETTE = ["#E8A33D", "#3DDC97", "#5B9BE0", "#D4537E", "#7F77DD", "
 
 const TUESDAY_TEMPLATE = [
   { title: "Welcome Speech/Greeting", duration_minutes: 3 },
-  { title: "Opening Prayer & Prayer 1", duration_minutes: 5 },
-  { title: "Prayer 2 & 3", duration_minutes: 6 },
-  { title: "Prayer 4 & 5", duration_minutes: 6 },
-  { title: "Group discussion (Q&A, icebreaker etc.)", duration_minutes: 20 },
+  { title: "Opening Prayer & Prayer 1", duration_minutes: 3 },
+  { title: "Prayer 2 & 3", duration_minutes: 3 },
+  { title: "Prayer 4 & 5", duration_minutes: 3 },
+  { title: "Group discussion (Q&A, icebreaker etc.)", duration_minutes: 10 },
   { title: "Observations & announcements", duration_minutes: 4 },
   { title: "Closing prayer", duration_minutes: 2 },
 ];

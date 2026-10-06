@@ -401,3 +401,20 @@ body {
 .hldt-week-toggle:active {
   transform: scale(0.97);
 }
+
+
+/* Placeholder + disabled text must stay legible on dark and glass surfaces */
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: #A3ABB9;
+  opacity: 1;
+}
+[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder {
+  color: #6B6D71;
+  opacity: 1;
+}
+[data-theme="dark"] select option {
+  background: #1C2027;
+  color: #EDEEF2;
+}

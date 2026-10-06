@@ -13,19 +13,19 @@ const DARK_COLORS = {
   bg: "#14171C",
   surface1: "#1C2027",
   surface2: "#242933",
-  glass1: "rgba(28, 32, 39, 0.66)",
-  glass2: "rgba(36, 41, 51, 0.55)",
+  glass1: "rgba(28, 32, 39, 0.84)",
+  glass2: "rgba(36, 41, 51, 0.76)",
   glassBorder: "rgba(255, 255, 255, 0.09)",
   border: "#2E3440",
   borderStrong: "#3A4150",
   textPrimary: "#EDEEF2",
-  textSecondary: "#9AA2B1",
-  textMuted: "#89919F",
+  textSecondary: "#B4BBC8",
+  textMuted: "#A3ABB9",
   amber: "#E8A33D",
   amberDim: "#4A3A1F",
   green: "#3DDC97",
   greenDim: "#173A2C",
-  red: "#E9676B",
+  red: "#F2797D",
   redDim: "#3D1E20",
 };
 
@@ -247,10 +247,21 @@ function computeAvatarLabels(people) {
   return labels;
 }
 
+function readableTextOn(hex) {
+  const h = String(hex || "#000").replace("#", "");
+  const [r, g, b] = [0, 2, 4].map((i) => {
+    const v = parseInt(h.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  // Whichever of near-black / white gives the higher contrast ratio.
+  return (1.05) / (lum + 0.05) > (lum + 0.05) / 0.0575 ? "#FFFFFF" : "#14171C";
+}
+
 function Avatar({ label, color, size = 28, celebration, photoUrl }) {
   const emoji = celebrationEmoji(celebration);
   const inner = emoji || !photoUrl ? (
-    <div style={{ width: size, height: size, borderRadius: 999, background: emoji ? COLORS.amberDim : color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: emoji ? size * 0.55 : size * 0.4, fontWeight: 600, flexShrink: 0 }}>
+    <div style={{ width: size, height: size, borderRadius: 999, background: emoji ? COLORS.amberDim : color, color: emoji ? COLORS.textPrimary : readableTextOn(color), display: "flex", alignItems: "center", justifyContent: "center", fontSize: emoji ? size * 0.55 : size * 0.4, fontWeight: 600, flexShrink: 0 }}>
       {emoji || label}
     </div>
   ) : (
@@ -1531,7 +1542,7 @@ function ProfileModal({ session, profile, setProfile, myMember, onClose, reload,
       </div>
 
       <Field label="Full name"><input style={inputStyle} value={fullName} onChange={(e) => setFullName(e.target.value)} /></Field>
-      <Field label="Email"><input style={{ ...inputStyle, opacity: 0.6 }} value={session.user.email} disabled /></Field>
+      <Field label="Email"><input style={{ ...inputStyle, opacity: 0.8 }} value={session.user.email} disabled /></Field>
       {myMember && <Field label="Phone"><input style={inputStyle} value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>}
 
       {myMember && (
@@ -2352,7 +2363,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                               </div>
                             )}
                             {renderTaggedBody(m.body, m.tagged_profile_ids, members)}
-                            {m.edited_at && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 6 }}>(edited)</span>}
+                            {m.edited_at && <span style={{ fontSize: 10, opacity: 0.85, marginLeft: 6 }}>(edited)</span>}
                           </div>
                           <div className="hldt-msg-actions" style={{ display: "flex", position: "relative" }}>
                             <button onClick={() => setShowPinPickerFor(showPinPickerFor === m.id ? null : m.id)} aria-label="Pin" style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex", fontSize: 12 }}>
@@ -3491,6 +3502,7 @@ function MembersTab({ data, isAdmin, canManage, myUnit, reload, currentUserId, n
             if (filterSkill !== "any" && (m.skills?.[filterSkill] ?? 3) < filterSkillMin) return false;
             return true;
           });
+          const memberAvatarLabels = computeAvatarLabels(data.members);
           return filteredMembers.length === 0 ? <EmptyRow text="No members match these filters." /> : (
           <div style={{ overflowX: "auto" }}>
             <div style={{ minWidth: 560 }}>
@@ -3504,11 +3516,14 @@ function MembersTab({ data, isAdmin, canManage, myUnit, reload, currentUserId, n
                   className={canManage ? "hldt-row" : undefined}
                   data-clickable={canManage}
                   title={m.unavailable ? "Temporarily unavailable" : undefined}
-                  style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 0.7fr 0.9fr 0.6fr", alignItems: "center", padding: "8px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 13, cursor: canManage ? "pointer" : "default", opacity: m.unavailable ? 0.45 : 1 }}
+                  style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 0.7fr 0.9fr 0.6fr", alignItems: "center", padding: "8px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 13, cursor: canManage ? "pointer" : "default", opacity: m.unavailable ? 0.7 : 1 }}
                 >
-                  <div>
-                    <div>{m.name}</div>
-                    <div style={{ fontSize: 10, color: COLORS.textMuted, fontFamily: "'JetBrains Mono', monospace" }}>{skillSummary(m)}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                    <Avatar label={memberAvatarLabels[m.id] || "?"} color={hashColor(m.profileId || m.id)} size={32} photoUrl={m.avatarUrl} />
+                    <div style={{ minWidth: 0 }}>
+                      <div>{m.name}</div>
+                      <div style={{ fontSize: 10, color: COLORS.textMuted, fontFamily: "'JetBrains Mono', monospace" }}>{skillSummary(m)}</div>
+                    </div>
                   </div>
                   <div style={{ color: COLORS.textSecondary }}>{m.unit}</div>
                   <div style={{ color: COLORS.textSecondary }}>{m.tier}</div>

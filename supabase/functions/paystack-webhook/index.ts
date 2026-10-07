@@ -32,6 +32,14 @@ async function computeHmacSha512(secret: string, body: string): Promise<string> 
   return Array.from(new Uint8Array(signature)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+// Constant-time string comparison so the signature can't be probed by timing.
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 async function applySplitAndNotify(admin: any, rows: any[], verifyData: any) {
   const actualTotal = verifyData.amount;
   const numMonths = rows.length;
@@ -70,6 +78,12 @@ async function applySplitAndNotify(admin: any, rows: any[], verifyData: any) {
 
 serve(async (req) => {
   try {
+    if (!PAYSTACK_SECRET_KEY) {
+      // Never run with a missing secret: the signature check would be meaningless.
+      console.error("PAYSTACK_SECRET_KEY is not configured.");
+      return new Response("not configured", { status: 500 });
+    }
+
     const rawBody = await req.text();
     const signature = req.headers.get("x-paystack-signature");
 
@@ -79,7 +93,7 @@ serve(async (req) => {
     }
 
     const expected = await computeHmacSha512(PAYSTACK_SECRET_KEY, rawBody);
-    if (expected !== signature) {
+    if (!safeEqual(expected, signature)) {
       console.log("Rejected: signature mismatch.");
       return new Response("invalid signature", { status: 401 });
     }

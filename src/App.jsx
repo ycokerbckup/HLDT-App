@@ -3742,7 +3742,16 @@ function InventoryPanel({ notify }) {
     setSuggestions(null);
     const { data, error } = await supabase.functions.invoke("generate-equipment-suggestions");
     if (error || data?.error) {
-      notify?.(data?.error || error?.message || "Couldn't generate suggestions", "error");
+      // supabase-js hides the function's real response behind a generic
+      // "non-2xx" message; read the body so the actual reason is shown.
+      let detail = data?.error;
+      if (!detail && error?.context && typeof error.context.text === "function") {
+        try {
+          const raw = await error.context.text();
+          try { detail = JSON.parse(raw)?.error || raw; } catch { detail = raw; }
+        } catch { /* fall through to generic message */ }
+      }
+      notify?.(detail || error?.message || "Couldn't generate suggestions", "error");
     } else {
       setSuggestions(data.suggestions || []);
     }

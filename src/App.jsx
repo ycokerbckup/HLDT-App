@@ -1499,9 +1499,10 @@ function WithdrawalPhoneSection({ session, notify }) {
   async function confirmCode() {
     if (!code.trim()) { notify?.("Enter the code", "error"); return; }
     setBusy(true);
-    const { error } = await supabase.rpc("confirm_phone_change", { p_verification_id: verificationId, p_code: code.trim() });
+    const { data: result, error } = await supabase.rpc("confirm_phone_change_v2", { p_verification_id: verificationId, p_code: code.trim() });
     setBusy(false);
     if (error) { notify?.(error.message, "error"); return; }
+    if (!result?.ok) { notify?.(result?.error || "Couldn't update the OTP email", "error"); return; }
     notify?.("Withdrawal OTP email updated");
     setNewPhone("");
     setVerificationId(null);
@@ -2957,9 +2958,10 @@ function SetPinModal({ onClose, notify, onSaved, hasPin }) {
   async function confirmChange() {
     if (!otp.trim()) { notify?.("Enter the OTP", "error"); return; }
     setBusy(true);
-    const { error } = await supabase.rpc("confirm_pin_change", { p_request_id: requestId, p_otp: otp.trim() });
+    const { data: result, error } = await supabase.rpc("confirm_pin_change_v2", { p_request_id: requestId, p_otp: otp.trim() });
     setBusy(false);
     if (error) { notify?.(error.message, "error"); return; }
+    if (!result?.ok) { notify?.(result?.error || "Couldn't update the PIN", "error"); return; }
     notify?.("Withdrawal PIN updated");
     onSaved?.();
     onClose();
@@ -3010,9 +3012,10 @@ function WithdrawModal({ onClose, notify, reloadBalance, onResetPin }) {
   async function submitConfirm() {
     if (!pin || !otp) { notify?.("Enter both the PIN and OTP", "error"); return; }
     setBusy(true);
-    const { error } = await supabase.rpc("confirm_withdrawal", { p_request_id: requestId, p_pin: pin, p_otp: otp });
+    const { data: result, error } = await supabase.rpc("confirm_withdrawal_v2", { p_request_id: requestId, p_pin: pin, p_otp: otp });
     setBusy(false);
     if (error) { notify?.(error.message, "error"); return; }
+    if (!result?.ok) { notify?.(result?.error || "Couldn't complete the withdrawal", "error"); return; }
     notify?.("Withdrawal completed");
     reloadBalance();
     onClose();

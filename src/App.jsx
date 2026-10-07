@@ -289,6 +289,42 @@ const inputStyle = {
   fontFamily: "inherit",
 };
 
+/* Password rules for creating/changing a password (not enforced on sign-in,
+   so existing accounts with older passwords can still log in). */
+function validateNewPassword(pw) {
+  if (!pw || pw.length < 6) return "Password must be at least 6 characters.";
+  if (!/[a-z]/.test(pw)) return "Password needs at least one lowercase letter.";
+  if (!/[A-Z]/.test(pw)) return "Password needs at least one uppercase letter.";
+  if (!/[0-9]/.test(pw)) return "Password needs at least one number.";
+  return "";
+}
+const PASSWORD_RULES_HINT = "At least 6 characters, with an uppercase letter, a lowercase letter and a number.";
+
+function PasswordInput({ value, onChange, required, autoComplete, style }) {
+  const [shown, setShown] = useState(false);
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        type={shown ? "text" : "password"}
+        style={{ ...inputStyle, paddingRight: 36, ...style }}
+        value={value}
+        onChange={onChange}
+        required={required}
+        autoComplete={autoComplete}
+      />
+      <button
+        type="button"
+        onClick={() => setShown((v) => !v)}
+        aria-label={shown ? "Hide password" : "Show password"}
+        title={shown ? "Hide password" : "Show password"}
+        style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", padding: 4, cursor: "pointer", color: COLORS.textSecondary, display: "flex", alignItems: "center" }}
+      >
+        {shown ? <EyeOff size={15} /> : <Eye size={15} />}
+      </button>
+    </div>
+  );
+}
+
 /* ---------------- shared UI ---------------- */
 
 function StatusDot({ tone }) {
@@ -524,6 +560,8 @@ function AuthScreen() {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) setError(error.message || "Something went wrong signing in. Please try again.");
       } else if (mode === "signup") {
+        const pwError = validateNewPassword(password);
+        if (pwError) { setError(pwError); setBusy(false); return; }
         const { error } = await supabase.auth.signUp({
           email,
           password,
@@ -579,7 +617,8 @@ function AuthScreen() {
             </Field>
             {mode !== "forgot" && (
               <Field label="Password">
-                <input type="password" style={inputStyle} value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
+                <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete={mode === "signup" ? "new-password" : "current-password"} />
+                {mode === "signup" && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>{PASSWORD_RULES_HINT}</div>}
               </Field>
             )}
             {error && <div style={{ fontSize: 12, color: COLORS.red, marginBottom: 10 }}>{error}</div>}
@@ -624,6 +663,8 @@ function ResetPasswordScreen() {
   async function submit(e) {
     e.preventDefault();
     setError("");
+    const pwError = validateNewPassword(password);
+    if (pwError) { setError(pwError); return; }
     if (password !== confirm) {
       setError("Passwords don't match.");
       return;
@@ -651,10 +692,11 @@ function ResetPasswordScreen() {
         ) : (
           <form onSubmit={submit}>
             <Field label="New password">
-              <input type="password" style={inputStyle} value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
+              <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="new-password" />
+              <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>{PASSWORD_RULES_HINT}</div>
             </Field>
             <Field label="Confirm new password">
-              <input type="password" style={inputStyle} value={confirm} onChange={(e) => setConfirm(e.target.value)} required minLength={6} />
+              <PasswordInput value={confirm} onChange={(e) => setConfirm(e.target.value)} required autoComplete="new-password" />
             </Field>
             {error && <div style={{ fontSize: 12, color: COLORS.red, marginBottom: 10 }}>{error}</div>}
             <Btn tone="amber" type="submit" disabled={busy}>{busy ? "Saving..." : "Update password"}</Btn>

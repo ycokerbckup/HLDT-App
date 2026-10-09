@@ -1,5 +1,11 @@
 // Confirms a withdrawal and sends the money for real.
 //
+// Record mode (withdrawal_config.payout_mode = 'record', the default while the
+// Paystack account can't send transfers): after the PIN + OTP check the amount
+// comes off the wallet and the withdrawal is marked completed straight away. No
+// transfer is sent; it records money taken out of the team bank account that
+// Paystack settles into. Steps 3 and 4 below apply to 'paystack' mode only.
+//
 // 1. Checks the caller is signed in.
 // 2. confirm_withdrawal_v3 checks the PIN + emailed OTP and, only if both are
 //    right, holds the amount and the transfer fee (takes them off the balance)
@@ -36,8 +42,6 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
 
   try {
-    if (!PAYSTACK_SECRET_KEY) return json({ error: "Payments are not configured." }, 500);
-
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return json({ error: "Not authenticated." }, 401);
     const userClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { global: { headers: { Authorization: authHeader } } });
@@ -53,6 +57,22 @@ serve(async (req) => {
     });
     if (rpcErr) return json({ error: rpcErr.message }, 400);
     if (!held?.ok) return json({ ok: false, error: held?.error || "Couldn't confirm the withdrawal." });
+
+    // Record mode (until real payouts are available): Paystack already paid the
+    // money into the team bank account, so this only records what was taken out.
+    if (held.mode === "record") {
+      await admin.rpc("finalize_withdrawal", { p_request_id: request_id, p_outcome: "completed", p_transfer_code: null, p_reason: "Recorded: paid from the team bank account." });
+      return json({ ok: true, status: "completed", message: "Withdrawal recorded." });
+    }
+    if (!held.recipient_code) {
+      await admin.rpc("finalize_withdrawal", { p_request_id: request_id, p_outcome: "failed", p_transfer_code: null, p_reason: "No payout account." });
+      return json({ ok: false, error: "Add the payout bank account first. Nothing was taken from the wallet." });
+    }
+
+    if (!PAYSTACK_SECRET_KEY) {
+      await admin.rpc("finalize_withdrawal", { p_request_id: request_id, p_outcome: "failed", p_transfer_code: null, p_reason: "Payments are not configured." });
+      return json({ ok: false, error: "Payments are not configured. Nothing was taken from the wallet." }, 500);
+    }
 
     // Money is now held. Send it.
     let transferJson: any = null;

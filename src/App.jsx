@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, GraduationCap, Wrench, CalendarDays,
   Wallet, MessageSquare, Plus, X, ChevronRight, ChevronLeft, Shield, User,
   CheckCircle2, Clock, Trash2, Save, LogOut, RefreshCw, Download,
-  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil, GripVertical, Eye, EyeOff, Camera, Menu, CornerUpLeft, Check, CheckCheck, Boxes, DollarSign, Sparkles, ClipboardCheck, Search as SearchIcon, PartyPopper, ArrowUpRight, KeyRound, Landmark
+  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil, GripVertical, Eye, EyeOff, Camera, Menu, CornerUpLeft, Check, CheckCheck, Boxes, DollarSign, Sparkles, ClipboardCheck, Search as SearchIcon, PartyPopper, ArrowUpRight, ArrowDownLeft, KeyRound, Landmark
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "./supabaseClient";
@@ -70,7 +70,7 @@ const TICKET_STATUSES = ["Open", "Assigned", "In progress", "Resolved"];
 const SYSTEMS = ["proPresenter", "vmix", "resolume", "monitors", "screens", "network"];
 const SYSTEM_LABELS = { proPresenter: "ProPresenter", vmix: "vMix", resolume: "Resolume", monitors: "Monitors", screens: "Screens", network: "Network" };
 const SCORE_LABELS = { proPres: "ProPresenter", vmix: "vMix", resolume: "Resolume", hardware: "Hardware", attention: "Attention to detail", responsiveness: "Responsiveness", reliability: "Reliability" };
-const DUES_START_MONTH = "2026-09"; // reset point — dues before this are archived, not tracked in-app
+const DUES_START_MONTH = "2026-10"; // reset point — dues before this are archived, not tracked in-app
 
 // The team operates on West Africa Time (UTC+1, no daylight saving).
 // Pin all business-date calculations to this explicitly rather than
@@ -187,7 +187,8 @@ function netAfterPaystackFee(naira) {
 }
 
 // Largest amount that can be withdrawn so that amount + its transfer fee fits in the balance.
-function maxWithdrawableFrom(available) {
+function maxWithdrawableFrom(available, recordMode) {
+  if (recordMode) return Math.floor(available * 100) / 100;
   let best = 0;
   for (const fee of [10, 25, 50]) {
     const x = Math.floor((available - fee) * 100) / 100;
@@ -1208,7 +1209,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
       {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} myMember={myMember} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
       {tab === "attendance" && <AttendanceTab data={data} canManageRosters={canManageRosters} myMember={myMember} notify={notify} />}
       {tab === "events" && <SpecialEventsTab data={data} canManageEvents={canManageEvents} myUnit={myUnit} session={session} notify={notify} />}
-      {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} pendingPaymentRef={pendingPaymentRef} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
+      {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} pendingPaymentRef={pendingPaymentRef} myUnit={myMember?.unit} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
       {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} canSeeReadReceipts={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
       {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
       {tab === "chat" && <ChatTab session={session} profile={profile} members={data.members} onboarding={data.onboarding} notify={notify} pendingDmProfileId={pendingDm} onPendingDmConsumed={() => setPendingDm(null)} />}
@@ -3004,6 +3005,13 @@ const TOUR_RELEASES = [
       { selector: '[data-tour="wallet"]', title: "The team wallet", body: "The live balance after Paystack fees. Tap the eye to hide it when others can see your screen." },
     ],
   },
+  {
+    version: 3,
+    label: "What's new",
+    steps: [
+      { selector: '[data-tour="wallet-activity"]', title: "Tap any transaction", body: "See who paid, their note, the Paystack fee and the exact time. The full history is on the Dues page too." },
+    ],
+  },
 ];
 const TOUR_VERSION = Math.max(...TOUR_RELEASES.map((r) => r.version));
 
@@ -3213,10 +3221,12 @@ function MoneyLine({ label, value, strong }) {
 }
 
 function nairaExact(n) {
-  return `₦${(Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+  const v = Number(n) || 0;
+  const whole = Math.round(v * 100) % 100 === 0;
+  return `₦${v.toLocaleString(undefined, { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: 2 })}`;
 }
 
-function WithdrawModal({ onClose, notify, reloadBalance, onResetPin, available, payout }) {
+function WithdrawModal({ onClose, notify, reloadBalance, onResetPin, available, payout, recordMode }) {
   const [step, setStep] = useState("amount"); // amount | otp
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
@@ -3226,13 +3236,14 @@ function WithdrawModal({ onClose, notify, reloadBalance, onResetPin, available, 
   const [busy, setBusy] = useState(false);
 
   const value = Number(amount) || 0;
-  const fee = value > 0 ? paystackTransferFee(value) : 0;
+  const fee = value > 0 && !recordMode ? paystackTransferFee(value) : 0;
   const total = value + fee;
-  const maxWithdrawable = maxWithdrawableFrom(available);
+  const maxWithdrawable = maxWithdrawableFrom(available, recordMode);
 
   async function submitAmount() {
     if (!value || value < 100) { notify?.("The smallest withdrawal is ₦100", "error"); return; }
-    if (total > available) { notify?.(`That plus the ${nairaExact(fee)} transfer fee is more than the available balance`, "error"); return; }
+    if (recordMode && !reason.trim()) { notify?.("Say what the money was for", "error"); return; }
+    if (total > available) { notify?.(recordMode ? "That is more than the available balance" : `That plus the ${nairaExact(fee)} transfer fee is more than the available balance`, "error"); return; }
     setBusy(true);
     const { data: newId, error } = await supabase.rpc("initiate_withdrawal", { p_amount: value, p_reason: reason || null });
     if (error) { notify?.(error.message, "error"); setBusy(false); return; }
@@ -3255,16 +3266,29 @@ function WithdrawModal({ onClose, notify, reloadBalance, onResetPin, available, 
   }
 
   return (
-    <Modal title="Withdraw funds" onClose={onClose} width={380}>
+    <Modal title={recordMode ? "Record a withdrawal" : "Withdraw funds"} onClose={onClose} width={380}>
       {step === "amount" ? (
         <>
-          <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12 }}>
-            Sends to <strong style={{ color: COLORS.textPrimary }}>{payout.bank_name} ••{payout.last4}</strong> ({payout.account_name}).
-          </div>
+          {recordMode ? (
+            <div style={{ fontSize: 12.5, color: COLORS.textSecondary, marginBottom: 12, lineHeight: 1.5 }}>
+              Paystack pays every collection into the team bank account automatically, so the money is already there.
+              Record what you take out of that account here and the wallet balance drops straight away. No transfer is sent and there's no fee.
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12 }}>
+              Sends to <strong style={{ color: COLORS.textPrimary }}>{payout.bank_name} ••{payout.last4}</strong> ({payout.account_name}).
+            </div>
+          )}
           <Field label={`Amount (up to ${nairaExact(maxWithdrawable)})`}>
-            <input type="number" style={inputStyle} value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <input type="number" inputMode="decimal" style={inputStyle} value={amount} onChange={(e) => setAmount(e.target.value)} />
           </Field>
-          {value > 0 && (
+          {value > 0 && recordMode && (
+            <div style={{ background: COLORS.surface2, borderRadius: 8, padding: "8px 12px", marginBottom: 12 }}>
+              <MoneyLine label="Taken from wallet" value={nairaExact(value)} strong />
+              <MoneyLine label="Balance after" value={nairaExact(Math.max(0, available - value))} />
+            </div>
+          )}
+          {value > 0 && !recordMode && (
             <div style={{ background: COLORS.surface2, borderRadius: 8, padding: "8px 12px", marginBottom: 12 }}>
               <MoneyLine label="Arrives in the account" value={nairaExact(value)} />
               <MoneyLine label="Paystack transfer fee" value={nairaExact(fee)} />
@@ -3272,15 +3296,19 @@ function WithdrawModal({ onClose, notify, reloadBalance, onResetPin, available, 
               <MoneyLine label="Balance after" value={nairaExact(Math.max(0, available - total))} />
             </div>
           )}
-          <Field label="Reason (optional)"><textarea style={{ ...inputStyle, minHeight: 60 }} value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
+          <Field label={recordMode ? "What was it for?" : "Reason (optional)"}><textarea style={{ ...inputStyle, minHeight: 60 }} placeholder={recordMode ? "e.g. Bought 2 HDMI cables" : undefined} value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
           <Btn tone="amber" disabled={busy || total > available} onClick={submitAmount}>{busy ? "Starting..." : "Continue"}</Btn>
         </>
       ) : (
         <>
-          <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12 }}>An OTP has been emailed. Enter it with the withdrawal PIN to send {nairaExact(value)} to {payout.bank_name} ••{payout.last4}.</div>
+          <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12 }}>
+            {recordMode
+              ? <>An OTP has been emailed. Enter it with the withdrawal PIN to record {nairaExact(value)} taken from the team bank account.</>
+              : <>An OTP has been emailed. Enter it with the withdrawal PIN to send {nairaExact(value)} to {payout.bank_name} ••{payout.last4}.</>}
+          </div>
           <Field label="Withdrawal PIN"><input type="password" style={inputStyle} value={pin} onChange={(e) => setPin(e.target.value)} /></Field>
           <Field label="OTP"><input style={inputStyle} value={otp} onChange={(e) => setOtp(e.target.value)} /></Field>
-          <Btn tone="amber" disabled={busy} onClick={submitConfirm}>{busy ? "Sending..." : "Confirm withdrawal"}</Btn>
+          <Btn tone="amber" disabled={busy} onClick={submitConfirm}>{busy ? (recordMode ? "Recording..." : "Sending...") : (recordMode ? "Confirm and record" : "Confirm withdrawal")}</Btn>
           {onResetPin && (
             <div style={{ marginTop: 10, fontSize: 12, color: COLORS.textMuted, cursor: "pointer", textDecoration: "underline" }} onClick={onResetPin}>
               Forgot the PIN? Reset it
@@ -3401,10 +3429,142 @@ function activityLabel(note, delta) {
   return note.replace(/NGN /g, "₦");
 }
 
-function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
+// A short title for a ledger row: the part of the note before the amounts.
+function activityTitle(note, delta) {
+  const label = activityLabel(note, delta);
+  const m = label.match(/^([^:]+):\s*(.*)$/);
+  if (!m) return label;
+  const reason = label.match(/\(([^)]+)\)\s*$/);
+  return reason ? `${m[1]} · ${reason[1]}` : m[1];
+}
+
+// Date and exact time, always (friendlyDateTime drops the time for older years).
+function entryDateTime(value) {
+  const d = new Date(value);
+  if (isNaN(d)) return "";
+  const now = new Date();
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const sameDay = (a, b) => a.toDateString() === b.toDateString();
+  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+  if (sameDay(d, now)) return `Today, ${time}`;
+  if (sameDay(d, yesterday)) return `Yesterday, ${time}`;
+  return `${d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", ...(d.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }) })}, ${time}`;
+}
+
+// "2026-10" → "October 2026"
+function monthLabel(mo) {
+  const [y, m] = String(mo || "").split("-").map(Number);
+  if (!y || !m) return mo || "";
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(undefined, { month: "long", year: "numeric", timeZone: "UTC" });
+}
+
+function fullDateTime(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (isNaN(d)) return "";
+  return d.toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit" });
+}
+
+const CHANNEL_LABELS = { card: "Card", bank: "Bank", bank_transfer: "Bank transfer", ussd: "USSD", qr: "QR", mobile_money: "Mobile money", apple_pay: "Apple Pay" };
+const WITHDRAWAL_STATUS = { processing: "Processing", completed: "Completed", failed: "Failed, money returned", reversed: "Reversed, money returned", cancelled: "Cancelled", expired: "Expired", pending_otp: "Waiting for OTP" };
+
+function DetailRow({ label, children }) {
+  if (children == null || children === "" || children === false) return null;
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 16, padding: "9px 0", borderBottom: `1px solid ${COLORS.border}`, fontSize: 13.5 }}>
+      <span style={{ color: COLORS.textMuted, flexShrink: 0 }}>{label}</span>
+      <span style={{ color: COLORS.textPrimary, textAlign: "right", minWidth: 0, overflowWrap: "anywhere" }}>{children}</span>
+    </div>
+  );
+}
+
+function WalletEntryModal({ entry, onClose }) {
+  const [detail, setDetail] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase.rpc("get_wallet_entry", { p_id: entry.id }).then(({ data }) => {
+      if (cancelled) return;
+      setDetail(data || null);
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [entry.id]);
+
+  const delta = Number(entry.delta);
+  const d = detail?.details || {};
+  const kind = detail?.kind || (/^Pool funding/.test(entry.note || "") ? "pool" : /^Dues payment/.test(entry.note || "") ? "dues" : /^Withdrawal/.test(entry.note || "") ? "withdrawal" : null);
+  const title = kind === "pool" ? "Pool funding" : kind === "dues" ? "Dues payment" : kind === "withdrawal" ? (delta >= 0 ? "Withdrawal returned" : "Withdrawal") : delta >= 0 ? "Money in" : "Money out";
+  const hasDetails = Object.keys(d).length > 0;
+  const naira = (v) => (v == null ? null : nairaExact(Number(v)));
+
+  return (
+    <Modal title={title} onClose={onClose} width={420}>
+      <div style={{ textAlign: "center", padding: "4px 0 16px" }}>
+        <div style={{ fontSize: 28, fontWeight: 700, color: delta >= 0 ? COLORS.green : COLORS.textPrimary, letterSpacing: "-0.01em" }}>
+          {delta >= 0 ? "+" : "−"}{nairaExact(Math.abs(delta))}
+        </div>
+        <div style={{ fontSize: 12.5, color: COLORS.textMuted, marginTop: 4 }}>{fullDateTime(entry.created_at)}</div>
+      </div>
+
+      {kind === "pool" && (
+        <>
+          <DetailRow label="From">{d.from}</DetailRow>
+          <DetailRow label="Description">{d.description}</DetailRow>
+          <DetailRow label="Amount paid">{naira(d.paid)}</DetailRow>
+          <DetailRow label="Paystack fee">{d.fee != null ? `−${nairaExact(Number(d.fee))}` : null}</DetailRow>
+          <DetailRow label="Paid with">{d.channel ? CHANNEL_LABELS[d.channel] || d.channel : null}</DetailRow>
+          <DetailRow label="Paid at">{d.paid_at ? fullDateTime(d.paid_at) : null}</DetailRow>
+          <DetailRow label="Started by">{d.started_by}</DetailRow>
+          <DetailRow label="Reference">{d.reference}</DetailRow>
+        </>
+      )}
+      {kind === "dues" && (
+        <>
+          <DetailRow label="Member">{d.member}</DetailRow>
+          <DetailRow label="Month">{d.month ? monthLabel(d.month) : null}</DetailRow>
+          <DetailRow label="Same payment covered">{Array.isArray(d.months) && d.months.length > 1 ? d.months.map(monthLabel).join(", ") : null}</DetailRow>
+          <DetailRow label="Amount paid">{naira(d.paid)}</DetailRow>
+          <DetailRow label="Still owed">{d.owed ? nairaExact(Number(d.owed)) : null}</DetailRow>
+          <DetailRow label="Paid with">{d.channel ? CHANNEL_LABELS[d.channel] || d.channel : null}</DetailRow>
+          <DetailRow label="Paid at">{d.paid_at ? fullDateTime(d.paid_at) : null}</DetailRow>
+          <DetailRow label="Reference">{d.reference}</DetailRow>
+        </>
+      )}
+      {kind === "withdrawal" && (
+        <>
+          <DetailRow label="By">{d.by}</DetailRow>
+          <DetailRow label="For">{d.reason}</DetailRow>
+          <DetailRow label="To">{d.to}</DetailRow>
+          <DetailRow label="Amount">{naira(d.amount)}</DetailRow>
+          <DetailRow label="Transfer fee">{d.fee ? nairaExact(Number(d.fee)) : null}</DetailRow>
+          <DetailRow label="Status">{d.status ? WITHDRAWAL_STATUS[d.status] || d.status : null}</DetailRow>
+          <DetailRow label="Why it failed">{d.failure_reason && d.status !== "completed" ? d.failure_reason : null}</DetailRow>
+          <DetailRow label="Requested">{d.requested_at ? fullDateTime(d.requested_at) : null}</DetailRow>
+          <DetailRow label="Completed">{d.completed_at ? fullDateTime(d.completed_at) : null}</DetailRow>
+          <DetailRow label="Paystack transfer">{d.transfer_code}</DetailRow>
+        </>
+      )}
+      {!loading && !hasDetails && <DetailRow label="What happened">{activityLabel(entry.note, delta)}</DetailRow>}
+      {detail && (
+        <>
+          <DetailRow label="Balance before">{naira(detail.balance_before)}</DetailRow>
+          <DetailRow label="Balance after">{naira(detail.balance_after)}</DetailRow>
+        </>
+      )}
+      {loading && <div style={{ fontSize: 13, color: COLORS.textMuted, padding: "8px 0" }}>Loading details…</div>}
+    </Modal>
+  );
+}
+
+function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef, fullHistory = false }) {
   const [month, setMonth] = useState(currentMonthStringWAT());
   const [overview, setOverview] = useState(null);
   const [activity, setActivity] = useState([]);
+  const [activityLimit, setActivityLimit] = useState(fullHistory ? 20 : 8);
+  const [hasMoreActivity, setHasMoreActivity] = useState(false);
+  const [openEntry, setOpenEntry] = useState(null);
   const [paystackBalance, setPaystackBalance] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
@@ -3434,14 +3594,24 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
     setPaystackBalance(error ? null : res.balance);
   }
 
+  const limitRef = useRef(activityLimit);
+  limitRef.current = activityLimit;
+
   async function loadBalance() {
+    const lim = limitRef.current;
     const [{ data: ov }, { data: rows }] = await Promise.all([
       supabase.rpc("get_wallet_overview"),
-      supabase.from("wallet_ledger").select("id, created_at, delta, note").neq("delta", 0).order("created_at", { ascending: false }).limit(8),
+      supabase.from("wallet_ledger").select("id, created_at, delta, note").neq("delta", 0).order("created_at", { ascending: false }).limit(lim + 1),
     ]);
     if (ov) setOverview(ov);
-    setActivity(rows || []);
+    setActivity((rows || []).slice(0, lim));
+    setHasMoreActivity((rows || []).length > lim);
   }
+
+  useEffect(() => {
+    if (activityLimit > (fullHistory ? 20 : 8)) loadBalance();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activityLimit]);
 
   async function refreshAll() {
     setRefreshing(true);
@@ -3455,7 +3625,7 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
     loadPinStatus();
     loadPaystackBalance();
     const channel = supabase
-      .channel("wallet-live")
+      .channel(fullHistory ? "wallet-live-dues" : "wallet-live")
       .on("postgres_changes", { event: "*", schema: "public", table: "wallet_balance" }, () => { loadBalance(); loadPaystackBalance(); })
       .subscribe((status) => setLive(status === "SUBSCRIBED"));
     return () => supabase.removeChannel(channel);
@@ -3515,11 +3685,15 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
   const available = Number(overview?.balance || 0);
   const processing = Number(overview?.processing || 0);
   const payout = overview?.payout || null;
+  // Record mode: Paystack can't send payouts on this account, so withdrawals record money
+  // taken out of the team bank account Paystack already settles into.
+  const recordMode = overview?.mode === "record";
   // Paystack makes card payments available after settlement, so its balance can trail ours for a day or so.
   const unsettled = paystackBalance == null ? 0 : Math.round((available - paystackBalance) * 100) / 100;
   const withdrawHint = hasPin === false ? "Set a withdrawal PIN to start withdrawing."
-    : hasPin && !payout ? "Add the payout account to start withdrawing."
+    : hasPin && !payout && !recordMode ? "Add the payout account to start withdrawing."
     : null;
+  const canStartWithdraw = !!hasPin && available > 0 && (recordMode || !!payout);
 
   return (
     <Panel
@@ -3556,13 +3730,18 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
                   {hideBalance ? <Eye size={16} /> : <EyeOff size={16} />}
                 </button>
               </div>
-              {processing > 0 && (
+              {processing > 0 && !recordMode && (
                 <div className="hldt-wcard-pending"><Clock size={12} aria-hidden="true" /> {hideBalance ? "A payout" : nairaExact(processing)} on its way to the bank</div>
               )}
             </div>
             <div className="hldt-wcard-bottom">
               <div className="hldt-wcard-acct">
-                {payout ? (
+                {recordMode ? (
+                  <>
+                    <span className="hldt-wcard-digits">Team bank account</span>
+                    <span className="hldt-wcard-bank">Paid in by Paystack</span>
+                  </>
+                ) : payout ? (
                   <>
                     <span className="hldt-wcard-digits">•••• {payout.last4}</span>
                     <span className="hldt-wcard-bank">{payout.bank_name}</span>
@@ -3580,14 +3759,14 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
 
           <div className="hldt-wactions">
             {canWithdraw && (
-              <button type="button" className="hldt-waction" disabled={!payout || !hasPin || available <= 0} onClick={() => setShowWithdraw(true)}>
-                <span className="hldt-waction-icon is-primary"><ArrowUpRight size={18} /></span>Withdraw
+              <button type="button" className="hldt-waction" disabled={!canStartWithdraw} onClick={() => setShowWithdraw(true)}>
+                <span className="hldt-waction-icon is-primary"><ArrowUpRight size={18} /></span>{recordMode ? "Record withdrawal" : "Withdraw"}
               </button>
             )}
             <button type="button" className="hldt-waction" onClick={() => setShowFundPool(true)}>
               <span className="hldt-waction-icon"><Plus size={18} /></span>Fund pool
             </button>
-            {canWithdraw && (
+            {canWithdraw && !recordMode && (
               <button type="button" className="hldt-waction" onClick={() => (hasPin ? setShowPayout(true) : notify?.("Set the withdrawal PIN first", "error"))}>
                 <span className="hldt-waction-icon"><Landmark size={18} /></span>{payout ? "Payout account" : "Add account"}
               </button>
@@ -3606,8 +3785,12 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
             <div className="hldt-wbreak-row" style={{ color: COLORS.textSecondary }}><span>Dues received</span><strong style={{ color: COLORS.textPrimary }}>{currency(overview?.dues_total)}</strong></div>
             <div className="hldt-wbreak-row" style={{ color: COLORS.textSecondary }}><span>Pool funding</span><strong style={{ color: COLORS.textPrimary }}>{currency(overview?.pool_total)}</strong></div>
             <div className="hldt-wbreak-row" style={{ color: COLORS.textSecondary }}><span>Paystack fees</span><strong style={{ color: COLORS.red }}>−{currency(overview?.fees_total)}</strong></div>
-            <div className="hldt-wbreak-row" style={{ color: COLORS.textSecondary }}><span>Paid out</span><strong style={{ color: COLORS.textPrimary }}>−{currency(overview?.withdrawn_total)}</strong></div>
-            {paystackBalance != null && (
+            <div className="hldt-wbreak-row" style={{ color: COLORS.textSecondary }}><span>{recordMode ? "Taken out" : "Paid out"}</span><strong style={{ color: COLORS.textPrimary }}>−{currency(overview?.withdrawn_total)}</strong></div>
+            {recordMode ? (
+              <div className="hldt-wbreak-note" style={{ color: COLORS.textMuted, borderTop: `1px solid ${COLORS.border}` }}>
+                Paystack pays collections into the team bank account automatically. Record anything taken out so this balance matches the account.
+              </div>
+            ) : paystackBalance != null && (
               <div className="hldt-wbreak-note" style={{ color: COLORS.textMuted, borderTop: `1px solid ${COLORS.border}` }}>
                 {Math.abs(unsettled) <= 1
                   ? <><Check size={12} aria-hidden="true" /> Matches the {nairaExact(paystackBalance)} Paystack is holding</>
@@ -3645,21 +3828,31 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
       </div>
       {activity.length > 0 && (
         <div style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.textMuted, marginBottom: 6 }}>Recent activity</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.textMuted, marginBottom: 6 }} data-tour={fullHistory ? undefined : "wallet-activity"}>{fullHistory ? "Transaction history" : "Recent activity"}</div>
           {activity.map((e) => (
-            <RowLine key={e.id}>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                {activityLabel(e.note, e.delta)}
-                <span style={{ color: COLORS.textMuted }}> · {new Date(e.created_at).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</span>
+            <RowLine key={e.id} onClick={() => setOpenEntry(e)} title="See details">
+              <span className="hldt-wact-icon" style={{ background: e.delta >= 0 ? COLORS.greenDim : COLORS.surface2, color: e.delta >= 0 ? COLORS.green : COLORS.textSecondary }} aria-hidden="true">
+                {e.delta >= 0 ? <ArrowDownLeft size={15} /> : <ArrowUpRight size={15} />}
               </span>
-              <span style={{ fontSize: 12, fontWeight: 600, color: e.delta >= 0 ? COLORS.green : COLORS.textPrimary, marginLeft: 8 }}>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span className="hldt-wact-title">{activityTitle(e.note, e.delta)}</span>
+                <span style={{ display: "block", fontSize: 12, color: COLORS.textMuted }}>{entryDateTime(e.created_at)}</span>
+              </span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: e.delta >= 0 ? COLORS.green : COLORS.textPrimary, marginLeft: 8, whiteSpace: "nowrap" }}>
                 {e.delta >= 0 ? "+" : "−"}{nairaExact(Math.abs(e.delta))}
               </span>
+              <ChevronRight size={15} color={COLORS.textMuted} aria-hidden="true" className="hldt-wact-chev" />
             </RowLine>
           ))}
+          {fullHistory && hasMoreActivity && (
+            <div style={{ marginTop: 10 }}>
+              <Btn tone="ghost" onClick={() => setActivityLimit((n) => n + 20)}>Show more</Btn>
+            </div>
+          )}
         </div>
       )}
-      {showWithdraw && payout && <WithdrawModal onClose={() => setShowWithdraw(false)} notify={notify} reloadBalance={loadBalance} available={available} payout={payout} onResetPin={() => { setShowWithdraw(false); setShowSetPin(true); }} />}
+      {openEntry && <WalletEntryModal entry={openEntry} onClose={() => setOpenEntry(null)} />}
+      {showWithdraw && (payout || recordMode) && <WithdrawModal onClose={() => setShowWithdraw(false)} notify={notify} reloadBalance={loadBalance} available={available} payout={payout} recordMode={recordMode} onResetPin={() => { setShowWithdraw(false); setShowSetPin(true); }} />}
       {showSetPin && <SetPinModal onClose={() => setShowSetPin(false)} notify={notify} onSaved={loadPinStatus} hasPin={hasPin} />}
       {showFundPool && <FundPoolModal onClose={() => setShowFundPool(false)} notify={notify} />}
       {showPayout && <PayoutAccountModal onClose={() => setShowPayout(false)} notify={notify} onSaved={loadBalance} current={payout} />}
@@ -6176,7 +6369,7 @@ function MultiMonthDuesPay({ member, months, duesPayments, onPay, paying }) {
   );
 }
 
-function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef }) {
+function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef, myUnit, pendingPoolPaymentRef }) {
   const [monthPage, setMonthPage] = useState(0);
   const [payingMonth, setPayingMonth] = useState(null);
   const [confirmingRef, setConfirmingRef] = useState(null);
@@ -6325,6 +6518,11 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef 
         <Panel title="Your own dues" style={{ marginBottom: 16 }}>
           <MultiMonthDuesPay member={myOwnMember} months={months} duesPayments={data.duesPayments} onPay={payNow} paying={payingMonth} />
         </Panel>
+      )}
+      {isAdmin && (
+        <div style={{ marginBottom: 16 }}>
+          <WalletPanel data={data} isAdmin={isAdmin} myUnit={myUnit} notify={notify} pendingPoolPaymentRef={pendingPoolPaymentRef} fullHistory />
+        </div>
       )}
       <SectionHeader
         title="Dues"

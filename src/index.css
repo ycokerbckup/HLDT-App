@@ -548,6 +548,9 @@ body {
 .hldt-waction:focus-visible { outline: 2px solid var(--w-amber); outline-offset: 2px; }
 .hldt-waction:disabled { cursor: not-allowed; opacity: 0.45; }
 .hldt-whint { font-size: 12px; margin-top: 6px; text-align: center; }
+.hldt-wact-icon { width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.hldt-wact-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; line-height: 1.35; }
+@media (max-width: 420px) { .hldt-wact-chev { display: none; } .hldt-wact-icon { width: 28px; height: 28px; } }
 
 /* Breakdown beside the card */
 .hldt-wbreak { box-sizing: border-box; border-radius: 14px; padding: 6px 16px; }

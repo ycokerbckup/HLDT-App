@@ -7,6 +7,7 @@ html, body, #root {
 }
 
 body {
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -606,7 +607,8 @@ body {
   display: inline-grid; place-items: center; font-size: 11px; font-weight: 700;
   background: var(--nav-dot); color: #fff;
 }
-.hldt-main-desktop { flex: 1; min-width: 0; padding: 28px 32px 40px; position: relative; z-index: 1; }
+/* top padding leaves room for the search / notifications / theme buttons pinned top-right */
+.hldt-main-desktop { flex: 1; min-width: 0; padding: 76px 32px 40px; position: relative; z-index: 1; }
 .hldt-main-desktop > .hldt-tab-content { max-width: 1180px; margin: 0 auto; }
 
 .hldt-account {
@@ -719,3 +721,46 @@ body {
   .hldt-home-cols { grid-template-columns: minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) { .hldt-tile { transition: none; } }
+
+/* ---------------- Members ---------------- */
+.hldt-member-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 12px; }
+.hldt-member-card {
+  display: block; width: 100%; text-align: left; border: 0; border-radius: 18px;
+  padding: 16px; font: inherit; min-width: 0;
+}
+.hldt-member-card.is-clickable { cursor: pointer; transition: transform 120ms ease, box-shadow 120ms ease; }
+.hldt-member-card.is-clickable:hover { transform: translateY(-1px); box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.6); }
+.hldt-member-card:focus-visible { outline: 2px solid var(--nav-active); outline-offset: 2px; }
+.hldt-skill-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 18px; margin-top: 14px; }
+.hldt-skill-bar { height: 6px; border-radius: 999px; overflow: hidden; }
+.hldt-skill-bar span { display: block; height: 100%; border-radius: 999px; }
+@media (prefers-reduced-motion: reduce) { .hldt-member-card.is-clickable { transition: none; } }
+
+/* ---------------- Tables that become cards on phones ----------------
+   Rows keep their grid on wide screens; on phones each row stacks, the first
+   cell becomes the title, and the rest show their data-label. */
+@media (max-width: 640px) {
+  .hldt-table { overflow: visible !important; }
+  .hldt-table-inner { min-width: 0 !important; }
+  .hldt-table-head { display: none !important; }
+  .hldt-table-row {
+    display: flex !important; flex-wrap: wrap; align-items: center; gap: 6px 16px;
+    padding: 14px 4px !important;
+  }
+  .hldt-table-row > div:first-child { flex-basis: 100%; font-size: 15px; font-weight: 600; }
+  .hldt-table-row > div[data-label]::before {
+    content: attr(data-label) " "; font-size: 12px; font-weight: 500; opacity: 0.75; margin-right: 4px;
+  }
+  .hldt-table-row > div:empty { display: none; }
+}
+
+/* Dues: names stay put while months scroll sideways */
+.hldt-dues-row > div:first-child {
+  position: sticky; left: 0; z-index: 1; background: var(--sticky-bg);
+  padding-right: 10px;
+}
+
+/* Section header actions wrap instead of running off narrow screens */
+.hldt-section-actions { display: flex; flex-wrap: wrap; gap: 8px; max-width: 100%; }
+.hldt-section-actions > div { flex-wrap: wrap !important; }
+@media (max-width: 640px) { .hldt-section-actions { width: 100%; } }

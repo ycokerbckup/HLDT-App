@@ -372,7 +372,7 @@ function StatusDot({ tone }) {
 }
 
 function Badge({ children, tone = "gray" }) {
-  const bgMap = { green: COLORS.greenDim, amber: COLORS.amberDim, red: COLORS.redDim, gray: COLORS.surface2 };
+  const bgMap = { green: COLORS.greenDim, amber: COLORS.amberDim, red: COLORS.redDim, gray: hexToRgba(COLORS.textPrimary, 0.09) };
   const fgMap = { green: COLORS.green, amber: COLORS.amber, red: COLORS.red, gray: COLORS.textSecondary };
   return (
     <span style={{ display: "inline-flex", alignItems: "center", fontSize: 12, fontWeight: 600, lineHeight: 1.3, padding: "3px 10px", borderRadius: 999, background: bgMap[tone], color: fgMap[tone], whiteSpace: "nowrap" }}>
@@ -425,7 +425,7 @@ function SectionHeader({ title, subtitle, right }) {
         <h2 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: "clamp(22px, 5.5vw, 28px)", letterSpacing: "-0.01em", lineHeight: 1.15 }}>{title}</h2>
         {subtitle && <div style={{ fontSize: 14, color: COLORS.textMuted, marginTop: 4 }}>{subtitle}</div>}
       </div>
-      {right}
+      {right && <div className="hldt-section-actions">{right}</div>}
     </div>
   );
 }
@@ -646,7 +646,7 @@ function AuthScreen() {
 
       <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 64, flexWrap: "wrap", width: "100%", maxWidth: 920 }}>
         <div style={{ flex: "1 1 320px", minWidth: 260, maxWidth: 420, textAlign: "left" }}>
-          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, letterSpacing: "0.12em", color: COLORS.amber, marginBottom: 14, textTransform: "uppercase" }}>Ops Console</div>
+          <div style={{ fontVariantNumeric: "tabular-nums", fontSize: 13, fontWeight: 600, color: COLORS.amber, marginBottom: 14 }}>Welcome back</div>
           <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: "clamp(36px, 6vw, 56px)", lineHeight: 1.02, color: COLORS.textPrimary, letterSpacing: "-0.02em" }}>
             Display<br />Team
           </div>
@@ -672,7 +672,7 @@ function AuthScreen() {
             {mode !== "forgot" && (
               <Field label="Password">
                 <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete={mode === "signup" ? "new-password" : "current-password"} />
-                {mode === "signup" && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>{PASSWORD_RULES_HINT}</div>}
+                {mode === "signup" && <div style={{ fontSize: 12.5, color: COLORS.textMuted, marginTop: 4 }}>{PASSWORD_RULES_HINT}</div>}
               </Field>
             )}
             {error && <div style={{ fontSize: 12, color: COLORS.red, marginBottom: 10 }}>{error}</div>}
@@ -697,7 +697,7 @@ function AuthScreen() {
             )}
           </div>
           {mode === "signup" && (
-            <div style={{ marginTop: 10, fontSize: 11, color: COLORS.textMuted }}>
+            <div style={{ marginTop: 10, fontSize: 12.5, color: COLORS.textMuted }}>
               New accounts start as members. An existing admin has to promote you from the Members tab.
             </div>
           )}
@@ -747,7 +747,7 @@ function ResetPasswordScreen() {
           <form onSubmit={submit}>
             <Field label="New password">
               <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="new-password" />
-              <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>{PASSWORD_RULES_HINT}</div>
+              <div style={{ fontSize: 12.5, color: COLORS.textMuted, marginTop: 4 }}>{PASSWORD_RULES_HINT}</div>
             </Field>
             <Field label="Confirm new password">
               <PasswordInput value={confirm} onChange={(e) => setConfirm(e.target.value)} required autoComplete="new-password" />
@@ -1228,15 +1228,23 @@ function Dashboard_Shell({ session, profile, setProfile }) {
     </div>
   );
 
+  // Theme colours as CSS variables. Applied to the app and to anything opened in a portal
+  // (sheets render outside .hldt-app, so they need their own copy).
+  const navVars = {
+    fontFamily: "'Inter', sans-serif", color: COLORS.textPrimary,
+    "--nav-bg": COLORS.glass1, "--nav-border": COLORS.glassBorder, "--nav-text": COLORS.textPrimary,
+    "--nav-active": COLORS.amber, "--nav-active-bg": hexToRgba(COLORS.amber, 0.14), "--nav-hover": hexToRgba(COLORS.textPrimary, 0.05),
+    "--nav-dot": COLORS.red, "--nav-muted": COLORS.textMuted, "--nav-surface": COLORS.surface2, "--nav-solid": hexToRgba(COLORS.surface1, 0.97),
+  };
+
   return (
     <div
       className="hldt-app"
       style={{
-        minHeight: "100vh", background: COLORS.bg, color: COLORS.textPrimary, fontFamily: "'Inter', sans-serif",
+        minHeight: "100vh", background: COLORS.bg,
         display: "flex", flexDirection: isMobile ? "column" : "row",
-        "--nav-bg": COLORS.glass1, "--nav-border": COLORS.glassBorder, "--nav-text": COLORS.textSecondary,
-        "--nav-active": COLORS.amber, "--nav-active-bg": hexToRgba(COLORS.amber, 0.14), "--nav-hover": hexToRgba(COLORS.textPrimary, 0.05),
-        "--nav-dot": COLORS.red, "--nav-muted": COLORS.textMuted, "--nav-surface": COLORS.surface2, "--nav-solid": hexToRgba(COLORS.surface1, 0.97),
+        ...navVars,
+        "--nav-text": COLORS.textSecondary,
       }}
     >
       <div style={{ position: "fixed", inset: 0, overflow: "hidden", pointerEvents: "none", zIndex: 0 }}>
@@ -1298,7 +1306,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
           </nav>
 
           {showAccountMenu && createPortal(
-            <div className="hldt-modal-backdrop" style={{ position: "fixed", inset: 0, background: "rgba(5,7,10,0.62)", zIndex: 1900, display: "flex", alignItems: "flex-end" }} onClick={() => setShowAccountMenu(false)}>
+            <div className="hldt-modal-backdrop" style={{ position: "fixed", inset: 0, background: "rgba(5,7,10,0.62)", zIndex: 1900, display: "flex", alignItems: "flex-end", ...navVars }} onClick={() => setShowAccountMenu(false)}>
               <div
                 className="hldt-modal hldt-sheet"
                 role="dialog"
@@ -1544,7 +1552,7 @@ function GlobalSearch({ data, goToTab, isOperationsUser }) {
               <>
                 {results.members.length > 0 && (
                   <div style={{ marginBottom: 10 }}>
-                    <div style={{ fontSize: 10, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", padding: "0 4px 4px" }}>Members</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.textMuted, padding: "0 4px 4px" }}>Members</div>
                     {results.members.map((m) => (
                       <div key={m.id}>
                         <div className="hldt-row" data-clickable="true" onClick={() => clickMember(m)} style={{ padding: "8px 6px", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
@@ -1563,7 +1571,7 @@ function GlobalSearch({ data, goToTab, isOperationsUser }) {
                 )}
                 {results.announcements.length > 0 && (
                   <div style={{ marginBottom: 10 }}>
-                    <div style={{ fontSize: 10, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", padding: "0 4px 4px" }}>Announcements</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.textMuted, padding: "0 4px 4px" }}>Announcements</div>
                     {results.announcements.map((a) => (
                       <div key={a.id} className="hldt-row" data-clickable="true" onClick={() => clickAnnouncement(a)} style={{ padding: "8px 6px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>
                         {a.title}
@@ -1573,7 +1581,7 @@ function GlobalSearch({ data, goToTab, isOperationsUser }) {
                 )}
                 {results.tickets.length > 0 && (
                   <div>
-                    <div style={{ fontSize: 10, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", padding: "0 4px 4px" }}>Equipment tickets</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.textMuted, padding: "0 4px 4px" }}>Equipment tickets</div>
                     {results.tickets.map((t) => (
                       <div key={t.id} className="hldt-row" data-clickable="true" onClick={() => clickTicket(t)} style={{ padding: "8px 6px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>
                         {t.reporter} · {t.date} {t.description ? `— ${t.description.slice(0, 40)}` : ""}
@@ -1859,8 +1867,8 @@ function NotificationBell({ notifications, readIds, onRead, onNavigate }) {
                       {isUnread && <span style={{ width: 6, height: 6, borderRadius: 999, background: COLORS.amber, marginTop: 5, flexShrink: 0 }} />}
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 12, color: COLORS.textPrimary, fontWeight: isUnread ? 500 : 400 }}>{n.title}</div>
-                        {n.body && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 2 }}>{n.body}</div>}
-                        <div style={{ fontSize: 10, color: COLORS.textMuted, marginTop: 3, fontFamily: "'JetBrains Mono', monospace" }}>{timeAgo(n.createdAt)}</div>
+                        {n.body && <div style={{ fontSize: 12.5, color: COLORS.textMuted, marginTop: 2 }}>{n.body}</div>}
+                        <div style={{ fontSize: 11.5, color: COLORS.textMuted, marginTop: 3, fontVariantNumeric: "tabular-nums" }}>{timeAgo(n.createdAt)}</div>
                       </div>
                     </div>
                   </div>
@@ -1997,7 +2005,7 @@ function AnnouncementsTab({ data, isAdmin, canPost, canSeeReadReceipts, reload, 
               )}
             </div>
             <div style={{ fontSize: 13, color: COLORS.textSecondary, whiteSpace: "pre-wrap", marginBottom: 8 }}>{a.body}</div>
-            <div style={{ fontSize: 11, color: COLORS.textMuted, display: "flex", gap: 10, alignItems: "center" }}>
+            <div style={{ fontSize: 12.5, color: COLORS.textMuted, display: "flex", gap: 10, alignItems: "center" }}>
               <span>{a.createdByName || "Admin"} · {new Date(a.createdAt).toLocaleString()}</span>
               {canPost && withinEditWindow(a) && <span style={{ color: COLORS.amber }}>{timeLeft(a)}</span>}
               {canSeeReadReceipts && (
@@ -2020,7 +2028,7 @@ function AnnouncementsTab({ data, isAdmin, canPost, canSeeReadReceipts, reload, 
               .map((r, i) => (
                 <RowLine key={i}>
                   <span style={{ flex: 1 }}>{r.name}</span>
-                  <span style={{ fontSize: 11, color: COLORS.textMuted }}>{new Date(r.readAt).toLocaleString()}</span>
+                  <span style={{ fontSize: 12.5, color: COLORS.textMuted }}>{new Date(r.readAt).toLocaleString()}</span>
                 </RowLine>
               ))
           )}
@@ -2042,7 +2050,7 @@ function DateDivider({ date }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "4px 0" }}>
       <div style={{ flex: 1, height: 1, background: COLORS.border }} />
-      <div style={{ fontSize: 10, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.04em", flexShrink: 0 }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.textMuted, flexShrink: 0 }}>{label}</div>
       <div style={{ flex: 1, height: 1, background: COLORS.border }} />
     </div>
   );
@@ -2413,9 +2421,9 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
               <span style={{ flex: 1, color: thread.type === "team" ? COLORS.amber : COLORS.textPrimary, display: "flex", alignItems: "center", gap: 6 }}><Users size={13} /> Team channel</span>
               {unreadByThread.team && <span className="hldt-pulse" style={{ width: 8, height: 8, borderRadius: 999, background: COLORS.red, flexShrink: 0 }} />}
             </div>
-            <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.04em", padding: "12px 12px 4px" }}>Direct messages</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.textMuted, padding: "12px 12px 4px" }}>Direct messages</div>
             {dmCandidates.length === 0 ? (
-              <div style={{ fontSize: 11, color: COLORS.textMuted, padding: "4px 10px" }}>No other members with accounts yet.</div>
+              <div style={{ fontSize: 12.5, color: COLORS.textMuted, padding: "4px 10px" }}>No other members with accounts yet.</div>
             ) : (
               sortedDmCandidates.map((m) => {
                 const conv = conversations.find((c) => (c.user_a === session.user.id ? c.user_b : c.user_a) === m.profileId);
@@ -2452,7 +2460,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
           {pins.length > 0 && (
             <div style={{ padding: "8px 16px", borderBottom: `1px solid ${COLORS.border}`, background: COLORS.surface2, display: "flex", flexDirection: "column", gap: 4 }}>
               {pins.map((p) => (
-                <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11 }}>
+                <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5 }}>
                   <span style={{ flexShrink: 0 }}>📌</span>
                   <span style={{ cursor: p.messages ? "pointer" : "default", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: COLORS.textSecondary }} onClick={() => p.messages && scrollToMessage(p.messages.id)}>
                     <b style={{ color: COLORS.textPrimary, fontWeight: 500 }}>{p.messages?.sender_id === session.user.id ? "You" : p.messages?.sender_name}:</b> {p.messages?.body || "(message removed)"}
@@ -2492,7 +2500,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                     >
                     <Avatar label={avatarLabels[m.sender_id] || m.sender_name?.[0] || "?"} color={hashColor(m.sender_id)} size={30} celebration={celebrationForProfile(m.sender_id)} photoUrl={avatarPhotoFor(m.sender_id)} />
                     <div style={{ maxWidth: "70%" }}>
-                      {!mine && <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 2, fontWeight: 500 }}>{m.sender_name}</div>}
+                      {!mine && <div style={{ fontSize: 12.5, color: COLORS.textMuted, marginBottom: 2, fontWeight: 500 }}>{m.sender_name}</div>}
                       {editingId === m.id ? (
                         <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 6, width: isMobile ? 220 : "auto" }}>
                           <textarea
@@ -2519,14 +2527,14 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                             {quoted && (
                               <div
                                 onClick={() => scrollToMessage(quoted.id)}
-                                style={{ borderLeft: `2px solid ${mine ? COLORS.amber : COLORS.textMuted}`, paddingLeft: 8, marginBottom: 5, opacity: 0.75, fontSize: 11, cursor: "pointer" }}
+                                style={{ borderLeft: `2px solid ${mine ? COLORS.amber : COLORS.textMuted}`, paddingLeft: 8, marginBottom: 5, opacity: 0.75, fontSize: 12.5, cursor: "pointer" }}
                               >
                                 <div style={{ fontWeight: 500 }}>{quoted.sender_id === session.user.id ? "You" : quoted.sender_name}</div>
                                 <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>{quoted.body}</div>
                               </div>
                             )}
                             {renderTaggedBody(m.body, m.tagged_profile_ids, members)}
-                            {m.edited_at && <span style={{ fontSize: 10, opacity: 0.85, marginLeft: 6 }}>(edited)</span>}
+                            {m.edited_at && <span style={{ fontSize: 11.5, opacity: 0.85, marginLeft: 6 }}>(edited)</span>}
                           </div>
                           <div className="hldt-msg-actions" style={{ display: "flex", position: "relative" }}>
                             <button onClick={() => setShowPinPickerFor(showPinPickerFor === m.id ? null : m.id)} aria-label="Pin" style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted, padding: 4, display: "flex", fontSize: 12 }}>
@@ -2534,7 +2542,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                             </button>
                             {showPinPickerFor === m.id && (
                               <div className="hldt-modal hldt-glass" style={{ position: "absolute", top: 0, [mine ? "right" : "left"]: "100%", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 6, display: "flex", flexDirection: "column", gap: 4, zIndex: 60, minWidth: 90 }}>
-                                <div style={{ fontSize: 10, color: COLORS.textMuted, padding: "0 4px" }}>Pin for...</div>
+                                <div style={{ fontSize: 11.5, color: COLORS.textMuted, padding: "0 4px" }}>Pin for...</div>
                                 {PIN_DURATIONS.map((d) => (
                                   <Btn key={d.label} small tone="ghost" onClick={() => pinMessage(m.id, d.hours)}>{d.label}</Btn>
                                 ))}
@@ -2580,7 +2588,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                                 className="hldt-reaction-pop"
                                 onClick={() => toggleReaction(m.id, emoji)}
                                 style={{
-                                  fontSize: 11, padding: "2px 8px", borderRadius: 999, cursor: "pointer",
+                                  fontSize: 12.5, padding: "2px 8px", borderRadius: 999, cursor: "pointer",
                                   background: reactedByMe ? COLORS.amberDim : COLORS.surface2,
                                   border: `1px solid ${reactedByMe ? COLORS.amber : COLORS.border}`,
                                 }}
@@ -2591,7 +2599,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                           })}
                         </div>
                       )}
-                      <div style={{ fontSize: 10, color: COLORS.textMuted, marginTop: 2, display: "flex", alignItems: "center", gap: 4, justifyContent: mine ? "flex-end" : "flex-start", position: "relative" }}>
+                      <div style={{ fontSize: 11.5, color: COLORS.textMuted, marginTop: 2, display: "flex", alignItems: "center", gap: 4, justifyContent: mine ? "flex-end" : "flex-start", position: "relative" }}>
                         {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                         {receipt && (
                           <span style={{ display: "inline-flex", alignItems: "center", gap: 3, cursor: "pointer" }} onClick={() => setShowReceiptsFor(showReceiptsFor === m.id ? null : m.id)}>
@@ -2601,7 +2609,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                         {showReceiptsFor === m.id && readerNames.length > 0 && (
                           <div className="hldt-modal hldt-glass" style={{ position: "absolute", bottom: 18, [mine ? "right" : "left"]: 0, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 12, padding: 8, minWidth: 120, zIndex: 50 }}>
                             {readerNames.map((n, i) => (
-                              <div key={i} style={{ fontSize: 11, color: COLORS.textSecondary, padding: "2px 4px", whiteSpace: "nowrap" }}>{n}</div>
+                              <div key={i} style={{ fontSize: 12.5, color: COLORS.textSecondary, padding: "2px 4px", whiteSpace: "nowrap" }}>{n}</div>
                             ))}
                           </div>
                         )}
@@ -2618,8 +2626,8 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
             <div style={{ padding: "8px 12px", borderTop: `1px solid ${COLORS.border}`, background: COLORS.surface2, display: "flex", alignItems: "center", gap: 8 }}>
               <CornerUpLeft size={12} color={COLORS.textMuted} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 11, color: COLORS.textSecondary, fontWeight: 500 }}>Replying to {replyingTo.sender_id === session.user.id ? "yourself" : replyingTo.sender_name}</div>
-                <div style={{ fontSize: 11, color: COLORS.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{replyingTo.body}</div>
+                <div style={{ fontSize: 12.5, color: COLORS.textSecondary, fontWeight: 500 }}>Replying to {replyingTo.sender_id === session.user.id ? "yourself" : replyingTo.sender_name}</div>
+                <div style={{ fontSize: 12.5, color: COLORS.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{replyingTo.body}</div>
               </div>
               <X size={14} style={{ cursor: "pointer", color: COLORS.textMuted, flexShrink: 0 }} onClick={() => setReplyingTo(null)} />
             </div>
@@ -2636,7 +2644,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                     ) : (
                       <Avatar label={avatarLabels[m.profileId] || "?"} color={hashColor(m.profileId)} size={20} photoUrl={avatarPhotoFor(m.profileId)} />
                     )}
-                    {m.isEveryone ? <span>everyone <span style={{ color: COLORS.textMuted, fontSize: 11 }}>· tags the whole team channel</span></span> : m.name}
+                    {m.isEveryone ? <span>everyone <span style={{ color: COLORS.textMuted, fontSize: 12.5 }}>· tags the whole team channel</span></span> : m.name}
                   </div>
                 ))}
               </div>
@@ -2699,7 +2707,7 @@ function ManageSourcesModal({ sources, onClose, reload, notify }) {
 
   return (
     <Modal title="YouTube sources" onClose={onClose} width={440}>
-      <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 14 }}>
+      <div style={{ fontSize: 12.5, color: COLORS.textMuted, marginBottom: 14 }}>
         New videos from these channels are pulled in automatically once a day. To find a channel ID: open the channel on YouTube, view page source (Ctrl+U), and search for <code>"channelId"</code> — or search "[channel name] channel ID finder" for a free lookup tool.
       </div>
       <Field label="Channel ID (starts with UC...)">
@@ -2831,7 +2839,7 @@ function FeedTab({ session, profile, isAdmin, canManage, notify }) {
         <>
         {filteredPosts.length > 2 && (
           <div style={{ marginBottom: 22 }}>
-            <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Recently added</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.textMuted, marginBottom: 8 }}>Recently added</div>
             <Carousel itemWidth={200}>
               {filteredPosts.slice(0, 8).map((p) => (
                 <a key={p.id} href={safeHttpUrl(p.url) || undefined} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "block" }}>
@@ -2868,10 +2876,10 @@ function FeedTab({ session, profile, isAdmin, canManage, notify }) {
                 <a href={safeHttpUrl(p.url) || undefined} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
                   <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.textPrimary, marginBottom: 4, lineHeight: 1.3 }}>{p.title}</div>
                 </a>
-                {p.description && <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6 }}>{p.description}</div>}
+                {p.description && <div style={{ fontSize: 12.5, color: COLORS.textMuted, marginBottom: 6 }}>{p.description}</div>}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <Badge tone={p.source === "youtube_auto" ? "gray" : "amber"}>{p.source === "youtube_auto" ? "Auto" : "Shared"}</Badge>
-                  <span style={{ fontSize: 10, color: COLORS.textMuted }}>{timeAgo(p.createdAt)}</span>
+                  <span style={{ fontSize: 11.5, color: COLORS.textMuted }}>{timeAgo(p.createdAt)}</span>
                 </div>
                 {canManage && (
                   <div style={{ marginTop: 8, textAlign: "right" }}>
@@ -3101,9 +3109,9 @@ function OwingDuesModal({ data, onClose }) {
           <RowLine key={m.id}>
             <div style={{ flex: 1 }}>
               <div>{m.name}</div>
-              {month === "all" && owingMonths.length > 1 && <div style={{ fontSize: 11, color: COLORS.textMuted }}>{owingMonths.length} months owing</div>}
+              {month === "all" && owingMonths.length > 1 && <div style={{ fontSize: 12.5, color: COLORS.textMuted }}>{owingMonths.length} months owing</div>}
             </div>
-            <span style={{ color: COLORS.red, fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>{currency(totalOwed)}</span>
+            <span style={{ color: COLORS.red, fontVariantNumeric: "tabular-nums", fontSize: 12 }}>{currency(totalOwed)}</span>
           </RowLine>
         ))
       )}
@@ -3610,13 +3618,13 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
           </BarChart>
         </ResponsiveContainer>
       </div>
-      <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 8 }}>
+      <div style={{ fontSize: 12.5, color: COLORS.textMuted, marginTop: 8 }}>
         Expected and collected are after Paystack's fee (1.5% + ₦100, ₦100 waived under ₦2,500, capped at ₦2,000). Cash payments recorded by hand have no fee.
         {month !== "all" ? " Chart always shows the last 6 months." : ""}
       </div>
       {activity.length > 0 && (
         <div style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>Recent activity</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.textMuted, marginBottom: 6 }}>Recent activity</div>
           {activity.map((e) => (
             <RowLine key={e.id}>
               <span style={{ flex: 1, minWidth: 0 }}>
@@ -3804,7 +3812,7 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWel
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.textMuted, marginBottom: 2 }}>Coming up in the next 2 weeks</div>
                   {upcomingBirthdays.map((m) => (
-                    <RowLine key={m.id}><span style={{ flex: 1 }}>{m.name}</span><span style={{ fontSize: 11, color: COLORS.textMuted }}>{m.dob}</span></RowLine>
+                    <RowLine key={m.id}><span style={{ flex: 1 }}>{m.name}</span><span style={{ fontSize: 12.5, color: COLORS.textMuted }}>{m.dob}</span></RowLine>
                   ))}
                 </div>
               )}
@@ -3830,6 +3838,7 @@ function MembersTab({ data, isAdmin, canManage, myUnit, reload, currentUserId, n
   const [filterUnit, setFilterUnit] = useState("all");
   const [filterSkill, setFilterSkill] = useState("any");
   const [filterSkillMin, setFilterSkillMin] = useState(3);
+  const [memberQuery, setMemberQuery] = useState("");
 
   const canExportMembers = isAdmin && (myUnit === "Operations" || myUnit === "Welfare" || myUnit === "Admin");
 
@@ -3912,13 +3921,13 @@ function MembersTab({ data, isAdmin, canManage, myUnit, reload, currentUserId, n
 
       {showRoles && (
         <Panel title="Account roles" style={{ marginBottom: 16 }} right={<X size={16} style={{ cursor: "pointer" }} onClick={() => setShowRoles(false)} />}>
-          <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 10 }}>
+          <div style={{ fontSize: 12.5, color: COLORS.textMuted, marginBottom: 10 }}>
             Promoting someone here gives them admin access everywhere in the app. Demoting yourself will lock you out of admin views immediately.
           </div>
           {profiles.map((p) => (
             <RowLine key={p.id}>
               <span style={{ flex: 1 }}>{p.full_name || p.email || p.id.slice(0, 8)}</span>
-              <span style={{ fontSize: 11, color: COLORS.textMuted, marginRight: 10 }}>{p.email}</span>
+              <span style={{ fontSize: 12.5, color: COLORS.textMuted, marginRight: 10 }}>{p.email}</span>
               <Btn small tone={p.role === "admin" ? "amber" : "ghost"} onClick={() => setRole(p.id, p.role === "admin" ? "member" : "admin")}>
                 {p.role === "admin" ? "Admin" : "Member"}
               </Btn>
@@ -3940,7 +3949,7 @@ function MembersTab({ data, isAdmin, canManage, myUnit, reload, currentUserId, n
                   <Btn key={u} small tone={form.unit === u ? "amber" : "ghost"} onClick={() => setForm({ ...form, unit: form.unit === u ? "" : u })}>{u}</Btn>
                 ))}
               </div>
-              {!form.unit && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>Unassigned</div>}
+              {!form.unit && <div style={{ fontSize: 12.5, color: COLORS.textMuted, marginTop: 4 }}>Unassigned</div>}
             </Field>
             <Field label="Tier">
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -3948,7 +3957,7 @@ function MembersTab({ data, isAdmin, canManage, myUnit, reload, currentUserId, n
                   <Btn key={t} small tone={form.tier === t ? "amber" : "ghost"} onClick={() => setForm({ ...form, tier: form.tier === t ? "" : t })}>{t}</Btn>
                 ))}
               </div>
-              {!form.tier && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>Unassigned</div>}
+              {!form.tier && <div style={{ fontSize: 12.5, color: COLORS.textMuted, marginTop: 4 }}>Unassigned</div>}
             </Field>
             <Field label="Rotation team">
               <div style={{ display: "flex", gap: 6 }}>
@@ -3956,19 +3965,19 @@ function MembersTab({ data, isAdmin, canManage, myUnit, reload, currentUserId, n
                   <Btn key={t} small tone={form.team === t ? "amber" : "ghost"} onClick={() => setForm({ ...form, team: form.team === t ? "" : t })}>Team {t}</Btn>
                 ))}
               </div>
-              {!form.team && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>Unassigned</div>}
+              {!form.team && <div style={{ fontSize: 12.5, color: COLORS.textMuted, marginTop: 4 }}>Unassigned</div>}
             </Field>
             <Field label="Availability">
               <Btn small tone={form.unavailable ? "danger" : "ghost"} onClick={() => setForm({ ...form, unavailable: !form.unavailable })}>
                 {form.unavailable ? "Marked unavailable" : "Available"}
               </Btn>
-              {form.unavailable && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>Can't be assigned tickets or roster duty. Dues not expected, chat/notifications unaffected.</div>}
+              {form.unavailable && <div style={{ fontSize: 12.5, color: COLORS.textMuted, marginTop: 4 }}>Can't be assigned tickets or roster duty. Dues not expected, chat/notifications unaffected.</div>}
             </Field>
             <Field label="Suspension">
               <Btn small tone={form.suspended ? "danger" : "ghost"} onClick={() => setForm({ ...form, suspended: !form.suspended })}>
                 {form.suspended ? "Suspended" : "In good standing"}
               </Btn>
-              {form.suspended && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>Can't be assigned tickets or roster duty. Chat/notifications unaffected.</div>}
+              {form.suspended && <div style={{ fontSize: 12.5, color: COLORS.textMuted, marginTop: 4 }}>Can't be assigned tickets or roster duty. Chat/notifications unaffected.</div>}
             </Field>
           </div>
           <div style={{ fontSize: 12, color: COLORS.textSecondary, margin: "10px 0 6px" }}>Self-reported proficiency (1-5)</div>
@@ -4025,39 +4034,70 @@ function MembersTab({ data, isAdmin, canManage, myUnit, reload, currentUserId, n
             return true;
           });
           const memberAvatarLabels = computeAvatarLabels(data.members);
-          return filteredMembers.length === 0 ? <EmptyRow text="No members match these filters." /> : (
-          <div style={{ overflowX: "auto" }}>
-            <div style={{ minWidth: 560 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 0.7fr 0.9fr 0.6fr", fontSize: 11, color: COLORS.textMuted, padding: "0 4px 8px", textTransform: "uppercase", letterSpacing: "0.03em" }}>
-                <div>Name</div><div>Unit</div><div>Tier</div><div>Team</div><div>Account</div><div></div>
+          const q = memberQuery.trim().toLowerCase();
+          const shown = q ? filteredMembers.filter((m) => [m.name, m.unit, m.tier, m.email, m.phone].some((v) => (v || "").toLowerCase().includes(q))) : filteredMembers;
+          const SKILL_NAMES = { proPresenter: "ProPresenter", vmix: "vMix", resolume: "Resolume", technical: "Technical" };
+          return (
+            <>
+              <div style={{ position: "relative", marginBottom: 14 }}>
+                <SearchIcon size={16} style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: COLORS.textMuted, pointerEvents: "none" }} />
+                <input
+                  type="search"
+                  style={{ ...inputStyle, paddingLeft: 38 }}
+                  placeholder={`Search ${filteredMembers.length} member${filteredMembers.length === 1 ? "" : "s"} by name, unit or phone`}
+                  value={memberQuery}
+                  onChange={(e) => setMemberQuery(e.target.value)}
+                  aria-label="Search members"
+                />
               </div>
-              {filteredMembers.map((m) => (
-                <div
-                  key={m.id}
-                  onClick={() => canManage && (setForm(m), setShowForm(true))}
-                  className={canManage ? "hldt-row" : undefined}
-                  data-clickable={canManage}
-                  title={m.unavailable ? "Temporarily unavailable" : undefined}
-                  style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 0.7fr 0.9fr 0.6fr", alignItems: "center", padding: "8px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 13, cursor: canManage ? "pointer" : "default", opacity: m.unavailable ? 0.7 : 1 }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                    <Avatar label={memberAvatarLabels[m.id] || "?"} color={hashColor(m.profileId || m.id)} size={32} photoUrl={m.avatarUrl} />
-                    <div style={{ minWidth: 0 }}>
-                      <div>{m.name}</div>
-                      <div style={{ fontSize: 10, color: COLORS.textMuted, fontFamily: "'JetBrains Mono', monospace" }}>{skillSummary(m)}</div>
-                    </div>
-                  </div>
-                  <div style={{ color: COLORS.textSecondary }}>{m.unit}</div>
-                  <div style={{ color: COLORS.textSecondary }}>{m.tier}</div>
-                  <div style={{ color: COLORS.textSecondary }}>{m.team}</div>
-                  <div>{m.profileId ? <Badge tone="green">Linked</Badge> : <Badge tone="gray">No login</Badge>}</div>
-                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                    {canManage && <ChevronRight size={14} style={{ color: COLORS.textMuted }} />}
-                  </div>
+              {shown.length === 0 ? <EmptyRow text={q ? `No one matches "${memberQuery}".` : "No members match these filters."} /> : (
+                <div className="hldt-member-grid">
+                  {shown.map((m) => {
+                    const status = m.suspended ? { t: "Suspended", tone: "red" } : m.unavailable ? { t: "Unavailable", tone: "amber" } : null;
+                    const Tag = canManage ? "button" : "div";
+                    return (
+                      <Tag
+                        key={m.id}
+                        type={canManage ? "button" : undefined}
+                        className={`hldt-member-card${canManage ? " is-clickable" : ""}`}
+                        onClick={canManage ? () => { setForm(m); setShowForm(true); } : undefined}
+                        style={{ background: COLORS.surface2, color: COLORS.textPrimary, opacity: m.unavailable ? 0.75 : 1 }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+                          <Avatar label={memberAvatarLabels[m.id] || "?"} color={hashColor(m.profileId || m.id)} size={44} photoUrl={m.avatarUrl} />
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ fontSize: 15, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</div>
+                            <div style={{ fontSize: 13, color: COLORS.textMuted, marginTop: 2 }}>
+                              {[m.unit, m.tier, m.team ? `Team ${m.team}` : null].filter(Boolean).join(" · ") || "Not assigned yet"}
+                            </div>
+                          </div>
+                          {canManage && <ChevronRight size={16} style={{ color: COLORS.textMuted, flexShrink: 0 }} />}
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
+                          {status && <Badge tone={status.tone}>{status.t}</Badge>}
+                          {m.profileId ? <Badge tone="green">Has a login</Badge> : <Badge tone="gray">No login yet</Badge>}
+                        </div>
+                        <div className="hldt-skill-row">
+                          {Object.keys(SKILL_NAMES).map((k) => {
+                            const v = m.skills?.[k] ?? 3;
+                            return (
+                              <div key={k} title={`${SKILL_NAMES[k]}: ${v} out of 5`}>
+                                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: COLORS.textMuted, marginBottom: 5 }}>
+                                  <span>{SKILL_NAMES[k]}</span><span style={{ color: COLORS.textSecondary, fontVariantNumeric: "tabular-nums" }}>{v}/5</span>
+                                </div>
+                                <div className="hldt-skill-bar" style={{ background: COLORS.border }} aria-hidden="true">
+                                  <span style={{ width: `${(v / 5) * 100}%`, background: COLORS.amber }} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </Tag>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
-          </div>
+              )}
+            </>
           );
         })()}
       </Panel>
@@ -4152,11 +4192,11 @@ function OnboardingTab({ data, isAdmin, canManage, reload, adminName, notify }) 
                 ))}
               </div>
               {o.history && o.history.length > 0 && (
-                <details style={{ fontSize: 11, color: COLORS.textMuted }}>
+                <details style={{ fontSize: 12.5, color: COLORS.textMuted }}>
                   <summary style={{ cursor: "pointer" }}>Edit log ({o.history.length})</summary>
                   <div style={{ marginTop: 6 }}>
                     {o.history.slice().reverse().slice(0, 10).map((h, i) => (
-                      <div key={i} style={{ padding: "3px 0", fontFamily: "'JetBrains Mono', monospace" }}>
+                      <div key={i} style={{ padding: "3px 0", fontVariantNumeric: "tabular-nums" }}>
                         {new Date(h.timestamp).toLocaleString()} — {h.admin} set {h.field} to "{h.newValue}"
                       </div>
                     ))}
@@ -4368,7 +4408,7 @@ function InventoryPanel({ notify }) {
         <Btn tone="amber" onClick={() => { setForm(blank()); setShowForm(true); }}><Plus size={13} /> Add item</Btn>
       </div>
       {quotaExhausted && (
-        <div style={{ fontSize: 11, color: COLORS.amber, textAlign: "right", marginBottom: 12 }}>
+        <div style={{ fontSize: 12.5, color: COLORS.amber, textAlign: "right", marginBottom: 12 }}>
           Free AI quota used up for today — available again around {new Date(quotaStatus.next_reset_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
         </div>
       )}
@@ -4390,15 +4430,15 @@ function InventoryPanel({ notify }) {
                   </div>
                 </div>
                 <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 4 }}>{s.issue}</div>
-                <div style={{ display: "flex", gap: 16, fontSize: 11, color: COLORS.textMuted, marginBottom: 4, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: 16, fontSize: 12.5, color: COLORS.textMuted, marginBottom: 4, flexWrap: "wrap" }}>
                   <span>Repair: {s.repairCostEstimate}</span>
                   <span>Replace: {s.replacementCostEstimate}</span>
                 </div>
-                {s.notes && <div style={{ fontSize: 11, color: COLORS.textMuted, fontStyle: "italic" }}>{s.notes}</div>}
+                {s.notes && <div style={{ fontSize: 12.5, color: COLORS.textMuted, fontStyle: "italic" }}>{s.notes}</div>}
               </div>
             ))
           )}
-          <div style={{ fontSize: 10, color: COLORS.textMuted, marginTop: 8 }}>AI-generated from your current inventory and open tickets — review before acting on it.</div>
+          <div style={{ fontSize: 11.5, color: COLORS.textMuted, marginTop: 8 }}>AI-generated from your current inventory and open tickets — review before acting on it.</div>
         </Panel>
       )}
 
@@ -4431,24 +4471,24 @@ function InventoryPanel({ notify }) {
 
       <Panel>
         {items.length === 0 ? <EmptyRow text="No inventory items yet." /> : (
-          <div style={{ overflowX: "auto" }}>
-            <div style={{ minWidth: 640 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 0.6fr 0.8fr 0.9fr 0.9fr", fontSize: 11, color: COLORS.textMuted, padding: "0 4px 8px", textTransform: "uppercase" }}>
+          <div className="hldt-table" style={{ overflowX: "auto" }}>
+            <div className="hldt-table-inner" style={{ minWidth: 640 }}>
+              <div className="hldt-table-head" style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 0.6fr 0.8fr 0.9fr 0.9fr", fontSize: 13, fontWeight: 600, color: COLORS.textMuted, padding: "0 4px 8px" }}>
                 <div>Name</div><div>Category</div><div>Qty</div><div>Condition</div><div>Purchased</div><div>Est. value</div>
               </div>
               {items.map((it) => (
                 <div
                   key={it.id}
-                  className="hldt-row" data-clickable="true"
+                  className="hldt-row hldt-table-row" data-clickable="true"
                   onClick={() => { setForm({ ...it, purchase_price: it.purchase_price ?? "", estimated_value: it.estimated_value ?? "", purchase_date: it.purchase_date || "" }); setShowForm(true); }}
                   style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 0.6fr 0.8fr 0.9fr 0.9fr", alignItems: "center", padding: "8px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 13, cursor: "pointer" }}
                 >
                   <div>{it.name}</div>
-                  <div style={{ color: COLORS.textSecondary }}>{it.category}</div>
-                  <div style={{ color: COLORS.textSecondary }}>{it.quantity}</div>
-                  <div><Badge tone={it.condition === "Faulty" || it.condition === "Poor" ? "red" : it.condition === "Fair" ? "amber" : "green"}>{it.condition}</Badge></div>
-                  <div style={{ color: COLORS.textSecondary, fontSize: 12 }}>{it.purchase_date || "—"}</div>
-                  <div style={{ color: COLORS.textSecondary, fontSize: 12 }}>{it.estimated_value ? currency(it.estimated_value) : "—"}</div>
+                  <div data-label="Category" style={{ color: COLORS.textSecondary }}>{it.category}</div>
+                  <div data-label="Qty" style={{ color: COLORS.textSecondary }}>{it.quantity}</div>
+                  <div data-label="Condition"><Badge tone={it.condition === "Faulty" || it.condition === "Poor" ? "red" : it.condition === "Fair" ? "amber" : "green"}>{it.condition}</Badge></div>
+                  <div data-label="Bought" style={{ color: COLORS.textSecondary, fontSize: 13 }}>{it.purchase_date || "Not recorded"}</div>
+                  <div data-label="Worth" style={{ color: COLORS.textSecondary, fontSize: 13 }}>{it.estimated_value ? currency(it.estimated_value) : "Not recorded"}</div>
                 </div>
               ))}
             </div>
@@ -4458,7 +4498,7 @@ function InventoryPanel({ notify }) {
 
       {showChat && (
         <Modal title="Ask AI about equipment" onClose={() => setShowChat(false)} width={480}>
-          <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 10 }}>
+          <div style={{ fontSize: 12.5, color: COLORS.textMuted, marginBottom: 10 }}>
             Describe what you need — an upcoming event, a requirement, a problem — and get suggestions grounded in your current inventory and open tickets.
           </div>
           <div style={{ height: 320, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, marginBottom: 10, padding: "4px 2px" }}>
@@ -4728,7 +4768,7 @@ function TuesdayRosterEditor({ existing, members, onClose, onSaved, notify }) {
         <Btn small tone={published ? "amber" : "ghost"} onClick={() => setPublished(!published)}>
           {published ? <Eye size={12} /> : <EyeOff size={12} />} {published ? "Published" : "Draft"}
         </Btn>
-        <span style={{ fontSize: 11, color: COLORS.textMuted }}>{published ? "Visible to everyone" : "Only visible to roster managers"}</span>
+        <span style={{ fontSize: 12.5, color: COLORS.textMuted }}>{published ? "Visible to everyone" : "Only visible to roster managers"}</span>
       </div>
     </Modal>
   );
@@ -4792,7 +4832,7 @@ function SaturdayRosterEditor({ existing, members, onClose, onSaved, notify }) {
         <Btn small tone={published ? "amber" : "ghost"} onClick={() => setPublished(!published)}>
           {published ? <Eye size={12} /> : <EyeOff size={12} />} {published ? "Published" : "Draft"}
         </Btn>
-        <span style={{ fontSize: 11, color: COLORS.textMuted }}>{published ? "Visible to everyone" : "Only visible to roster managers"}</span>
+        <span style={{ fontSize: 12.5, color: COLORS.textMuted }}>{published ? "Visible to everyone" : "Only visible to roster managers"}</span>
       </div>
     </Modal>
   );
@@ -5018,22 +5058,22 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
           {summary.length === 0 ? (
             <EmptyRow text="No attendance recorded yet." />
           ) : (
-            <div style={{ overflowX: "auto" }}>
-            <div style={{ minWidth: 380 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1.6fr 0.7fr 0.7fr 0.7fr", fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", padding: "0 4px 8px" }}>
+            <div className="hldt-table" style={{ overflowX: "auto" }}>
+            <div className="hldt-table-inner" style={{ minWidth: 380 }}>
+              <div className="hldt-table-head" style={{ display: "grid", gridTemplateColumns: "1.6fr 0.7fr 0.7fr 0.7fr", fontSize: 13, fontWeight: 600, color: COLORS.textMuted, padding: "0 4px 8px" }}>
                 <div>Name</div><div>Present</div><div>Absent</div><div>Excused</div>
               </div>
               {summary.map(({ m, counts }) => (
                 <div
                   key={m.id}
-                  className="hldt-row" data-clickable="true"
+                  className="hldt-row hldt-table-row" data-clickable="true"
                   onClick={() => openSummary(m)}
                   style={{ display: "grid", gridTemplateColumns: "1.6fr 0.7fr 0.7fr 0.7fr", alignItems: "center", padding: "6px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 13, cursor: "pointer", borderRadius: 8 }}
                 >
                   <div>{m.name}</div>
-                  <div style={{ color: COLORS.green }}>{counts.present}</div>
-                  <div style={{ color: COLORS.red }}>{counts.absent}</div>
-                  <div style={{ color: COLORS.textMuted }}>{counts.excused}</div>
+                  <div data-label="Present" style={{ color: COLORS.green }}>{counts.present}</div>
+                  <div data-label="Absent" style={{ color: COLORS.red }}>{counts.absent}</div>
+                  <div data-label="Excused" style={{ color: COLORS.textMuted }}>{counts.excused}</div>
                 </div>
               ))}
             </div>
@@ -5049,7 +5089,7 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
               return (
                 <RowLine key={i}>
                   <span style={{ flex: 1 }}>{EVENT_TYPE_LABELS[d.eventType]}</span>
-                  <span style={{ fontSize: 11, color: COLORS.textMuted, marginRight: editable ? 8 : 0 }}>{d.eventDate} · {d.count} marked</span>
+                  <span style={{ fontSize: 12.5, color: COLORS.textMuted, marginRight: editable ? 8 : 0 }}>{d.eventDate} · {d.count} marked</span>
                   {editable && (
                     <Pencil size={13} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => openEditBatch(d)} />
                   )}
@@ -5062,7 +5102,7 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
 
       {editingBatch && (
         <Modal title="Fix the event" onClose={() => setEditingBatch(null)} width={340}>
-          <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 12 }}>
+          <div style={{ fontSize: 12.5, color: COLORS.textMuted, marginBottom: 12 }}>
             Corrects all {editingBatch.count} marks currently filed under {EVENT_TYPE_LABELS[editingBatch.eventType]} · {editingBatch.eventDate}.
           </div>
           <Field label="Event">
@@ -5086,15 +5126,15 @@ function AttendanceTab({ data, canManageRosters, myMember, notify }) {
             </Badge>
           </div>
           <div style={{ fontSize: 13, color: COLORS.textPrimary, marginBottom: 4, lineHeight: 1.5 }}>{summaryResult.summary}</div>
-          {aiPending && <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 10 }}>Refining with AI...</div>}
+          {aiPending && <div style={{ fontSize: 12.5, color: COLORS.textMuted, marginBottom: 10 }}>Refining with AI...</div>}
           <Panel style={{ background: COLORS.glass2, marginTop: 10 }}>
-            <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>Recommended measure</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.textMuted, marginBottom: 4 }}>Recommended measure</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: COLORS.amber, marginBottom: 4 }}>{summaryResult.recommendation}</div>
             <div style={{ fontSize: 12, color: COLORS.textSecondary }}>{summaryResult.reasoning}</div>
           </Panel>
           {summaryResult.stats.excusableAbsences?.length > 0 && canManageRosters && (
             <div style={{ marginTop: 14 }}>
-              <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>Absences this month (can be pardoned)</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.textMuted, marginBottom: 6 }}>Absences this month (can be pardoned)</div>
               {summaryResult.stats.excusableAbsences.map((r) => (
                 <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: `1px solid ${COLORS.border}` }}>
                   <span style={{ flex: 1, fontSize: 12 }}>{EVENT_TYPE_LABELS[r.event_type]} · {r.event_date}</span>
@@ -5210,7 +5250,7 @@ function ImageFramePicker({ src, focusX, focusY, onChange }) {
         <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `${focusX}% ${focusY}%`, display: "block" }} />
         <div style={{ position: "absolute", left: `${focusX}%`, top: `${focusY}%`, width: 14, height: 14, marginLeft: -7, marginTop: -7, borderRadius: 999, border: "2px solid white", boxShadow: "0 0 0 1px rgba(0,0,0,0.4)", pointerEvents: "none" }} />
       </div>
-      <div style={{ fontSize: 10, color: COLORS.textMuted, marginTop: 4 }}>Tap anywhere on the image to set what stays in frame.</div>
+      <div style={{ fontSize: 11.5, color: COLORS.textMuted, marginTop: 4 }}>Tap anywhere on the image to set what stays in frame.</div>
     </div>
   );
 }
@@ -5285,7 +5325,7 @@ function EventCalendar({ events, roles, members, session, notify }) {
         </div>
         <Btn small tone="ghost" onClick={() => setMonthCursor(new Date(Date.UTC(year, month + 1, 1)))}><ChevronRight size={14} /></Btn>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, fontSize: 10, color: COLORS.textMuted, textAlign: "center", marginBottom: 4 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, fontSize: 11.5, color: COLORS.textMuted, textAlign: "center", marginBottom: 4 }}>
         {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <div key={i}>{d}</div>)}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
@@ -5351,7 +5391,7 @@ function EventCalendar({ events, roles, members, session, notify }) {
                     })}
                   </div>
                 )}
-                <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", marginBottom: 6 }}>Remind me (up to 2)</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.textMuted, marginBottom: 6 }}>Remind me (up to 2)</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {REMINDER_OPTIONS.filter((o) => !o.needsTime || occurrence.time).map((opt) => {
                     const active = subsForThis.some((s) => s.reminder_type === opt.id);
@@ -5619,7 +5659,7 @@ function SpecialEventsTab({ data, canManageEvents, myUnit, session, notify }) {
         </div>
         {ev.description && <div style={{ fontSize: 13, color: COLORS.textSecondary, marginBottom: 10 }}>{ev.description}</div>}
 
-        <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>Assignments</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.textMuted, marginBottom: 6 }}>Assignments</div>
         {eventRoles.length === 0 ? (
           <div style={{ fontSize: 12, color: COLORS.textMuted, marginBottom: 8 }}>No roles set up yet.</div>
         ) : (
@@ -5631,12 +5671,12 @@ function SpecialEventsTab({ data, canManageEvents, myUnit, session, notify }) {
                   <div style={{ fontSize: 13 }}>{r.role_name}</div>
                   {ev.event_dates.length > 1 && (
                     canManageRolesThis && (!r.event_date || r.event_date >= today) ? (
-                      <select style={{ ...inputStyle, width: "auto", fontSize: 10, padding: "2px 6px", marginTop: 2 }} value={r.event_date || ""} onChange={(e) => changeRoleDate(r.id, e.target.value)}>
+                      <select style={{ ...inputStyle, width: "auto", fontSize: 11.5, padding: "2px 6px", marginTop: 2 }} value={r.event_date || ""} onChange={(e) => changeRoleDate(r.id, e.target.value)}>
                         <option value="">All dates</option>
                         {[...ev.event_dates].sort((a, b) => a.date.localeCompare(b.date)).map((d) => <option key={d.date} value={d.date}>{formatDateShort(d.date)}</option>)}
                       </select>
                     ) : (
-                      <div style={{ fontSize: 10, color: COLORS.textMuted }}>{r.event_date ? formatDateShort(r.event_date) : "All dates"}</div>
+                      <div style={{ fontSize: 11.5, color: COLORS.textMuted }}>{r.event_date ? formatDateShort(r.event_date) : "All dates"}</div>
                     )
                   )}
                 </div>
@@ -5883,7 +5923,7 @@ function RosterTab({ data, isAdmin, canManageRosters, myMember, reload, notify, 
   return (
     <div>
       <SectionHeader title="Roster" subtitle="Team A / Team B rotation. Reporting time: 1 hour before service." right={<Btn tone="ghost" onClick={() => setShowCoverForm(true)}><RefreshCw size={13} /> Need cover?</Btn>} />
-      <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 12 }}>
+      <div style={{ fontSize: 12.5, color: COLORS.textMuted, marginBottom: 12 }}>
         To move someone between teams, edit their record from the Members tab — this view is read-only.
       </div>
 
@@ -5911,7 +5951,7 @@ function RosterTab({ data, isAdmin, canManageRosters, myMember, reload, notify, 
               <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: `1px solid ${COLORS.border}` }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13 }}>{requester?.name || "Someone"} needs cover — {EVENT_TYPE_LABELS[r.event_type]}, {r.event_date}</div>
-                  {r.reason && <div style={{ fontSize: 11, color: COLORS.textMuted }}>{r.reason}</div>}
+                  {r.reason && <div style={{ fontSize: 12.5, color: COLORS.textMuted }}>{r.reason}</div>}
                 </div>
                 {mine ? (
                   <Btn small tone="ghost" onClick={() => cancelCoverRequest(r.id)}>Cancel</Btn>
@@ -5928,14 +5968,14 @@ function RosterTab({ data, isAdmin, canManageRosters, myMember, reload, notify, 
         <Panel title="Team A" style={{ flex: 1 }}>
           {teamA.length === 0 ? <EmptyRow text="No members assigned." /> : teamA.map((m) => (
             <RowLine key={m.id} style={{ opacity: m.unavailable ? 0.45 : 1 }} title={m.unavailable ? "Temporarily unavailable" : undefined}>
-              <span style={{ flex: 1 }}>{m.name}</span><span style={{ fontSize: 11, color: COLORS.textMuted }}>{m.unit}</span>
+              <span style={{ flex: 1 }}>{m.name}</span><span style={{ fontSize: 12.5, color: COLORS.textMuted }}>{m.unit}</span>
             </RowLine>
           ))}
         </Panel>
         <Panel title="Team B" style={{ flex: 1 }}>
           {teamB.length === 0 ? <EmptyRow text="No members assigned." /> : teamB.map((m) => (
             <RowLine key={m.id} style={{ opacity: m.unavailable ? 0.45 : 1 }} title={m.unavailable ? "Temporarily unavailable" : undefined}>
-              <span style={{ flex: 1 }}>{m.name}</span><span style={{ fontSize: 11, color: COLORS.textMuted }}>{m.unit}</span>
+              <span style={{ flex: 1 }}>{m.name}</span><span style={{ fontSize: 12.5, color: COLORS.textMuted }}>{m.unit}</span>
             </RowLine>
           ))}
         </Panel>
@@ -5964,7 +6004,7 @@ function RosterTab({ data, isAdmin, canManageRosters, myMember, reload, notify, 
             {r.items.map((it, i) => (
               <RowLine key={i}>
                 <span style={{ flex: 1 }}>{it.title}</span>
-                <span style={{ fontSize: 11, color: COLORS.textMuted, marginRight: 10 }}>{it.duration_minutes} min</span>
+                <span style={{ fontSize: 12.5, color: COLORS.textMuted, marginRight: 10 }}>{it.duration_minutes} min</span>
                 <span style={{ fontSize: 12, color: COLORS.textSecondary }}>{it.assigned_name || "—"}</span>
               </RowLine>
             ))}
@@ -6057,7 +6097,7 @@ function DueEditModal({ member, month, onClose, onSaved, notify }) {
       <Field label={`Amount paid (expected ${currency(rate(member))})`}>
         <input type="number" min={0} step={100} style={inputStyle} value={amount} onChange={(e) => setAmount(e.target.value)} />
       </Field>
-      <div style={{ fontSize: 11, color: COLORS.textMuted }}>
+      <div style={{ fontSize: 12.5, color: COLORS.textMuted }}>
         Paying above the expected amount is fine — the extra just shows in the collected total.
       </div>
     </Modal>
@@ -6182,7 +6222,7 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef 
                 return (
                   <RowLine key={mo}>
                     <span style={{ flex: 1 }}>{mo}</span>
-                    {due.amount ? <span style={{ fontSize: 11, color: COLORS.textMuted, marginRight: 8 }}>{currency(due.amount)}</span> : null}
+                    {due.amount ? <span style={{ fontSize: 12.5, color: COLORS.textMuted, marginRight: 8 }}>{currency(due.amount)}</span> : null}
                     <Badge tone={tone}>{due.status === "unset" ? "Not set" : due.partial ? `Owing ${currency(due.owedAmount)}` : due.status}{due.viaOnline ? " ✓" : ""}</Badge>
                   </RowLine>
                 );
@@ -6271,7 +6311,7 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef 
               return (
                 <RowLine key={p.id}>
                   <span style={{ flex: 1 }}>{member?.name || "Unknown"} · {p.month}</span>
-                  <span style={{ fontSize: 11, color: COLORS.textMuted, marginRight: 8 }}>{currency(p.amountKobo / 100)}</span>
+                  <span style={{ fontSize: 12.5, color: COLORS.textMuted, marginRight: 8 }}>{currency(p.amountKobo / 100)}</span>
                   <Badge tone={tone}>{p.status}</Badge>
                 </RowLine>
               );
@@ -6281,12 +6321,13 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef 
       )}
       {pageNav}
       <Panel>
-        <div style={{ overflowX: "auto" }}>
-          <div style={{ display: "grid", gridTemplateColumns: `1.4fr repeat(${months.length}, minmax(70px, 0.9fr))`, fontSize: 11, color: COLORS.textMuted, padding: "0 4px 8px", textTransform: "uppercase" }}>
+        <div className="hldt-dues-scroll" style={{ overflowX: "auto", "--sticky-bg": COLORS.surface1 }}>
+          <div style={{ minWidth: 220 + months.length * 96 }}>
+          <div className="hldt-dues-row" style={{ display: "grid", gridTemplateColumns: `minmax(200px, 1.4fr) repeat(${months.length}, minmax(88px, 0.9fr))`, fontSize: 13, fontWeight: 600, color: COLORS.textMuted, padding: "0 4px 8px" }}>
             <div>Member</div>{months.map((mo) => <div key={mo} style={{ textAlign: "center" }}>{mo}</div>)}
           </div>
           {data.members.length === 0 ? <EmptyRow text="No members yet." /> : data.members.map((m) => (
-            <div key={m.id} style={{ display: "grid", gridTemplateColumns: `1.4fr repeat(${months.length}, minmax(70px, 0.9fr))`, alignItems: "center", padding: "8px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 12 }}>
+            <div key={m.id} className="hldt-dues-row" style={{ display: "grid", gridTemplateColumns: `minmax(200px, 1.4fr) repeat(${months.length}, minmax(88px, 0.9fr))`, alignItems: "center", padding: "8px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 12 }}>
               <div>{m.name} <span style={{ color: COLORS.textMuted }}>· {duesExempt(m) ? (m.unavailable ? "not expected (unavailable)" : "no dues yet (trainee)") : currency(rate(m))}</span></div>
               {months.map((mo) => {
                 const due = getDue(m, mo, data.duesPayments);
@@ -6299,6 +6340,7 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef 
               })}
             </div>
           ))}
+          </div>
         </div>
       </Panel>
       {editing && (
@@ -6353,9 +6395,9 @@ function FeedbackTab({ data, isAdmin, canReadFeedback, reload, notify }) {
         <Panel key={f.id} style={{ marginBottom: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
             <span style={{ fontSize: 13, fontWeight: 500 }}>{f.name || "Anonymous"}</span>
-            <span style={{ fontSize: 11, color: COLORS.textMuted }}>{new Date(f.timestamp).toLocaleDateString()}</span>
+            <span style={{ fontSize: 12.5, color: COLORS.textMuted }}>{new Date(f.timestamp).toLocaleDateString()}</span>
           </div>
-          <div style={{ display: "flex", gap: 14, fontSize: 11, color: COLORS.textSecondary, marginBottom: 8 }}>
+          <div style={{ display: "flex", gap: 14, fontSize: 12.5, color: COLORS.textSecondary, marginBottom: 8 }}>
             <span>Engagement {f.engagement}/5</span><span>Impact {f.impact}/5</span><span>Atmosphere {f.atmosphere}/5</span>
           </div>
           {f.suggestions && <div style={{ fontSize: 12, marginBottom: 4 }}><b style={{ color: COLORS.textMuted, fontWeight: 500 }}>Suggestions:</b> {f.suggestions}</div>}

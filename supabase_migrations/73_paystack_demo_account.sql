@@ -1,3 +1,6 @@
+-- NOTE: the account this created (2026-09-29) was deleted on 2026-10-09. Never commit real
+-- credentials here; fill them in only in the SQL editor when running it.
+--
 -- Creates a demo login for Paystack's review team — bypasses email
 -- verification entirely (the email doesn't need to be real or
 -- deliverable), and the existing handle_new_user() trigger fires
@@ -11,8 +14,8 @@
 do $$
 declare
   new_user_id uuid := gen_random_uuid();
-  demo_email text := 'paystack@review.com';
-  demo_password text := 'ABCefg123@';
+  demo_email text := 'REPLACE_WITH_DEMO_EMAIL';
+  demo_password text := 'REPLACE_WITH_A_STRONG_PASSWORD';
 begin
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,
@@ -39,5 +42,5 @@ begin
   update public.profiles set role = 'admin' where id = new_user_id;
   update public.members set unit = 'Operations', tier = 'HOD' where profile_id = new_user_id;
 
-  raise notice 'Demo account created — email: %, password: %', demo_email, demo_password;
+  raise notice 'Demo account created for %', demo_email;
 end $$;

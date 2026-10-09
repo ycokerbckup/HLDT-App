@@ -1079,12 +1079,16 @@ function Dashboard_Shell({ session, profile, setProfile }) {
 
   const [showProfile, setShowProfile] = useState(false);
   const [showTour, setShowTour] = useState(false);
+  const [tourSteps, setTourSteps] = useState([]);
   const tourPromptedRef = useRef(false);
   useEffect(() => {
     if (!loaded || !profile || tourPromptedRef.current) return;
     if ((profile.tour_version_seen || 0) >= TOUR_VERSION) return;
     tourPromptedRef.current = true;
     const t = setTimeout(async () => {
+      // Walkthroughs point at Home, so start there.
+      setTab("dashboard");
+      setTourSteps(tourStepsSince(profile.tour_version_seen, window.innerWidth <= 768));
       setShowTour(true);
       const { error } = await supabase.rpc("mark_tour_seen", { p_version: TOUR_VERSION });
       if (error) {
@@ -1249,7 +1253,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
       />
       {showKym && <KYMModal onClose={() => { setShowKym(false); load(); }} notify={notify} />}
       {celebrantType && <CelebrantPopup type={celebrantType} name={profile.full_name?.split(" ")[0] || "there"} onClose={() => setCelebrantType(null)} />}
-      {showTour && !showKym && !celebrantType && <TourGuide onDone={finishTour} />}
+      {showTour && !showKym && !celebrantType && tourSteps.length > 0 && <TourGuide steps={tourSteps} onDone={finishTour} />}
       {showProfile && (
         <ProfileModal
           session={session}
@@ -1284,7 +1288,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
                 </button>
               );
             })}
-            <button type="button" className={`hldt-bn-item${moreActive ? " is-active" : ""}`} onClick={() => setShowAccountMenu(true)} aria-haspopup="dialog">
+            <button type="button" data-tour="more" className={`hldt-bn-item${moreActive ? " is-active" : ""}`} onClick={() => setShowAccountMenu(true)} aria-haspopup="dialog">
               <span className="hldt-bn-icon">
                 <Menu size={20} strokeWidth={moreActive ? 2.2 : 1.8} />
                 {moreHasUnread && <span className="hldt-bn-dot" />}
@@ -2946,59 +2950,104 @@ function KYMModal({ onClose, notify }) {
 // Bump this whenever the tour content changes meaningfully — that's the
 // only thing that re-shows it to everyone. Otherwise it's genuinely
 // once per account, tracked server-side.
-const TOUR_VERSION = 1;
-
-const TOUR_STEPS = [
-  { selector: '[data-tour="search"]', title: "Search", body: "Find members, announcements, and tickets in seconds." },
-  { selector: '[data-tour="bell"]', title: "Notifications", body: "Anything that needs your attention shows up here first." },
-  { selector: '[data-tour="nav"]', title: "Everything else", body: "Roster, Dues, Chat, Attendance — all your tools live here." },
+// Walkthroughs, one per significant update.
+// To announce an update: add a release with the next version number and a few steps.
+// Everyone whose tour_version_seen is lower sees only the releases they missed, once.
+// People signing in for the first time see every release in order, as an introduction.
+// A step can be limited to phones ("mobile") or wider screens ("desktop"); steps whose
+// element isn't on screen (e.g. admin-only) are skipped automatically.
+const TOUR_RELEASES = [
+  {
+    version: 1,
+    steps: [
+      { selector: '[data-tour="search"]', title: "Search", body: "Find members, announcements and tickets in seconds." },
+      { selector: '[data-tour="bell"]', title: "Notifications", body: "Anything that needs your attention shows up here first." },
+    ],
+  },
+  {
+    version: 2,
+    label: "What's new",
+    steps: [
+      { selector: '[data-tour="nav"]', only: "mobile", title: "Your main tabs, one tap away", body: "Home, Roster, Chat and Updates now live at the bottom of the screen. A red dot means something new." },
+      { selector: '[data-tour="more"]', only: "mobile", title: "Everything else is in More", body: "Members, Dues, Events, Equipment, your profile and sign out are all here." },
+      { selector: '[data-tour="nav"]', only: "desktop", title: "A tidier menu", body: "Tabs are grouped so they're quicker to find, with a count when something new arrives." },
+      { selector: '[data-tour="home-tiles"]', title: "Your day at a glance", body: "Tap any of these to jump straight to it." },
+      { selector: '[data-tour="wallet"]', title: "The team wallet", body: "The live balance after Paystack fees. Tap the eye to hide it when others can see your screen." },
+    ],
+  },
 ];
+const TOUR_VERSION = Math.max(...TOUR_RELEASES.map((r) => r.version));
 
-function TourGuide({ onDone }) {
+function tourStepsSince(seenVersion, isMobile) {
+  return TOUR_RELEASES
+    .filter((r) => r.version > (seenVersion || 0))
+    .flatMap((r) => r.steps.map((st) => ({ ...st, label: (seenVersion || 0) > 0 ? r.label : null })))
+    .filter((st) => !st.only || (st.only === "mobile") === isMobile);
+}
+
+function TourGuide({ steps, onDone }) {
   const [step, setStep] = useState(0);
   const [rect, setRect] = useState(null);
-  const stepData = TOUR_STEPS[step];
+  const stepData = steps[step];
 
   useEffect(() => {
+    if (!stepData) { onDone(); return; }
     const el = document.querySelector(stepData.selector);
-    if (!el) {
-      if (step < TOUR_STEPS.length - 1) setStep((s) => s + 1);
+    if (!el || el.getClientRects().length === 0) {
+      if (step < steps.length - 1) setStep((x) => x + 1);
       else onDone();
       return;
     }
-    setRect(el.getBoundingClientRect());
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    setRect(null);
+    const measure = () => setRect(el.getBoundingClientRect());
+    const t = setTimeout(measure, 350);
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, { passive: true });
+    return () => { clearTimeout(t); window.removeEventListener("resize", measure); window.removeEventListener("scroll", measure); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
-  if (!rect) return null;
+  if (!stepData || !rect) return null;
 
   function next() {
-    if (step < TOUR_STEPS.length - 1) setStep((s) => s + 1);
+    if (step < steps.length - 1) setStep((x) => x + 1);
     else onDone();
   }
 
   const pad = 8;
-  const tooltipTop = Math.min(rect.bottom + 14, (typeof window !== "undefined" ? window.innerHeight : 800) - 170);
-  const tooltipLeft = Math.min(Math.max(rect.left, 12), (typeof window !== "undefined" ? window.innerWidth : 400) - 252);
+  const vw = typeof window !== "undefined" ? window.innerWidth : 400;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+  const boxW = Math.min(300, vw - 24);
+  const boxH = 170;
+  const below = rect.bottom + 14 + boxH < vh;
+  const tooltipTop = below ? rect.bottom + 14 : Math.max(12, rect.top - 14 - boxH);
+  const tooltipLeft = Math.min(Math.max(rect.left + rect.width / 2 - boxW / 2, 12), vw - boxW - 12);
 
-  return (
+  return createPortal(
     <>
       <div className="hldt-tour-spotlight" style={{ top: rect.top - pad, left: rect.left - pad, width: rect.width + pad * 2, height: rect.height + pad * 2 }} />
       <div
-        className="hldt-glass"
-        style={{ position: "fixed", top: tooltipTop, left: tooltipLeft, width: 240, background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 14, padding: 14, zIndex: 3001, boxShadow: "0 16px 40px rgba(0,0,0,0.4)" }}
+        role="dialog"
+        aria-live="polite"
+        aria-label={stepData.title}
+        style={{ position: "fixed", top: tooltipTop, left: tooltipLeft, width: boxW, background: COLORS.surface1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 18, padding: 16, zIndex: 3001, boxShadow: "0 20px 50px rgba(0,0,0,0.45)" }}
       >
-        <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.textPrimary, marginBottom: 4 }}>{stepData.title}</div>
-        <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12, lineHeight: 1.4 }}>{stepData.body}</div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span onClick={onDone} style={{ fontSize: 11, color: COLORS.textMuted, cursor: "pointer" }}>Skip</span>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 10, color: COLORS.textMuted }}>{step + 1}/{TOUR_STEPS.length}</span>
-            <Btn small tone="amber" onClick={next}>{step < TOUR_STEPS.length - 1 ? "Next" : "Done"}</Btn>
+        {stepData.label && <div style={{ fontSize: 12, fontWeight: 600, color: COLORS.amber, marginBottom: 6 }}>{stepData.label}</div>}
+        <div style={{ fontSize: 15, fontWeight: 700, color: COLORS.textPrimary, marginBottom: 6 }}>{stepData.title}</div>
+        <div style={{ fontSize: 14, color: COLORS.textSecondary, marginBottom: 14, lineHeight: 1.45 }}>{stepData.body}</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <button type="button" onClick={onDone} style={{ background: "none", border: "none", padding: 4, fontSize: 13, color: COLORS.textMuted, cursor: "pointer", fontFamily: "inherit" }}>Skip tour</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span aria-hidden="true" style={{ display: "flex", gap: 4 }}>
+              {steps.map((_, i) => <span key={i} style={{ width: i === step ? 14 : 6, height: 6, borderRadius: 999, background: i === step ? COLORS.amber : COLORS.borderStrong }} />)}
+            </span>
+            <Btn small tone="amber" onClick={next}>{step < steps.length - 1 ? "Next" : "Got it"}</Btn>
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 }
 
@@ -3456,7 +3505,7 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
       {confirmingPoolRef && <div style={{ fontSize: 12, color: COLORS.amber, marginBottom: 10 }}>Confirming pool payment…</div>}
       <div className="hldt-wallet" style={{ "--w-surface": COLORS.surface2, "--w-border": COLORS.border, "--w-text": COLORS.textPrimary, "--w-muted": COLORS.textSecondary, "--w-amber": COLORS.amber }}>
         <div className="hldt-wallet-main">
-          <div className="hldt-wcard" role="group" aria-label="Team wallet">
+          <div className="hldt-wcard" role="group" aria-label="Team wallet" data-tour="wallet">
             <div className="hldt-wcard-beam" aria-hidden="true" />
             <div className="hldt-wcard-top">
               <span className="hldt-wcard-name">Display Team wallet</span>
@@ -3646,7 +3695,7 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWel
         </div>
       )}
 
-      <div className="hldt-tiles">
+      <div className="hldt-tiles" data-tour="home-tiles">
         {tiles.map((t) => {
           const Icon = t.icon;
           return (

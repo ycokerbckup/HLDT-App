@@ -763,7 +763,7 @@ export default function App() {
   } else if (!profile) {
     content = <div className="hldt-app" style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.textMuted, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Inter, sans-serif", fontSize: 13 }}><RefreshCw size={14} className="hldt-spin" style={{ marginRight: 8 }} /> Setting up your profile...</div>;
   } else {
-    content = <Dashboard_Shell session={session} profile={profile} setProfile={setProfile} />;
+    content = <ApprovalGate session={session} profile={profile} setProfile={setProfile} />;
   }
 
   return (
@@ -772,6 +772,47 @@ export default function App() {
       {content}
     </>
   );
+}
+
+/* ---------------- approval gate ---------------- */
+
+// New sign-ups have no unit until an Operations admin reviews them. Until then the database
+// itself withholds team data (row-level security); this screen just explains why.
+function ApprovalGate({ session, profile, setProfile }) {
+  const isAdmin = profile.role === "admin";
+  const [state, setState] = useState(isAdmin ? "approved" : "checking");
+
+  useEffect(() => {
+    if (isAdmin || state === "approved") return;
+    let cancelled = false;
+    const check = () =>
+      supabase.from("members").select("unit").eq("profile_id", session.user.id).maybeSingle().then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) { setState("approved"); return; } // UI only; the database enforces access
+        setState(data?.unit ? "approved" : "pending");
+      });
+    check();
+    const timer = setInterval(check, 30000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [isAdmin, state === "approved", session.user.id]);
+
+  if (state === "checking") {
+    return <div className="hldt-app" style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.textMuted, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Inter, sans-serif" }}>Loading...</div>;
+  }
+  if (state === "pending") {
+    return (
+      <div className="hldt-app" style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.textPrimary, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, fontFamily: "Inter, sans-serif" }}>
+        <div style={{ width: 380, maxWidth: "100%", background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 28, textAlign: "center" }}>
+          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 19, marginBottom: 10 }}>Waiting for approval</div>
+          <div style={{ fontSize: 13, color: COLORS.textSecondary, lineHeight: 1.5, marginBottom: 18 }}>
+            Your account has been created. An Operations admin needs to review it and assign your unit before you can see the team's information. This page updates automatically once you are approved.
+          </div>
+          <Btn tone="ghost" onClick={() => supabase.auth.signOut()}>Sign out</Btn>
+        </div>
+      </div>
+    );
+  }
+  return <Dashboard_Shell session={session} profile={profile} setProfile={setProfile} />;
 }
 
 /* ---------------- authenticated shell ---------------- */
@@ -2543,6 +2584,16 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
 
 /* ---------------- feed ---------------- */
 
+/* Only ever link to http(s) addresses. Blocks javascript:, data: and similar in user-shared links. */
+function safeHttpUrl(raw) {
+  try {
+    const u = new URL(String(raw || "").trim());
+    return u.protocol === "http:" || u.protocol === "https:" ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+
 function extractYoutubeThumb(url) {
   const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{6,})/);
   return m ? `https://i.ytimg.com/vi/${m[1]}/hqdefault.jpg` : null;
@@ -2629,9 +2680,11 @@ function FeedTab({ session, profile, isAdmin, canManage, notify }) {
 
   async function submitLink() {
     if (!linkForm.title.trim() || !linkForm.url.trim()) return;
-    const thumb = extractYoutubeThumb(linkForm.url);
+    const cleanUrl = safeHttpUrl(linkForm.url) || safeHttpUrl("https://" + linkForm.url.trim());
+    if (!cleanUrl) { notify?.("Enter a valid web link (starting with http:// or https://)", "error"); return; }
+    const thumb = extractYoutubeThumb(cleanUrl);
     const { error } = await supabase.from("feed_posts").insert({
-      source: "manual", title: linkForm.title, url: linkForm.url, description: linkForm.description,
+      source: "manual", title: linkForm.title, url: cleanUrl, description: linkForm.description,
       thumbnail_url: thumb, posted_by: session.user.id, posted_by_name: profile.full_name || session.user.email,
     });
     if (error) { notify?.(error.message, "error"); return; }
@@ -2702,7 +2755,7 @@ function FeedTab({ session, profile, isAdmin, canManage, notify }) {
             <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Recently added</div>
             <Carousel itemWidth={200}>
               {filteredPosts.slice(0, 8).map((p) => (
-                <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "block" }}>
+                <a key={p.id} href={safeHttpUrl(p.url) || undefined} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "block" }}>
                   <div className="hldt-panel-hover" style={{ background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 12, overflow: "hidden" }}>
                     {p.thumbnailUrl ? (
                       <img src={p.thumbnailUrl} alt="" style={{ width: "100%", height: 110, objectFit: "cover", display: "block" }} />
@@ -2723,7 +2776,7 @@ function FeedTab({ session, profile, isAdmin, canManage, notify }) {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
           {filteredPosts.map((p) => (
             <div key={p.id} className="hldt-panel hldt-panel-hover" style={{ background: COLORS.surface1, border: `1px solid ${COLORS.border}`, borderRadius: 12, overflow: "hidden" }}>
-              <a href={p.url} target="_blank" rel="noopener noreferrer">
+              <a href={safeHttpUrl(p.url) || undefined} target="_blank" rel="noopener noreferrer">
                 {p.thumbnailUrl ? (
                   <img src={p.thumbnailUrl} alt="" style={{ width: "100%", height: 130, objectFit: "cover", display: "block" }} />
                 ) : (
@@ -2733,7 +2786,7 @@ function FeedTab({ session, profile, isAdmin, canManage, notify }) {
                 )}
               </a>
               <div style={{ padding: 12 }}>
-                <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+                <a href={safeHttpUrl(p.url) || undefined} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
                   <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.textPrimary, marginBottom: 4, lineHeight: 1.3 }}>{p.title}</div>
                 </a>
                 {p.description && <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6 }}>{p.description}</div>}

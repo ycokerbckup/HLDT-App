@@ -320,11 +320,12 @@ const inputStyle = {
   boxSizing: "border-box",
   background: COLORS.surface2,
   border: `1px solid ${COLORS.border}`,
-  borderRadius: 6,
+  borderRadius: 12,
   color: COLORS.textPrimary,
-  padding: "8px 10px",
-  fontSize: 13,
+  padding: "11px 13px",
+  fontSize: 14,
   fontFamily: "inherit",
+  outlineColor: COLORS.amber,
 };
 
 /* Password rules for creating/changing a password (not enforced on sign-in,
@@ -374,7 +375,7 @@ function Badge({ children, tone = "gray" }) {
   const bgMap = { green: COLORS.greenDim, amber: COLORS.amberDim, red: COLORS.redDim, gray: COLORS.surface2 };
   const fgMap = { green: COLORS.green, amber: COLORS.amber, red: COLORS.red, gray: COLORS.textSecondary };
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", fontSize: 11, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.03em", textTransform: "uppercase", padding: "3px 8px", borderRadius: 4, background: bgMap[tone], color: fgMap[tone] }}>
+    <span style={{ display: "inline-flex", alignItems: "center", fontSize: 12, fontWeight: 600, lineHeight: 1.3, padding: "3px 10px", borderRadius: 999, background: bgMap[tone], color: fgMap[tone], whiteSpace: "nowrap" }}>
       {children}
     </span>
   );
@@ -382,22 +383,22 @@ function Badge({ children, tone = "gray" }) {
 
 function Panel({ title, right, children, style }) {
   return (
-    <div className="hldt-panel hldt-panel-hover hldt-glass" style={{ background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 14, overflow: "hidden", ...style }}>
+    <div className="hldt-panel hldt-glass" style={{ background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 20, overflow: "hidden", ...style }}>
       {title && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderBottom: `1px solid ${COLORS.border}`, background: COLORS.glass2 }}>
-          <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 15, letterSpacing: "0.02em", textTransform: "uppercase", color: COLORS.textPrimary }}>{title}</h3>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", padding: "16px 18px 0" }}>
+          <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 16, color: COLORS.textPrimary }}>{title}</h3>
           {right}
         </div>
       )}
-      <div style={{ padding: 16 }}>{children}</div>
+      <div style={{ padding: title ? "12px 18px 18px" : 18 }}>{children}</div>
     </div>
   );
 }
 
 function Field({ label, children }) {
   return (
-    <label style={{ display: "block", marginBottom: 12 }}>
-      <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 4 }}>{label}</div>
+    <label style={{ display: "block", marginBottom: 14 }}>
+      <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.textSecondary, marginBottom: 6 }}>{label}</div>
       {children}
     </label>
   );
@@ -411,7 +412,7 @@ function Btn({ children, onClick, tone = "default", small, type = "button", disa
     danger: { background: hexToRgba(COLORS.red, 0.12), color: COLORS.red, border: `1px solid ${hexToRgba(COLORS.red, 0.3)}` },
   };
   return (
-    <button className={`hldt-btn hldt-glass${tone === "amber" ? " hldt-shine" : ""}`} type={type} onClick={onClick} disabled={disabled} style={{ ...toneStyles[tone], borderRadius: 10, padding: small ? "5px 10px" : "8px 14px", fontSize: small ? 12 : 13, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 6, ...style }}>
+    <button className={`hldt-btn hldt-glass${tone === "amber" ? " hldt-shine" : ""}`} type={type} onClick={onClick} disabled={disabled} style={{ ...toneStyles[tone], borderRadius: 12, padding: small ? "7px 12px" : "10px 16px", minHeight: small ? 34 : 42, fontSize: small ? 13 : 14, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, whiteSpace: "nowrap", ...style }}>
       {children}
     </button>
   );
@@ -419,10 +420,10 @@ function Btn({ children, onClick, tone = "default", small, type = "button", disa
 
 function SectionHeader({ title, subtitle, right }) {
   return (
-    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
-      <div>
-        <h2 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 26, letterSpacing: "0.01em" }}>{title}</h2>
-        {subtitle && <div style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 2 }}>{subtitle}</div>}
+    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+      <div style={{ minWidth: 0 }}>
+        <h2 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: "clamp(22px, 5.5vw, 28px)", letterSpacing: "-0.01em", lineHeight: 1.15 }}>{title}</h2>
+        {subtitle && <div style={{ fontSize: 14, color: COLORS.textMuted, marginTop: 4 }}>{subtitle}</div>}
       </div>
       {right}
     </div>
@@ -430,22 +431,22 @@ function SectionHeader({ title, subtitle, right }) {
 }
 
 function EmptyRow({ text }) {
-  return <div style={{ fontSize: 12, color: COLORS.textMuted, padding: "8px 0" }}>{text}</div>;
+  return <div style={{ fontSize: 14, color: COLORS.textMuted, padding: "14px 0", lineHeight: 1.45 }}>{text}</div>;
 }
 
 function ToastStack({ toasts }) {
   return (
-    <div style={{ position: "fixed", bottom: 20, right: 20, display: "flex", flexDirection: "column", gap: 8, zIndex: 1000 }}>
+    <div className="hldt-toasts" style={{ position: "fixed", bottom: 20, right: 20, display: "flex", flexDirection: "column", gap: 8, zIndex: 2500 }}>
       {toasts.map((t) => (
         <div
           key={t.id}
           className="hldt-toast"
           style={{
-            display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderRadius: 8,
+            display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderRadius: 14, boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
             background: t.type === "error" ? COLORS.redDim : COLORS.surface2,
             border: `1px solid ${t.type === "error" ? COLORS.red : COLORS.borderStrong}`,
             color: t.type === "error" ? COLORS.red : COLORS.textPrimary,
-            fontSize: 13, minWidth: 200, maxWidth: 320,
+            fontSize: 14, minWidth: 200, maxWidth: 360, lineHeight: 1.4,
           }}
         >
           {t.type === "error" ? <span style={{ fontSize: 15 }}>⚠</span> : <CheckCircle2 size={15} color={COLORS.green} />}
@@ -468,7 +469,7 @@ function useToasts() {
 
 function RowLine({ children, onClick, style, title }) {
   return (
-    <div className="hldt-row" data-clickable={!!onClick} onClick={onClick} title={title} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 4px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 13, cursor: onClick ? "pointer" : "default", ...style }}>
+    <div className="hldt-row" data-clickable={!!onClick} onClick={onClick} title={title} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 4px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 14, minHeight: 24, cursor: onClick ? "pointer" : "default", ...style }}>
       {children}
     </div>
   );
@@ -513,14 +514,14 @@ function Metric({ label, value, tone, isCurrency, onClick }) {
       className="hldt-panel-hover"
       onClick={onClick}
       style={{
-        background: COLORS.surface2, borderRadius: 12, padding: "14px 16px", flex: 1, minWidth: 120,
+        background: COLORS.surface2, borderRadius: 16, padding: "16px 18px", flex: 1, minWidth: 130,
         cursor: onClick ? "pointer" : "default",
         transition: "background-color 150ms ease, transform 150ms ease",
       }}
       onMouseEnter={(e) => { if (onClick) e.currentTarget.style.background = COLORS.border; }}
       onMouseLeave={(e) => { if (onClick) e.currentTarget.style.background = COLORS.surface2; }}
     >
-      <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
+      <div style={{ fontSize: 13, color: COLORS.textMuted, marginBottom: 6 }}>{label}</div>
       <div
         className={useGradient ? "hldt-gradient-text" : undefined}
         style={{
@@ -535,24 +536,39 @@ function Metric({ label, value, tone, isCurrency, onClick }) {
 }
 
 function Modal({ title, onClose, children, width = 480, footer, dismissable = true }) {
+  const isMobile = useIsMobile();
   return createPortal(
     <div
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, padding: 20 }}
+      className="hldt-modal-backdrop"
+      style={{ position: "fixed", inset: 0, background: "rgba(5,7,10,0.62)", display: "flex", alignItems: isMobile ? "flex-end" : "center", justifyContent: "center", zIndex: 2000, padding: isMobile ? 0 : 20 }}
       onClick={dismissable ? onClose : undefined}
     >
       <div
-        className="hldt-modal hldt-glass"
-        style={{ width, maxWidth: "100%", maxHeight: "85vh", display: "flex", flexDirection: "column", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 16, overflow: "hidden" }}
+        className={`hldt-modal hldt-glass${isMobile ? " hldt-sheet" : ""}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={typeof title === "string" ? title : undefined}
+        style={{
+          width: isMobile ? "100%" : width, maxWidth: "100%", maxHeight: isMobile ? "92dvh" : "85vh",
+          display: "flex", flexDirection: "column", background: COLORS.surface1,
+          border: `1px solid ${COLORS.glassBorder}`, borderRadius: isMobile ? "24px 24px 0 0" : 22, overflow: "hidden",
+          boxShadow: "0 30px 80px rgba(0,0,0,0.45)",
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 20px 12px", flexShrink: 0 }}>
-          <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 17, color: COLORS.textPrimary }}>{title}</h3>
-          {dismissable && <X size={18} style={{ cursor: "pointer", color: COLORS.textMuted, flexShrink: 0 }} onClick={onClose} />}
+        {isMobile && <div aria-hidden="true" style={{ width: 40, height: 4, borderRadius: 999, background: COLORS.borderStrong, margin: "10px auto 0", flexShrink: 0 }} />}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: isMobile ? "14px 20px 12px" : "22px 22px 12px", flexShrink: 0 }}>
+          <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 18, color: COLORS.textPrimary }}>{title}</h3>
+          {dismissable && (
+            <button type="button" onClick={onClose} aria-label="Close" style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 999, display: "grid", placeItems: "center", background: COLORS.surface2, border: "none", color: COLORS.textSecondary, cursor: "pointer" }}>
+              <X size={17} />
+            </button>
+          )}
         </div>
-        <div style={{ overflowY: "auto", padding: "0 20px 20px" }}>
+        <div style={{ overflowY: "auto", padding: isMobile ? "0 20px calc(20px + env(safe-area-inset-bottom))" : "0 22px 22px" }}>
           {children}
         </div>
-        {footer && <div style={{ padding: "0 20px 20px", display: "flex", gap: 8, justifyContent: "flex-end", flexShrink: 0 }}>{footer}</div>}
+        {footer && <div style={{ padding: "0 20px 20px", display: "flex", gap: 8, justifyContent: "flex-end", flexShrink: 0, flexWrap: "wrap" }}>{footer}</div>}
       </div>
     </div>,
     document.body
@@ -566,7 +582,7 @@ function ThemeToggle({ mode, onToggle }) {
       onClick={onToggle}
       aria-label="Toggle light/dark mode"
       style={{
-        position: "fixed", top: isMobile ? 8 : 16, right: isMobile ? 8 : 16, zIndex: 1500,
+        position: "fixed", top: isMobile ? 12 : 16, right: isMobile ? 12 : 16, zIndex: 1500,
         width: isMobile ? 32 : 36, height: isMobile ? 32 : 36, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center",
         background: COLORS.surface2, border: `1px solid ${COLORS.border}`, color: COLORS.textPrimary, cursor: "pointer",
         transition: "transform 150ms ease, background-color 150ms ease",
@@ -1142,8 +1158,83 @@ function Dashboard_Shell({ session, profile, setProfile }) {
   const isMobile = useIsMobile();
   const [showAccountMenu, setShowAccountMenu] = useState(false);
 
+  // Grouped so the sidebar reads as sections; phones get the five most-used tabs in a bottom bar.
+  const NAV_GROUPS = [
+    { label: "Team", ids: ["dashboard", "announcements", "feed", "chat"] },
+    { label: "Serving", ids: ["roster", "attendance", "events", "equipment"] },
+    { label: "People", ids: ["members", "onboarding"] },
+    { label: "Money & feedback", ids: ["dues", "feedback"] },
+  ];
+  const navById = Object.fromEntries(nav.map((n) => [n.id, n]));
+  const BOTTOM_IDS = ["dashboard", "roster", "chat", "announcements"];
+  const moreItems = nav.filter((n) => !BOTTOM_IDS.includes(n.id));
+  const moreHasUnread = moreItems.some((n) => unreadByTab[n.id] > 0);
+  const moreActive = !BOTTOM_IDS.includes(tab);
+  const firstName = (profile.full_name || "").trim().split(/\s+/)[0] || "there";
+
+  const tabContent = !loaded ? (
+    <SkeletonLoader />
+  ) : (
+    <div key={tab} className="hldt-tab-content">
+      {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} notify={notify} pendingPoolPaymentRef={pendingPoolPaymentRef} firstName={firstName} />}
+      {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} myUnit={myMember?.unit} reload={load} currentUserId={session.user.id} notify={notify} pendingMemberDetailId={pendingMemberDetailId} onPendingMemberDetailConsumed={() => setPendingMemberDetailId(null)} />}
+      {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
+      {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
+      {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} myMember={myMember} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
+      {tab === "attendance" && <AttendanceTab data={data} canManageRosters={canManageRosters} myMember={myMember} notify={notify} />}
+      {tab === "events" && <SpecialEventsTab data={data} canManageEvents={canManageEvents} myUnit={myUnit} session={session} notify={notify} />}
+      {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} pendingPaymentRef={pendingPaymentRef} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
+      {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} canSeeReadReceipts={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
+      {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
+      {tab === "chat" && <ChatTab session={session} profile={profile} members={data.members} onboarding={data.onboarding} notify={notify} pendingDmProfileId={pendingDm} onPendingDmConsumed={() => setPendingDm(null)} />}
+      {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} canReadFeedback={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} />}
+    </div>
+  );
+
+  const accountBlock = (onAfter) => (
+    <>
+      <button
+        type="button"
+        className="hldt-account"
+        onClick={() => { setShowProfile(true); onAfter?.(); }}
+        style={{ color: COLORS.textPrimary }}
+      >
+        <Avatar label={(profile.full_name || session.user.email)?.[0]?.toUpperCase() || "?"} color={hashColor(session.user.id)} size={40} photoUrl={profile.avatar_url} />
+        <span style={{ minWidth: 0, flex: 1, textAlign: "left" }}>
+          <span style={{ display: "block", fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profile.full_name || session.user.email}</span>
+          <span style={{ display: "block", fontSize: 12, color: COLORS.textMuted }}>{[myMember?.unit, isAdmin ? "Admin" : "Member"].filter(Boolean).join(", ")} · Edit profile</span>
+        </span>
+      </button>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
+        <PushNotificationToggle session={session} />
+        {isAdmin && <Btn small tone="ghost" onClick={() => { exportAllData(); notify("Backup downloaded"); onAfter?.(); }}><Download size={14} /> Download backup</Btn>}
+        <Btn small tone="ghost" onClick={() => supabase.auth.signOut()}><LogOut size={14} /> Sign out</Btn>
+      </div>
+    </>
+  );
+
+  const brand = (
+    <div className="hldt-brand">
+      <span className="hldt-brand-mark" aria-hidden="true" style={{ background: COLORS.amber }}>
+        <span />
+      </span>
+      <span>
+        <span className="hldt-brand-name" style={{ color: COLORS.textPrimary }}>Display Team</span>
+      </span>
+    </div>
+  );
+
   return (
-    <div className="hldt-app" style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.textPrimary, fontFamily: "'Inter', sans-serif", display: "flex", flexDirection: isMobile ? "column" : "row" }}>
+    <div
+      className="hldt-app"
+      style={{
+        minHeight: "100vh", background: COLORS.bg, color: COLORS.textPrimary, fontFamily: "'Inter', sans-serif",
+        display: "flex", flexDirection: isMobile ? "column" : "row",
+        "--nav-bg": COLORS.glass1, "--nav-border": COLORS.glassBorder, "--nav-text": COLORS.textSecondary,
+        "--nav-active": COLORS.amber, "--nav-active-bg": hexToRgba(COLORS.amber, 0.14), "--nav-hover": hexToRgba(COLORS.textPrimary, 0.05),
+        "--nav-dot": COLORS.red, "--nav-muted": COLORS.textMuted, "--nav-surface": COLORS.surface2, "--nav-solid": hexToRgba(COLORS.surface1, 0.97),
+      }}
+    >
       <div style={{ position: "fixed", inset: 0, overflow: "hidden", pointerEvents: "none", zIndex: 0 }}>
         <div className="hldt-glow-orb hldt-glow-warm hldt-glow-subtle" style={{ position: "fixed" }} />
         <div className="hldt-glow-orb hldt-glow-cool hldt-glow-subtle" style={{ position: "fixed" }} />
@@ -1173,160 +1264,104 @@ function Dashboard_Shell({ session, profile, setProfile }) {
 
       {isMobile ? (
         <>
-          {/* Hamburger opens a full drawer with every tab, so nothing is scrolled off-screen */}
-          <div style={{ position: "fixed", top: 8, left: 8, zIndex: 1500 }}>
-            <button
-              data-tour="nav"
-              onClick={() => setShowAccountMenu(!showAccountMenu)}
-              aria-label="Menu"
-              style={{ width: 32, height: 32, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.surface2, border: `1px solid ${COLORS.border}`, color: COLORS.textPrimary, cursor: "pointer", position: "relative" }}
-            >
-              <Menu size={16} />
-              {Object.keys(unreadByTab).length > 0 && <span style={{ position: "absolute", top: -2, right: -2, width: 8, height: 8, borderRadius: 999, background: COLORS.red, border: `1.5px solid ${COLORS.bg}` }} />}
+          <header className="hldt-topbar">{brand}</header>
+
+          <main className="hldt-main-mobile">{tabContent}</main>
+
+          <nav className="hldt-bottomnav" data-tour="nav" aria-label="Main">
+            {BOTTOM_IDS.map((id) => {
+              const n = navById[id];
+              if (!n) return null;
+              const Icon = n.icon;
+              const active = tab === id;
+              return (
+                <button key={id} type="button" className={`hldt-bn-item${active ? " is-active" : ""}`} onClick={() => goToTab(id)} aria-current={active ? "page" : undefined}>
+                  <span className="hldt-bn-icon">
+                    <Icon size={20} strokeWidth={active ? 2.2 : 1.8} />
+                    {unreadByTab[id] > 0 && <span className="hldt-bn-dot" />}
+                  </span>
+                  {id === "dashboard" ? "Home" : id === "announcements" ? "Updates" : n.label}
+                </button>
+              );
+            })}
+            <button type="button" className={`hldt-bn-item${moreActive ? " is-active" : ""}`} onClick={() => setShowAccountMenu(true)} aria-haspopup="dialog">
+              <span className="hldt-bn-icon">
+                <Menu size={20} strokeWidth={moreActive ? 2.2 : 1.8} />
+                {moreHasUnread && <span className="hldt-bn-dot" />}
+              </span>
+              {moreActive && navById[tab] ? navById[tab].label : "More"}
             </button>
-          </div>
+          </nav>
 
-          {showAccountMenu && (
-            <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 1600 }} onClick={() => setShowAccountMenu(false)}>
+          {showAccountMenu && createPortal(
+            <div className="hldt-modal-backdrop" style={{ position: "fixed", inset: 0, background: "rgba(5,7,10,0.62)", zIndex: 1900, display: "flex", alignItems: "flex-end" }} onClick={() => setShowAccountMenu(false)}>
               <div
-                className="hldt-modal hldt-glass"
+                className="hldt-modal hldt-sheet"
+                role="dialog"
+                aria-modal="true"
+                aria-label="More"
                 onClick={(e) => e.stopPropagation()}
-                style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 250, background: COLORS.glass1, borderRight: `1px solid ${COLORS.glassBorder}`, display: "flex", flexDirection: "column", overflowY: "auto" }}
+                style={{ width: "100%", maxHeight: "88dvh", overflowY: "auto", background: COLORS.surface1, borderRadius: "24px 24px 0 0", border: `1px solid ${COLORS.glassBorder}`, padding: "10px 16px calc(18px + env(safe-area-inset-bottom))" }}
               >
-                <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${COLORS.border}` }}>
-                  <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 17 }}>DISPLAY TEAM</div>
-                  <div style={{ fontSize: 10, color: COLORS.textMuted, fontFamily: "'JetBrains Mono', monospace", marginTop: 2 }}>OPS CONSOLE</div>
-                </div>
-
-                <div style={{ flex: 1, padding: "8px" }}>
-                  {nav.map((n) => {
+                <div aria-hidden="true" style={{ width: 40, height: 4, borderRadius: 999, background: COLORS.borderStrong, margin: "0 auto 16px" }} />
+                <div className="hldt-more-grid">
+                  {moreItems.map((n) => {
                     const Icon = n.icon;
                     const active = tab === n.id;
-                    const hasUnread = unreadByTab[n.id] > 0;
                     return (
-                      <div
-                        key={n.id}
-                        onClick={() => { goToTab(n.id); setShowAccountMenu(false); }}
-                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 10px", marginBottom: 2, borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: active || n.id === "events" ? 600 : 400, color: active ? COLORS.amber : n.id === "events" ? COLORS.green : COLORS.textSecondary, background: active ? `linear-gradient(135deg, ${COLORS.amberDim}, rgba(61,220,151,0.08))` : "transparent" }}
-                      >
-                        <div style={{ position: "relative", display: "flex" }}>
-                          <Icon size={16} strokeWidth={1.8} />
-                          {hasUnread && <span style={{ position: "absolute", top: -2, right: -3, width: 6, height: 6, borderRadius: 999, background: COLORS.red }} />}
-                        </div>
+                      <button key={n.id} type="button" className={`hldt-more-tile${active ? " is-active" : ""}`} onClick={() => { goToTab(n.id); setShowAccountMenu(false); }}>
+                        <span className="hldt-more-icon">
+                          <Icon size={20} strokeWidth={1.9} />
+                          {unreadByTab[n.id] > 0 && <span className="hldt-bn-dot" />}
+                        </span>
                         {n.label}
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
-
-                <div style={{ padding: 12, borderTop: `1px solid ${COLORS.border}` }}>
-                  <div
-                    className="hldt-row" data-clickable="true"
-                    onClick={() => { setShowProfile(true); setShowAccountMenu(false); }}
-                    style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "4px", borderRadius: 10, marginBottom: 10 }}
-                  >
-                    <Avatar label={(profile.full_name || session.user.email)?.[0]?.toUpperCase() || "?"} color={hashColor(session.user.id)} size={38} photoUrl={profile.avatar_url} />
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profile.full_name || session.user.email}</div>
-                      <Badge tone={isAdmin ? "amber" : "gray"}>{profile.role}</Badge>
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <PushNotificationToggle session={session} />
-                    {isAdmin && <Btn small tone="ghost" onClick={() => { exportAllData(); notify("Backup downloaded"); setShowAccountMenu(false); }}><Download size={12} /> Export data</Btn>}
-                    <Btn small tone="ghost" onClick={() => supabase.auth.signOut()}><LogOut size={12} /> Sign out</Btn>
-                  </div>
+                <div style={{ borderTop: `1px solid ${COLORS.border}`, marginTop: 16, paddingTop: 14 }}>
+                  {accountBlock(() => setShowAccountMenu(false))}
                 </div>
               </div>
-            </div>
+            </div>,
+            document.body
           )}
-
-          <div style={{ padding: "56px 14px 20px", minWidth: 0, flex: 1, overflowY: "auto" }}>
-            {!loaded ? (
-              <SkeletonLoader />
-            ) : (
-              <div key={tab} className="hldt-tab-content">
-                {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} notify={notify} pendingPoolPaymentRef={pendingPoolPaymentRef} />}
-                {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} myUnit={myMember?.unit} reload={load} currentUserId={session.user.id} notify={notify} pendingMemberDetailId={pendingMemberDetailId} onPendingMemberDetailConsumed={() => setPendingMemberDetailId(null)} />}
-                {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
-                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
-                {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} myMember={myMember} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
-                {tab === "attendance" && <AttendanceTab data={data} canManageRosters={canManageRosters} myMember={myMember} notify={notify} />}
-                {tab === "events" && <SpecialEventsTab data={data} canManageEvents={canManageEvents} myUnit={myUnit} session={session} notify={notify} />}
-                {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} pendingPaymentRef={pendingPaymentRef} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
-                {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} canSeeReadReceipts={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
-                {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
-                {tab === "chat" && <ChatTab session={session} profile={profile} members={data.members} onboarding={data.onboarding} notify={notify} pendingDmProfileId={pendingDm} onPendingDmConsumed={() => setPendingDm(null)} />}
-                {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} canReadFeedback={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} />}
-              </div>
-            )}
-          </div>
         </>
       ) : (
         <>
-          <div data-tour="nav" className="hldt-glass" style={{ width: 190, flexShrink: 0, background: COLORS.glass1, borderRight: `1px solid ${COLORS.glassBorder}`, display: "flex", flexDirection: "column" }}>
-            <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${COLORS.border}` }}>
-              <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 19, letterSpacing: "0.02em", lineHeight: 1.1 }}>DISPLAY TEAM</div>
-              <div style={{ fontSize: 11, color: COLORS.textMuted, fontFamily: "'JetBrains Mono', monospace", marginTop: 4 }}>OPS CONSOLE</div>
-            </div>
-
-            <div style={{ flex: 1, padding: "10px 8px" }}>
-              {nav.map((n) => {
-                const Icon = n.icon;
-                const active = tab === n.id;
-                const hasUnread = unreadByTab[n.id] > 0;
+          <aside className="hldt-sidebar hldt-glass" data-tour="nav" aria-label="Main">
+            <div style={{ padding: "20px 18px 12px" }}>{brand}</div>
+            <nav style={{ flex: 1, overflowY: "auto", padding: "4px 12px 12px" }}>
+              {NAV_GROUPS.map((g) => {
+                const items = g.ids.map((id) => navById[id]).filter(Boolean);
+                if (items.length === 0) return null;
                 return (
-                  <div key={n.id} className="hldt-nav-item" onClick={() => goToTab(n.id)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", marginBottom: 2, borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: active || n.id === "events" ? 600 : 400, color: active ? COLORS.amber : n.id === "events" ? COLORS.green : COLORS.textSecondary, background: active ? `linear-gradient(135deg, ${COLORS.amberDim}, rgba(61,220,151,0.08))` : "transparent", borderLeft: active ? `2px solid ${COLORS.amber}` : n.id === "events" ? `2px solid ${COLORS.green}` : "2px solid transparent" }}>
-                    <div style={{ position: "relative", display: "flex" }}>
-                      <Icon size={15} strokeWidth={1.8} />
-                      {hasUnread && <span style={{ position: "absolute", top: -2, right: -3, width: 6, height: 6, borderRadius: 999, background: COLORS.red, border: `1.5px solid ${COLORS.surface1}` }} />}
-                    </div>
-                    {n.label}
+                  <div key={g.label} style={{ marginBottom: 14 }}>
+                    <div className="hldt-nav-group">{g.label}</div>
+                    {items.map((n) => {
+                      const Icon = n.icon;
+                      const active = tab === n.id;
+                      return (
+                        <button key={n.id} type="button" className={`hldt-nav-link${active ? " is-active" : ""}`} onClick={() => goToTab(n.id)} aria-current={active ? "page" : undefined}>
+                          <span style={{ position: "relative", display: "flex" }}>
+                            <Icon size={18} strokeWidth={active ? 2.2 : 1.8} />
+                            {unreadByTab[n.id] > 0 && <span className="hldt-bn-dot" />}
+                          </span>
+                          <span style={{ flex: 1, textAlign: "left" }}>{n.id === "dashboard" ? "Home" : n.label}</span>
+                          {unreadByTab[n.id] > 0 && <span className="hldt-nav-count">{unreadByTab[n.id] > 9 ? "9+" : unreadByTab[n.id]}</span>}
+                        </button>
+                      );
+                    })}
                   </div>
                 );
               })}
-            </div>
+            </nav>
+            <div style={{ padding: 14, borderTop: `1px solid ${COLORS.border}` }}>{accountBlock()}</div>
+          </aside>
 
-            <div style={{ padding: 12, borderTop: `1px solid ${COLORS.border}` }}>
-              <div
-                className="hldt-row" data-clickable="true"
-                onClick={() => setShowProfile(true)}
-                style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "4px", borderRadius: 10, marginBottom: 10 }}
-              >
-                <Avatar label={(profile.full_name || session.user.email)?.[0]?.toUpperCase() || "?"} color={hashColor(session.user.id)} size={38} photoUrl={profile.avatar_url} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profile.full_name || session.user.email}</div>
-                  <Badge tone={isAdmin ? "amber" : "gray"}>{profile.role}</Badge>
-                </div>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <PushNotificationToggle session={session} />
-                {isAdmin && <Btn small tone="ghost" onClick={() => { exportAllData(); notify("Backup downloaded"); }}><Download size={12} /> Export data</Btn>}
-                <Btn small tone="ghost" onClick={() => supabase.auth.signOut()}><LogOut size={12} /> Sign out</Btn>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ flex: 1, padding: 24, minWidth: 0, overflowY: "auto" }}>
-            {!loaded ? (
-              <SkeletonLoader />
-            ) : (
-              <div key={tab} className="hldt-tab-content">
-                {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} notify={notify} pendingPoolPaymentRef={pendingPoolPaymentRef} />}
-                {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} myUnit={myMember?.unit} reload={load} currentUserId={session.user.id} notify={notify} pendingMemberDetailId={pendingMemberDetailId} onPendingMemberDetailConsumed={() => setPendingMemberDetailId(null)} />}
-                {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
-                {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
-                {tab === "roster" && <RosterTab data={data} isAdmin={isAdmin} canManageRosters={canManageRosters} myMember={myMember} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
-                {tab === "attendance" && <AttendanceTab data={data} canManageRosters={canManageRosters} myMember={myMember} notify={notify} />}
-                {tab === "events" && <SpecialEventsTab data={data} canManageEvents={canManageEvents} myUnit={myUnit} session={session} notify={notify} />}
-                {tab === "dues" && (canSeeDues ? <DuesTab data={data} isAdmin={isAdmin} reload={load} myMemberId={myMember?.id} notify={notify} pendingPaymentRef={pendingPaymentRef} /> : <Panel><EmptyRow text="Dues is only visible to Welfare and Operations." /></Panel>)}
-                {tab === "announcements" && <AnnouncementsTab data={data} isAdmin={isAdmin} canPost={isAdmin || myUnit === "Welfare"} canSeeReadReceipts={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} adminId={session.user.id} adminName={profile.full_name || session.user.email} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
-                {tab === "feed" && <FeedTab session={session} profile={profile} isAdmin={isAdmin} canManage={canManageFeed} notify={notify} />}
-                {tab === "chat" && <ChatTab session={session} profile={profile} members={data.members} onboarding={data.onboarding} notify={notify} pendingDmProfileId={pendingDm} onPendingDmConsumed={() => setPendingDm(null)} />}
-                {tab === "feedback" && <FeedbackTab data={data} isAdmin={isAdmin} canReadFeedback={isAdmin && (myUnit === "Operations" || myUnit === "Welfare")} reload={load} notify={notify} />}
-              </div>
-            )}
-          </div>
+          <main className="hldt-main-desktop">
+            {tabContent}
+          </main>
         </>
       )}
     </div>
@@ -1473,7 +1508,7 @@ function GlobalSearch({ data, goToTab, isOperationsUser }) {
   }
 
   return (
-    <div style={{ position: "fixed", top: isMobile ? 8 : 16, right: isMobile ? 84 : 112, zIndex: 1500 }}>
+    <div style={{ position: "fixed", top: isMobile ? 12 : 16, right: isMobile ? 92 : 112, zIndex: 1500 }}>
       <button
         data-tour="search"
         onClick={() => setOpen(true)}
@@ -1777,7 +1812,7 @@ function NotificationBell({ notifications, readIds, onRead, onNavigate }) {
   }
 
   return (
-    <div style={{ position: "fixed", top: isMobile ? 8 : 16, right: isMobile ? 46 : 64, zIndex: 1500 }}>
+    <div style={{ position: "fixed", top: isMobile ? 12 : 16, right: isMobile ? 52 : 64, zIndex: 1500 }}>
       <button
         data-tour="bell"
         onClick={() => setOpen(!open)}
@@ -1799,7 +1834,7 @@ function NotificationBell({ notifications, readIds, onRead, onNavigate }) {
           <div
             className="hldt-modal hldt-glass"
             onClick={(e) => e.stopPropagation()}
-            style={{ position: "fixed", top: isMobile ? 46 : 58, right: isMobile ? 8 : 16, width: isMobile ? "calc(100vw - 16px)" : 320, maxWidth: 320, maxHeight: 400, overflowY: "auto", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 14, padding: 8, boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}
+            style={{ position: "fixed", top: isMobile ? 56 : 58, right: isMobile ? 8 : 16, width: isMobile ? "calc(100vw - 16px)" : 320, maxWidth: 320, maxHeight: 400, overflowY: "auto", background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 14, padding: 8, boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}
           >
             <div style={{ fontSize: 12, fontWeight: 500, color: COLORS.textSecondary, padding: "6px 8px" }}>Notifications</div>
             {notifications.length === 0 ? (
@@ -2363,7 +2398,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
   return (
     <div>
       <SectionHeader title="Chat" subtitle="Messages are removed 24 hours after being seen. Editable for 5 minutes after sending, deletable for 5 minutes after being seen." />
-      <div style={{ display: "flex", gap: 16, height: isMobile ? "calc(100vh - 200px)" : "65vh" }}>
+      <div style={{ display: "flex", gap: 16, height: isMobile ? "calc(100dvh - 250px)" : "65vh" }}>
         {(!isMobile || !mobileShowThread) && (
           <div style={{ width: isMobile ? "100%" : 210, flexShrink: 0, display: "flex", flexDirection: "column", gap: 4, overflowY: "auto" }}>
             <div
@@ -3554,7 +3589,7 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
   );
 }
 
-function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWelfareInfo, notify, pendingPoolPaymentRef }) {
+function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWelfareInfo, notify, pendingPoolPaymentRef, firstName }) {
   const [showOwingModal, setShowOwingModal] = useState(false);
   const currentMonth = currentMonthStringWAT();
   const openTickets = data.tickets.filter((t) => t.status !== "Resolved");
@@ -3577,25 +3612,70 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWel
     return diffDays > 0 && diffDays <= 14;
   });
 
+  const watNow = nowWAT();
+  const hour = watNow.getUTCHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const dateLabel = watNow.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
+  const tiles = [
+    { id: "members", label: "Team members", value: data.members.length, icon: Users, fg: COLORS.amber, bg: COLORS.amberDim, show: true },
+    { id: "onboarding", label: "In onboarding", value: inTraining.length, icon: GraduationCap, fg: COLORS.green, bg: COLORS.greenDim, show: isAdmin },
+    { id: "equipment", label: openTickets.length === 1 ? "Open ticket" : "Open tickets", value: openTickets.length, icon: Wrench, fg: openTickets.length ? COLORS.red : COLORS.textSecondary, bg: openTickets.length ? COLORS.redDim : COLORS.surface2, show: true },
+    { id: "owing", label: owingCount === 1 ? "Member owing dues" : "Members owing dues", value: owingCount, icon: Wallet, fg: owingCount ? COLORS.amber : COLORS.textSecondary, bg: owingCount ? COLORS.amberDim : COLORS.surface2, show: canSeeWelfareInfo },
+  ].filter((t) => t.show);
+
   return (
     <div>
-      <SectionHeader title="Dashboard" subtitle="Live overview, synced in real time across all admins" />
-      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-        <Metric label="Active members" value={data.members.length} />
-        {isAdmin && <Metric label="In onboarding" value={inTraining.length} tone={inTraining.length ? "amber" : undefined} />}
-        <Metric label="Open tickets" value={openTickets.length} tone={openTickets.length ? "red" : undefined} />
-        {canSeeWelfareInfo && <Metric label="Owing dues" value={owingCount} tone={owingCount ? "amber" : undefined} onClick={() => setShowOwingModal(true)} />}
+      <div className="hldt-hello">
+        <div className="hldt-hello-date" style={{ color: COLORS.textMuted }}>{dateLabel}</div>
+        <h2 className="hldt-hello-title">{greeting}, {firstName || myMember?.name?.split(" ")[0] || "there"}</h2>
+        {myMember && (myMember.unit || myMember.tier || myMember.team) && (
+          <div className="hldt-hello-chips">
+            {myMember.unit && <span className="hldt-chip" style={{ background: COLORS.surface2, color: COLORS.textSecondary }}>{myMember.unit}</span>}
+            {myMember.tier && <span className="hldt-chip" style={{ background: COLORS.surface2, color: COLORS.textSecondary }}>{myMember.tier}</span>}
+            {myMember.team && <span className="hldt-chip" style={{ background: COLORS.surface2, color: COLORS.textSecondary }}>Team {myMember.team}</span>}
+          </div>
+        )}
       </div>
 
-      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
-        <Panel title="Open equipment tickets" style={{ flex: 1, minWidth: 280 }}>
+      {todaysBirthdays.length > 0 && (
+        <div className="hldt-celebrate" style={{ background: COLORS.greenDim, color: COLORS.textPrimary }}>
+          <span className="hldt-celebrate-emoji" aria-hidden="true">🎂</span>
+          <span style={{ fontSize: 14, lineHeight: 1.4 }}>
+            It's <strong>{todaysBirthdays.map((m) => m.name.trim().split(" ")[0]).join(", ").replace(/, ([^,]*)$/, " and $1")}</strong>'s birthday today. Send them a message in Chat.
+          </span>
+        </div>
+      )}
+
+      <div className="hldt-tiles">
+        {tiles.map((t) => {
+          const Icon = t.icon;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              className="hldt-tile"
+              style={{ background: COLORS.glass1, borderColor: COLORS.glassBorder, color: COLORS.textPrimary }}
+              onClick={() => (t.id === "owing" ? setShowOwingModal(true) : setTab(t.id))}
+            >
+              <span className="hldt-tile-icon" style={{ background: t.bg, color: t.fg }}><Icon size={19} /></span>
+              <span>
+                <span className="hldt-tile-value" style={{ display: "block", color: t.value && t.id !== "members" ? t.fg : COLORS.textPrimary }}>{t.value}</span>
+                <span className="hldt-tile-label" style={{ display: "block", color: COLORS.textMuted }}>{t.label}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="hldt-home-cols">
+        <Panel title="Equipment that needs attention" right={openTickets.length > 0 ? <Btn small tone="ghost" onClick={() => setTab("equipment")}>See all</Btn> : null}>
           {openTickets.length === 0 ? (
-            <EmptyRow text="No open tickets." />
+            <EmptyRow text="Everything's working. Nothing reported right now." />
           ) : (
-            openTickets.slice(0, 6).map((t) => (
+            openTickets.slice(0, 5).map((t) => (
               <RowLine key={t.id} onClick={() => setTab("equipment")}>
                 <StatusDot tone={t.status === "Open" ? "red" : "amber"} />
-                <span style={{ flex: 1 }}>{t.description || SYSTEMS.find((s) => t.systems[s] === "Issue") || "Issue reported"}</span>
+                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.description || SYSTEMS.find((sys) => t.systems[sys] === "Issue") || "Issue reported"}</span>
                 <Badge tone={t.status === "Open" ? "red" : "amber"}>{t.status}</Badge>
               </RowLine>
             ))
@@ -3603,9 +3683,9 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWel
         </Panel>
 
         {isAdmin ? (
-          <Panel title="Onboarding ready for review" style={{ flex: 1, minWidth: 280 }}>
+          <Panel title="Ready to graduate" right={readyToGraduate.length > 0 ? <Btn small tone="ghost" onClick={() => setTab("onboarding")}>Review</Btn> : null}>
             {readyToGraduate.length === 0 ? (
-              <EmptyRow text="No trainees flagged ready yet." />
+              <EmptyRow text="No trainees are marked ready yet." />
             ) : (
               readyToGraduate.map((o) => (
                 <RowLine key={o.id} onClick={() => setTab("onboarding")}>
@@ -3617,17 +3697,17 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWel
             )}
           </Panel>
         ) : (
-          <Panel title="Your status" style={{ flex: 1, minWidth: 280 }}>
+          <Panel title="You on the team">
             {!myMember ? (
-              <EmptyRow text="No member record is linked to your account yet — ask an admin." />
+              <EmptyRow text="Your account isn't linked to a team member yet. Ask an admin to link it." />
             ) : (
               <>
-                <RowLine><span style={{ flex: 1 }}>Team</span><span style={{ color: COLORS.textSecondary }}>{myMember.team || "—"}</span></RowLine>
-                <RowLine><span style={{ flex: 1 }}>Unit</span><span style={{ color: COLORS.textSecondary }}>{myMember.unit || "—"}</span></RowLine>
-                <RowLine><span style={{ flex: 1 }}>Tier</span><span style={{ color: COLORS.textSecondary }}>{myMember.tier || "—"}</span></RowLine>
+                <RowLine><span style={{ flex: 1, color: COLORS.textSecondary }}>Team</span><span>{myMember.team || "Not set"}</span></RowLine>
+                <RowLine><span style={{ flex: 1, color: COLORS.textSecondary }}>Unit</span><span>{myMember.unit || "Not set"}</span></RowLine>
+                <RowLine><span style={{ flex: 1, color: COLORS.textSecondary }}>Tier</span><span>{myMember.tier || "Not set"}</span></RowLine>
                 {myOnboarding && (
                   <RowLine onClick={() => setTab("onboarding")}>
-                    <span style={{ flex: 1 }}>Onboarding status</span>
+                    <span style={{ flex: 1, color: COLORS.textSecondary }}>Onboarding</span>
                     <Badge tone={myOnboarding.status.toLowerCase().includes("ready") ? "green" : "amber"}>{myOnboarding.status}</Badge>
                   </RowLine>
                 )}
@@ -3660,12 +3740,12 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWel
           }
         >
           {todaysBirthdays.length === 0 && upcomingBirthdays.length === 0 ? (
-            <EmptyRow text="No birthdays today or in the next 14 days." />
+            <EmptyRow text="No birthdays today or in the next 2 weeks." />
           ) : (
             <>
               {todaysBirthdays.length > 0 && (
                 <div style={{ marginBottom: upcomingBirthdays.length > 0 ? 10 : 0 }}>
-                  <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", marginBottom: 4 }}>Today</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.textMuted, marginBottom: 2 }}>Today</div>
                   {todaysBirthdays.map((m) => (
                     <RowLine key={m.id}><span style={{ flex: 1 }}>{m.name}</span><Badge tone="green">Today</Badge></RowLine>
                   ))}
@@ -3673,7 +3753,7 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWel
               )}
               {upcomingBirthdays.length > 0 && (
                 <div>
-                  <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", marginBottom: 4 }}>Next 14 days</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.textMuted, marginBottom: 2 }}>Coming up in the next 2 weeks</div>
                   {upcomingBirthdays.map((m) => (
                     <RowLine key={m.id}><span style={{ flex: 1 }}>{m.name}</span><span style={{ fontSize: 11, color: COLORS.textMuted }}>{m.dob}</span></RowLine>
                   ))}

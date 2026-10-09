@@ -1,4 +1,4 @@
--- PROPOSED, NOT YET APPLIED (awaiting owner approval, 2026-10-08). Security hardening, round 2.
+-- PROPOSED, NOT YET APPLIED (approval prompt was cancelled 2026-10-09). Security hardening, round 2, incl. owner-only OTP email.
 -- 1) Least-privilege table grants  2) Dues crediting trusts only the confirmed amount
 -- 3) Append-only wallet ledger     4) Audit log + alerts to Operations admins
 -- 5) Approval gate: only approved team members (unit assigned) or admins can read team data
@@ -308,3 +308,87 @@ alter table public.feed_posts add constraint feed_posts_url_is_http check (url ~
 alter table public.withdrawal_requests add column if not exists emails_sent int not null default 0;
 alter table public.pin_change_requests add column if not exists emails_sent int not null default 0;
 alter table public.phone_change_verifications add column if not exists emails_sent int not null default 0;
+
+-- ============================================================
+-- 8) Only the account owner may change the withdrawal OTP email (or the permission to do so).
+--    Fails closed: if owner_profile_id is ever null, nobody can change it.
+-- ============================================================
+alter table public.withdrawal_config add column if not exists owner_profile_id uuid;
+update public.withdrawal_config
+  set owner_profile_id = (select id from public.profiles where lower(email) = 'cokeremmanuel23@gmail.com')
+  where id = 1;
+
+update public.profiles set can_manage_withdrawal_otp = false
+  where can_manage_withdrawal_otp and id is distinct from (select owner_profile_id from public.withdrawal_config where id = 1);
+update public.profiles set can_manage_withdrawal_otp = true
+  where id = (select owner_profile_id from public.withdrawal_config where id = 1) and not can_manage_withdrawal_otp;
+
+create or replace function public.request_phone_change_code(p_new_phone text)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare new_id uuid;
+begin
+  if auth.uid() is null or auth.uid() is distinct from (select owner_profile_id from withdrawal_config where id = 1) then
+    raise exception 'Only the account owner can change the withdrawal OTP email.';
+  end if;
+  if p_new_phone is null or p_new_phone !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then
+    raise exception 'Enter a valid email address.';
+  end if;
+  insert into phone_change_verifications (profile_id, code, new_phone, expires_at)
+  values (auth.uid(), public._gen_otp(), lower(trim(p_new_phone)), now() + interval '10 minutes')
+  returning id into new_id;
+  return new_id;
+end;
+$$;
+
+create or replace function public.confirm_phone_change_v2(p_verification_id uuid, p_code text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v record;
+  n int;
+begin
+  if auth.uid() is null or auth.uid() is distinct from (select owner_profile_id from withdrawal_config where id = 1) then
+    raise exception 'Only the account owner can change the withdrawal OTP email.';
+  end if;
+  select * into v from phone_change_verifications where id = p_verification_id and profile_id = auth.uid() for update;
+  if v is null or v.used then
+    return jsonb_build_object('ok', false, 'error', 'Invalid or already-used verification.');
+  end if;
+  if v.expires_at < now() then
+    return jsonb_build_object('ok', false, 'error', 'This code has expired. Request a new one.');
+  end if;
+  if v.attempts >= 5 then
+    update phone_change_verifications set used = true where id = p_verification_id;
+    return jsonb_build_object('ok', false, 'error', 'Too many incorrect attempts. Request a new code.');
+  end if;
+  if coalesce(p_code, '') <> v.code then
+    n := v.attempts + 1;
+    update phone_change_verifications set attempts = n, used = (n >= 5) where id = p_verification_id;
+    return jsonb_build_object('ok', false, 'error', case when n >= 5 then 'Too many incorrect attempts. Request a new code.' else 'Incorrect code.' end);
+  end if;
+  update withdrawal_config set otp_email = v.new_phone where id = 1;
+  update phone_change_verifications set used = true where id = p_verification_id;
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+-- The permission itself can only be changed by the owner (or from the SQL editor / service role).
+create or replace function public.guard_otp_manager_flag()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.can_manage_withdrawal_otp is distinct from old.can_manage_withdrawal_otp
+     and auth.uid() is not null
+     and auth.uid() is distinct from (select owner_profile_id from withdrawal_config where id = 1) then
+    raise exception 'Only the account owner can change this permission.';
+  end if;
+  return new;
+end;
+$$;
+revoke execute on function public.guard_otp_manager_flag() from public, anon, authenticated;
+drop trigger if exists guard_otp_manager_flag on public.profiles;
+create trigger guard_otp_manager_flag before update of can_manage_withdrawal_otp on public.profiles
+  for each row execute function public.guard_otp_manager_flag();
+
+-- ============================================================
+-- 9) Celebration notifications at 8:00 Lagos time (07:00 UTC; was 06:00 UTC = 7:00).
+-- ============================================================
+select cron.alter_job((select jobid from cron.job where jobname = 'daily-celebrations'), schedule => '0 7 * * *');

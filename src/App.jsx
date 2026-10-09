@@ -3282,16 +3282,11 @@ function FundPoolModal({ onClose, notify }) {
   );
 }
 
-const LEDGER_LABELS = {
-  dues_credit: "Dues",
-  pool_credit: "Pool funding",
-  withdrawal: "Withdrawal",
-  transfer_fee: "Transfer fee",
-  withdrawal_reversal: "Withdrawal returned",
-  transfer_fee_reversal: "Transfer fee returned",
-  fee_correction: "Past Paystack fees",
-  opening_balance: "Opening balance",
-};
+// wallet_ledger notes are written by the database; old rows just say "credit"/"debit".
+function activityLabel(note, delta) {
+  if (!note || note === "credit" || note === "debit") return delta >= 0 ? "Money in" : "Money out";
+  return note.replace(/NGN /g, "₦");
+}
 
 function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
   const [month, setMonth] = useState(currentMonthStringWAT());
@@ -3320,7 +3315,7 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
   async function loadBalance() {
     const [{ data: ov }, { data: rows }] = await Promise.all([
       supabase.rpc("get_wallet_overview"),
-      supabase.from("wallet_movements").select("*").neq("entry_type", "opening_balance").order("created_at", { ascending: false }).limit(8),
+      supabase.from("wallet_ledger").select("id, created_at, delta, note").neq("delta", 0).order("created_at", { ascending: false }).limit(8),
     ]);
     if (ov) setOverview(ov);
     setActivity(rows || []);
@@ -3340,7 +3335,6 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
     const channel = supabase
       .channel("wallet-live")
       .on("postgres_changes", { event: "*", schema: "public", table: "wallet_balance" }, () => { loadBalance(); loadPaystackBalance(); })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "wallet_movements" }, loadBalance)
       .subscribe();
     return () => supabase.removeChannel(channel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3480,13 +3474,11 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
           {activity.map((e) => (
             <RowLine key={e.id}>
               <span style={{ flex: 1, minWidth: 0 }}>
-                {LEDGER_LABELS[e.entry_type] || e.entry_type}
-                {e.note && e.note !== LEDGER_LABELS[e.entry_type] ? <span style={{ color: COLORS.textMuted }}> · {e.note}</span> : null}
-                {e.fee_kobo > 0 && (e.entry_type === "dues_credit" || e.entry_type === "pool_credit")
-                  ? <span style={{ color: COLORS.textMuted }}> · {nairaExact(e.gross_kobo / 100)} less {nairaExact(e.fee_kobo / 100)} fee</span> : null}
+                {activityLabel(e.note, e.delta)}
+                <span style={{ color: COLORS.textMuted }}> · {new Date(e.created_at).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</span>
               </span>
-              <span style={{ fontSize: 12, fontWeight: 600, color: e.amount_kobo >= 0 ? COLORS.green : COLORS.textPrimary, marginLeft: 8 }}>
-                {e.amount_kobo >= 0 ? "+" : "−"}{nairaExact(Math.abs(e.amount_kobo) / 100)}
+              <span style={{ fontSize: 12, fontWeight: 600, color: e.delta >= 0 ? COLORS.green : COLORS.textPrimary, marginLeft: 8 }}>
+                {e.delta >= 0 ? "+" : "−"}{nairaExact(Math.abs(e.delta))}
               </span>
             </RowLine>
           ))}

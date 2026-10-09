@@ -12,6 +12,16 @@
 // is marked fully paid. If it's short (or over), the actual amount
 // received is divided EQUALLY across the covered months — each row's
 // paid/owed amounts reflect its real share, never a guess.
+//
+// Withdrawals: transfer.success / transfer.failed / transfer.reversed
+// events carry the withdrawal request id as the transfer reference.
+// finalize_withdrawal is idempotent, so retries are harmless.
+//
+// Error handling: once the signature has passed, any genuine
+// processing failure (database error, Paystack verify unreachable)
+// returns 500 so Paystack retries the event later. Every update is
+// guarded by status = 'pending', so retries and the redirect-time
+// verify-dues-payment are safe to overlap — nothing is applied twice.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -40,21 +50,43 @@ function safeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
+async function verifyWithPaystack(reference: string) {
+  const res = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+    headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` },
+  });
+  if (!res.ok && res.status >= 500) throw new Error(`Paystack verify returned ${res.status}`);
+  return await res.json();
+}
+
+async function verifyTransferWithPaystack(reference: string) {
+  const res = await fetch(`https://api.paystack.co/transfer/verify/${encodeURIComponent(reference)}`, {
+    headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` },
+  });
+  if (!res.ok && res.status >= 500) throw new Error(`Paystack transfer verify returned ${res.status}`);
+  return await res.json();
+}
+
 async function applySplitAndNotify(admin: any, rows: any[], verifyData: any) {
   const actualTotal = verifyData.amount;
   const numMonths = rows.length;
   const baseShare = Math.floor(actualTotal / numMonths);
   const remainder = actualTotal - baseShare * numMonths;
 
+  let updatedCount = 0;
   for (let i = 0; i < rows.length; i++) {
     const paidForThisRow = baseShare + (i === rows.length - 1 ? remainder : 0);
     const owedForThisRow = Math.max(0, rows[i].amount_kobo - paidForThisRow);
     const rowStatus = owedForThisRow > 0 ? "partial" : "success";
-    await admin.from("dues_payments").update({
+    const { data, error } = await admin.from("dues_payments").update({
       status: rowStatus, paid_kobo: paidForThisRow, owed_kobo: owedForThisRow,
       channel: verifyData.channel, paid_at: verifyData.paid_at, raw_event: verifyData,
-    }).eq("id", rows[i].id);
+    }).eq("id", rows[i].id).eq("status", "pending").select("id");
+    if (error) throw error;
+    if (data && data.length > 0) updatedCount++;
   }
+
+  // Another path (the redirect-time verify) already applied this payment.
+  if (updatedCount === 0) return;
 
   const months = rows.map((r: any) => r.month).sort();
   const isFullyPaid = rows.every((r: any) => Math.max(0, r.amount_kobo - baseShare) <= 0);
@@ -101,21 +133,22 @@ serve(async (req) => {
     const payload = JSON.parse(rawBody);
     console.log("Verified webhook event:", payload.event);
 
-    // Withdrawals: the transfer reference is the withdrawal request id.
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+
     if (payload.event === "transfer.success" || payload.event === "transfer.failed" || payload.event === "transfer.reversed") {
       const ref = payload.data?.reference;
       if (!ref || !/^[0-9a-f-]{36}$/.test(ref)) return new Response("ok", { status: 200 });
-      // Re-confirm with Paystack rather than trusting the event body alone.
-      const verifyRes = await fetch(`https://api.paystack.co/transfer/verify/${encodeURIComponent(ref)}`, {
-        headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` },
-      });
-      const verifyJson = await verifyRes.json();
+      const verifyJson = await verifyTransferWithPaystack(ref);
       const s = verifyJson?.data?.status;
-      const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-      if (s === "success") {
-        await admin.rpc("finalize_withdrawal", { p_request_id: ref, p_outcome: "completed", p_transfer_code: verifyJson.data.transfer_code, p_reason: null });
-      } else if (s === "failed" || s === "reversed") {
-        await admin.rpc("finalize_withdrawal", { p_request_id: ref, p_outcome: s, p_transfer_code: verifyJson.data.transfer_code, p_reason: verifyJson.data.reason || `Transfer ${s}.` });
+      let outcome: string | null = null;
+      if (s === "success") outcome = "completed";
+      else if (s === "failed" || s === "reversed") outcome = s;
+      if (outcome) {
+        const { error } = await admin.rpc("finalize_withdrawal", {
+          p_request_id: ref, p_outcome: outcome, p_transfer_code: verifyJson.data.transfer_code,
+          p_reason: outcome === "completed" ? null : (verifyJson.data.reason || `Transfer ${s}.`),
+        });
+        if (error) throw error;
       }
       return new Response("ok", { status: 200 });
     }
@@ -127,50 +160,46 @@ serve(async (req) => {
     const reference = payload.data?.reference;
     if (!reference) return new Response("ok", { status: 200 });
 
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-
     if (reference.startsWith("POOL-")) {
-      const { data: row } = await admin.from("pool_payments").select("*").eq("reference", reference).maybeSingle();
+      const { data: row, error: rowErr } = await admin.from("pool_payments").select("*").eq("reference", reference).maybeSingle();
+      if (rowErr) throw rowErr;
       if (!row || row.status !== "pending") return new Response("ok", { status: 200 });
 
-      const verifyRes = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
-        headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` },
-      });
-      const verifyJson = await verifyRes.json();
+      const verifyJson = await verifyWithPaystack(reference);
       const paystackStatus = verifyJson?.data?.status;
       if (paystackStatus === "success" || paystackStatus === "failed" || paystackStatus === "abandoned") {
-        await admin.from("pool_payments").update({
+        const { error } = await admin.from("pool_payments").update({
           status: paystackStatus, channel: verifyJson.data.channel, paid_at: verifyJson.data.paid_at, raw_event: verifyJson.data,
         }).eq("reference", reference).eq("status", "pending");
+        if (error) throw error;
       }
       return new Response("ok", { status: 200 });
     }
 
-    const { data: rows } = await admin.from("dues_payments").select("*").eq("reference", reference);
+    const { data: rows, error: rowsErr } = await admin.from("dues_payments").select("*").eq("reference", reference);
+    if (rowsErr) throw rowsErr;
     if (!rows || rows.length === 0 || rows.every((r: any) => r.status !== "pending")) {
-      // Already processed (e.g. by verify-dues-payment on redirect) —
-      // idempotent no-op, this is expected on Paystack's retries.
+      // Unknown reference, or already processed (e.g. by verify-dues-payment
+      // on redirect) — idempotent no-op, expected on Paystack's retries.
       return new Response("ok", { status: 200 });
     }
 
-    const verifyRes = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
-      headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` },
-    });
-    const verifyJson = await verifyRes.json();
+    const verifyJson = await verifyWithPaystack(reference);
     const paystackStatus = verifyJson?.data?.status;
 
     if (paystackStatus === "success") {
       await applySplitAndNotify(admin, rows, verifyJson.data);
     } else if (paystackStatus === "failed" || paystackStatus === "abandoned") {
-      await admin.from("dues_payments").update({ status: paystackStatus, raw_event: verifyJson.data }).eq("reference", reference).eq("status", "pending");
+      const { error } = await admin.from("dues_payments").update({ status: paystackStatus, raw_event: verifyJson.data }).eq("reference", reference).eq("status", "pending");
+      if (error) throw error;
     }
 
     return new Response("ok", { status: 200 });
   } catch (e) {
+    // Non-2xx on purpose: Paystack retries, so a transient failure
+    // (database blip, Paystack verify down) can't leave a paid member
+    // stuck on 'pending'. Details are in the function logs.
     console.error(e);
-    // Still 200 — Paystack retries on non-2xx, and a transient error
-    // on our side shouldn't trigger a retry storm. Errors are visible
-    // in the function logs for follow-up.
-    return new Response("logged error", { status: 200 });
+    return new Response("processing error", { status: 500 });
   }
 });

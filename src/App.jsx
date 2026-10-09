@@ -147,6 +147,44 @@ function currency(n) {
   return `₦${Math.round(n || 0).toLocaleString()}`;
 }
 
+// Paystack Nigeria pricing (checked 2026-10-09; paystack.com/pricing). Kept in step with
+// paystack_charge_fee_kobo / paystack_transfer_fee_kobo in migration 85. These are only
+// estimates for display: credits use the exact fee Paystack reports on each payment.
+function paystackChargeFee(naira) {
+  const kobo = Math.round((Number(naira) || 0) * 100);
+  if (kobo <= 0) return 0;
+  return Math.min(200000, Math.round(kobo * 0.015) + (kobo >= 250000 ? 10000 : 0)) / 100;
+}
+
+function paystackTransferFee(naira) {
+  const n = Number(naira) || 0;
+  return n <= 5000 ? 10 : n <= 50000 ? 25 : 50;
+}
+
+function netAfterPaystackFee(naira) {
+  return (Number(naira) || 0) - paystackChargeFee(naira);
+}
+
+// Largest amount that can be withdrawn so that amount + its transfer fee fits in the balance.
+function maxWithdrawableFrom(available) {
+  let best = 0;
+  for (const fee of [10, 25, 50]) {
+    const x = Math.floor((available - fee) * 100) / 100;
+    if (x > 0 && paystackTransferFee(x) === fee) best = Math.max(best, x);
+  }
+  return best;
+}
+
+// The share of the Paystack fee that fell on one month of an online dues payment
+// (a payment covering several months splits its fee equally, as the database does).
+function onlineFeeFor(m, month, duesPayments) {
+  const row = (duesPayments || []).find((p) => p.memberId === m.id && p.month === month && (p.status === "success" || p.status === "partial"));
+  if (!row) return 0;
+  const siblings = (duesPayments || []).filter((p) => p.reference === row.reference).length || 1;
+  const txnFee = row.feesKobo != null ? row.feesKobo / 100 : paystackChargeFee((row.txnAmountKobo ?? row.paidKobo ?? row.amountKobo) / 100);
+  return txnFee / siblings;
+}
+
 // Dues aren't expected from a trainee until they're promoted to full
 // membership, or from a member marked temporarily unavailable — though
 // either can still choose to pay (this only excludes them from the
@@ -886,6 +924,8 @@ function Dashboard_Shell({ session, profile, setProfile }) {
         id: p.id, memberId: p.member_id, month: p.month, amountKobo: p.amount_kobo,
         paidKobo: p.paid_kobo, owedKobo: p.owed_kobo,
         reference: p.reference, status: p.status, channel: p.channel, paidAt: p.paid_at, createdAt: p.created_at,
+        feesKobo: p.raw_event?.fees != null ? Number(p.raw_event.fees) : null,
+        txnAmountKobo: p.raw_event?.amount != null ? Number(p.raw_event.amount) : null,
       })),
       members: (membersRes.data || []).map((m) => {
         const isSelf = ownMemberRow && m.id === ownMemberRow.id;
@@ -3040,7 +3080,30 @@ function SetPinModal({ onClose, notify, onSaved, hasPin }) {
   );
 }
 
-function WithdrawModal({ onClose, notify, reloadBalance, onResetPin }) {
+// Edge-function errors come back as a non-2xx Response; pull our { error } out of it.
+async function invokeFn(name, body) {
+  const { data, error } = await supabase.functions.invoke(name, { body });
+  if (error) {
+    let message = error.message;
+    try { const j = await error.context?.json?.(); if (j?.error) message = j.error; } catch (_) { /* keep generic */ }
+    return { data: null, error: message };
+  }
+  return { data, error: data?.ok === false ? data.error : data?.error || null };
+}
+
+function MoneyLine({ label, value, strong }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "3px 0", color: strong ? COLORS.textPrimary : COLORS.textSecondary, fontWeight: strong ? 600 : 400 }}>
+      <span>{label}</span><span>{value}</span>
+    </div>
+  );
+}
+
+function nairaExact(n) {
+  return `₦${(Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+}
+
+function WithdrawModal({ onClose, notify, reloadBalance, onResetPin, available, payout }) {
   const [step, setStep] = useState("amount"); // amount | otp
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
@@ -3049,9 +3112,14 @@ function WithdrawModal({ onClose, notify, reloadBalance, onResetPin }) {
   const [otp, setOtp] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const value = Number(amount) || 0;
+  const fee = value > 0 ? paystackTransferFee(value) : 0;
+  const total = value + fee;
+  const maxWithdrawable = maxWithdrawableFrom(available);
+
   async function submitAmount() {
-    const value = Number(amount);
-    if (!value || value <= 0) { notify?.("Enter a valid amount", "error"); return; }
+    if (!value || value < 100) { notify?.("The smallest withdrawal is ₦100", "error"); return; }
+    if (total > available) { notify?.(`That plus the ${nairaExact(fee)} transfer fee is more than the available balance`, "error"); return; }
     setBusy(true);
     const { data: newId, error } = await supabase.rpc("initiate_withdrawal", { p_amount: value, p_reason: reason || null });
     if (error) { notify?.(error.message, "error"); setBusy(false); return; }
@@ -3065,12 +3133,11 @@ function WithdrawModal({ onClose, notify, reloadBalance, onResetPin }) {
   async function submitConfirm() {
     if (!pin || !otp) { notify?.("Enter both the PIN and OTP", "error"); return; }
     setBusy(true);
-    const { data: result, error } = await supabase.rpc("confirm_withdrawal_v2", { p_request_id: requestId, p_pin: pin, p_otp: otp });
+    const { data: result, error } = await invokeFn("confirm-withdrawal", { request_id: requestId, pin, otp });
     setBusy(false);
-    if (error) { notify?.(error.message, "error"); return; }
-    if (!result?.ok) { notify?.(result?.error || "Couldn't complete the withdrawal", "error"); return; }
-    notify?.("Withdrawal completed");
     reloadBalance();
+    if (error) { notify?.(error, "error"); return; }
+    notify?.(result?.message || "Withdrawal sent");
     onClose();
   }
 
@@ -3078,16 +3145,29 @@ function WithdrawModal({ onClose, notify, reloadBalance, onResetPin }) {
     <Modal title="Withdraw funds" onClose={onClose} width={380}>
       {step === "amount" ? (
         <>
-          <Field label="Amount"><input type="number" style={inputStyle} value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+          <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12 }}>
+            Sends to <strong style={{ color: COLORS.textPrimary }}>{payout.bank_name} ••{payout.last4}</strong> ({payout.account_name}).
+          </div>
+          <Field label={`Amount (up to ${nairaExact(maxWithdrawable)})`}>
+            <input type="number" style={inputStyle} value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </Field>
+          {value > 0 && (
+            <div style={{ background: COLORS.surface2, borderRadius: 8, padding: "8px 12px", marginBottom: 12 }}>
+              <MoneyLine label="Arrives in the account" value={nairaExact(value)} />
+              <MoneyLine label="Paystack transfer fee" value={nairaExact(fee)} />
+              <MoneyLine label="Taken from wallet" value={nairaExact(total)} strong />
+              <MoneyLine label="Balance after" value={nairaExact(Math.max(0, available - total))} />
+            </div>
+          )}
           <Field label="Reason (optional)"><textarea style={{ ...inputStyle, minHeight: 60 }} value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
-          <Btn tone="amber" disabled={busy} onClick={submitAmount}>{busy ? "Starting..." : "Continue"}</Btn>
+          <Btn tone="amber" disabled={busy || total > available} onClick={submitAmount}>{busy ? "Starting..." : "Continue"}</Btn>
         </>
       ) : (
         <>
-          <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12 }}>An OTP has been emailed. Enter it along with the withdrawal PIN to complete this withdrawal.</div>
+          <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12 }}>An OTP has been emailed. Enter it with the withdrawal PIN to send {nairaExact(value)} to {payout.bank_name} ••{payout.last4}.</div>
           <Field label="Withdrawal PIN"><input type="password" style={inputStyle} value={pin} onChange={(e) => setPin(e.target.value)} /></Field>
           <Field label="OTP"><input style={inputStyle} value={otp} onChange={(e) => setOtp(e.target.value)} /></Field>
-          <Btn tone="amber" disabled={busy} onClick={submitConfirm}>{busy ? "Confirming..." : "Confirm withdrawal"}</Btn>
+          <Btn tone="amber" disabled={busy} onClick={submitConfirm}>{busy ? "Sending..." : "Confirm withdrawal"}</Btn>
           {onResetPin && (
             <div style={{ marginTop: 10, fontSize: 12, color: COLORS.textMuted, cursor: "pointer", textDecoration: "underline" }} onClick={onResetPin}>
               Forgot the PIN? Reset it
@@ -3099,15 +3179,83 @@ function WithdrawModal({ onClose, notify, reloadBalance, onResetPin }) {
   );
 }
 
+function PayoutAccountModal({ onClose, notify, onSaved, current }) {
+  const [banks, setBanks] = useState(null);
+  const [bankCode, setBankCode] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [accountName, setAccountName] = useState("");
+  const [resolving, setResolving] = useState(false);
+  const [pin, setPin] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    invokeFn("wallet-admin", { action: "banks" }).then(({ data, error }) => {
+      if (error) { notify?.(error, "error"); setBanks([]); return; }
+      setBanks(data.banks || []);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    setAccountName("");
+    if (!bankCode || !/^\d{10}$/.test(accountNumber)) return;
+    let cancelled = false;
+    setResolving(true);
+    invokeFn("wallet-admin", { action: "resolve_account", bank_code: bankCode, account_number: accountNumber }).then(({ data, error }) => {
+      if (cancelled) return;
+      setResolving(false);
+      if (error) { setAccountName(""); notify?.(error, "error"); return; }
+      setAccountName(data.account_name);
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bankCode, accountNumber]);
+
+  async function save() {
+    if (!accountName) { notify?.("Check the bank and account number first", "error"); return; }
+    if (!pin) { notify?.("Enter the withdrawal PIN", "error"); return; }
+    setBusy(true);
+    const { error } = await invokeFn("wallet-admin", { action: "save_payout_account", bank_code: bankCode, account_number: accountNumber, pin });
+    setBusy(false);
+    if (error) { notify?.(error, "error"); return; }
+    notify?.("Payout account saved");
+    onSaved?.();
+    onClose();
+  }
+
+  return (
+    <Modal title={current ? "Change payout account" : "Add payout account"} onClose={onClose} width={380}>
+      <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12 }}>
+        Withdrawals are sent only to this account. {current ? `It's currently ${current.bank_name} ••${current.last4}.` : ""} Changing it needs the withdrawal PIN and cancels any withdrawal waiting for its OTP.
+      </div>
+      <Field label="Bank">
+        <select style={inputStyle} value={bankCode} onChange={(e) => setBankCode(e.target.value)} disabled={!banks}>
+          <option value="">{banks ? "Choose a bank" : "Loading banks…"}</option>
+          {(banks || []).map((b) => <option key={b.code} value={b.code}>{b.name}</option>)}
+        </select>
+      </Field>
+      <Field label="Account number">
+        <input inputMode="numeric" maxLength={10} style={inputStyle} value={accountNumber} onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ""))} />
+      </Field>
+      <div style={{ fontSize: 13, minHeight: 20, marginBottom: 10, color: accountName ? COLORS.green : COLORS.textMuted }}>
+        {resolving ? "Checking account…" : accountName ? <><Check size={13} style={{ verticalAlign: "middle" }} /> {accountName}</> : ""}
+      </div>
+      <Field label="Withdrawal PIN"><input type="password" style={inputStyle} value={pin} onChange={(e) => setPin(e.target.value)} /></Field>
+      <Btn tone="amber" disabled={busy || !accountName} onClick={save}>{busy ? "Saving..." : "Save payout account"}</Btn>
+    </Modal>
+  );
+}
+
 function FundPoolModal({ onClose, notify }) {
   const [contributorName, setContributorName] = useState("");
   const [note, setNote] = useState("");
   const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState(false);
+  const value = Number(amount) || 0;
+  const fee = paystackChargeFee(value);
 
   async function submit() {
     if (!contributorName.trim()) { notify?.("Enter who this contribution is from", "error"); return; }
-    const value = Number(amount);
     if (!value || value <= 0) { notify?.("Enter a valid amount", "error"); return; }
     setBusy(true);
     const { data: result, error } = await supabase.functions.invoke("initialize-pool-payment", { body: { amount: value, contributor_name: contributorName.trim(), note: note.trim() || undefined } });
@@ -3122,45 +3270,88 @@ function FundPoolModal({ onClose, notify }) {
       <Field label="Contributor name"><input style={inputStyle} placeholder="Who this is from" value={contributorName} onChange={(e) => setContributorName(e.target.value)} /></Field>
       <Field label="Note (optional)"><textarea style={{ ...inputStyle, minHeight: 60 }} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
       <Field label="Amount"><input type="number" style={inputStyle} value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+      {value > 0 && (
+        <div style={{ background: COLORS.surface2, borderRadius: 8, padding: "8px 12px", marginBottom: 12 }}>
+          <MoneyLine label="Contributor pays" value={nairaExact(value)} />
+          <MoneyLine label="Paystack fee (est.)" value={`−${nairaExact(fee)}`} />
+          <MoneyLine label="Wallet receives" value={nairaExact(value - fee)} strong />
+        </div>
+      )}
       <Btn tone="amber" disabled={busy} onClick={submit}>{busy ? "Starting..." : "Continue to Paystack"}</Btn>
     </Modal>
   );
 }
 
+const LEDGER_LABELS = {
+  dues_credit: "Dues",
+  pool_credit: "Pool funding",
+  withdrawal: "Withdrawal",
+  transfer_fee: "Transfer fee",
+  withdrawal_reversal: "Withdrawal returned",
+  transfer_fee_reversal: "Transfer fee returned",
+  fee_correction: "Past Paystack fees",
+  opening_balance: "Opening balance",
+};
+
 function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
   const [month, setMonth] = useState(currentMonthStringWAT());
-  const [totalBalance, setTotalBalance] = useState(0);
-  const [duesTotal, setDuesTotal] = useState(0);
-  const [poolTotal, setPoolTotal] = useState(0);
+  const [overview, setOverview] = useState(null);
+  const [activity, setActivity] = useState([]);
+  const [paystackBalance, setPaystackBalance] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [showSetPin, setShowSetPin] = useState(false);
   const [showFundPool, setShowFundPool] = useState(false);
+  const [showPayout, setShowPayout] = useState(false);
   const [hasPin, setHasPin] = useState(null);
   const [confirmingPoolRef, setConfirmingPoolRef] = useState(null);
+  const canWithdraw = isAdmin && myUnit === "Operations";
 
   async function loadPinStatus() {
     const { data } = await supabase.rpc("get_withdrawal_pin_status");
     setHasPin(data === true);
   }
 
+  async function loadPaystackBalance() {
+    const { data: res, error } = await invokeFn("wallet-admin", { action: "paystack_balance" });
+    setPaystackBalance(error ? null : res.balance);
+  }
+
   async function loadBalance() {
-    const { data: row } = await supabase.from("wallet_balance").select("*").eq("id", 1).maybeSingle();
-    if (row) {
-      setTotalBalance(row.balance);
-      setDuesTotal(row.dues_total ?? 0);
-      setPoolTotal(row.pool_total ?? 0);
-    }
+    const [{ data: ov }, { data: rows }] = await Promise.all([
+      supabase.rpc("get_wallet_overview"),
+      supabase.from("wallet_ledger").select("*").neq("entry_type", "opening_balance").order("created_at", { ascending: false }).limit(8),
+    ]);
+    if (ov) setOverview(ov);
+    setActivity(rows || []);
+  }
+
+  async function refreshAll() {
+    setRefreshing(true);
+    if (canWithdraw && (overview?.processing || 0) > 0) await invokeFn("wallet-admin", { action: "refresh_withdrawals" });
+    await Promise.all([loadBalance(), loadPaystackBalance()]);
+    setRefreshing(false);
   }
 
   useEffect(() => {
     loadBalance();
     loadPinStatus();
+    loadPaystackBalance();
     const channel = supabase
-      .channel("wallet-balance-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "wallet_balance" }, loadBalance)
+      .channel("wallet-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "wallet_balance" }, () => { loadBalance(); loadPaystackBalance(); })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "wallet_ledger" }, loadBalance)
       .subscribe();
     return () => supabase.removeChannel(channel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // While a payout is in flight, keep checking so "being paid out" clears by itself.
+  useEffect(() => {
+    if (!((overview?.processing || 0) > 0)) return;
+    const t = setInterval(loadBalance, 15000);
+    return () => clearInterval(t);
+  }, [overview?.processing]);
 
   useEffect(() => {
     const ref = pendingPoolPaymentRef;
@@ -3177,35 +3368,39 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
       else setConfirmingPoolRef(null);
     }
     poll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingPoolPaymentRef]);
 
-  const canWithdraw = isAdmin && myUnit === "Operations";
-
+  // Expected = what the wallet should receive once Paystack takes its fee on each dues payment.
+  // Collected = what actually reached the team: online payments net of the fee Paystack charged,
+  // cash/transfer payments recorded by hand at face value.
   function statsFor(mo) {
     let expected = 0, collected = 0;
+    const tally = (m, recordedMonth, payments) => {
+      const due = getDue(m, recordedMonth, payments);
+      if (due.status !== "free" && !duesExempt(m)) expected += netAfterPaystackFee(rate(m));
+      const gross = due.amount || 0;
+      collected += due.viaOnline ? gross - onlineFeeFor(m, recordedMonth, data.duesPayments) : gross;
+    };
     if (mo === "all") {
-      data.members.forEach((m) => {
-        Object.keys(m.dues || {}).forEach((recordedMonth) => {
-          const due = getDue(m, recordedMonth, data.duesPayments);
-          if (due.status !== "free" && !duesExempt(m)) expected += rate(m);
-          collected += due.amount || 0;
-        });
-      });
+      data.members.forEach((m) => Object.keys(m.dues || {}).forEach((recordedMonth) => tally(m, recordedMonth, data.duesPayments)));
       return { expected, collected };
     }
-    data.members.forEach((m) => {
-      const due = getDue(m, mo);
-      if (due.status !== "free" && !duesExempt(m)) expected += rate(m);
-      collected += due.amount || 0;
-    });
+    data.members.forEach((m) => tally(m, mo, data.duesPayments));
     return { expected, collected };
   }
 
   const current = statsFor(month);
   const chartData = monthsRange(6).map((mo) => {
     const s = statsFor(mo);
-    return { month: mo.slice(5), Expected: s.expected, Collected: s.collected };
+    return { month: mo.slice(5), Expected: Math.round(s.expected), Collected: Math.round(s.collected) };
   });
+
+  const available = Number(overview?.balance || 0);
+  const processing = Number(overview?.processing || 0);
+  const payout = overview?.payout || null;
+  // Paystack makes card payments available after settlement, so its balance can trail ours for a day or so.
+  const unsettled = paystackBalance == null ? 0 : Math.round((available - paystackBalance) * 100) / 100;
 
   return (
     <Panel
@@ -3219,21 +3414,45 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
     >
       {confirmingPoolRef && <div style={{ fontSize: 12, color: COLORS.amber, marginBottom: 10 }}>Confirming pool payment…</div>}
       <div style={{ display: "flex", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
-        <div style={{ background: COLORS.surface2, borderRadius: 8, padding: "14px 16px", flex: 1, minWidth: 160 }}>
-          <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>Total balance</div>
+        <div style={{ background: COLORS.surface2, borderRadius: 8, padding: "14px 16px", flex: 2, minWidth: 240 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: COLORS.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Available balance
+            <RefreshCw size={11} className={refreshing ? "hldt-spin" : undefined} style={{ cursor: "pointer" }} onClick={refreshAll} />
+          </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
-            <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 22, color: COLORS.textPrimary }}>{currency(totalBalance)}</div>
-            {canWithdraw && <Btn small tone="ghost" onClick={() => setShowWithdraw(true)}>Withdraw</Btn>}
+            <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 22, color: COLORS.textPrimary }}>{overview ? nairaExact(available) : "…"}</div>
+            {canWithdraw && <Btn small tone="ghost" disabled={!payout || !hasPin || available <= 0} onClick={() => setShowWithdraw(true)}>Withdraw</Btn>}
             <Btn small tone="ghost" onClick={() => setShowFundPool(true)}>Fund pool</Btn>
             {canWithdraw && <Btn small tone="ghost" onClick={() => setShowSetPin(true)}>{hasPin === true ? "Change PIN" : "Set PIN"}</Btn>}
           </div>
-          <div style={{ display: "flex", gap: 14, fontSize: 12, color: COLORS.textSecondary }}>
-            <span>Dues: <strong style={{ color: COLORS.textPrimary }}>{currency(duesTotal)}</strong></span>
-            <span>Pool: <strong style={{ color: COLORS.textPrimary }}>{currency(poolTotal)}</strong></span>
+          {processing > 0 && (
+            <div style={{ fontSize: 12, color: COLORS.amber, marginBottom: 6 }}>
+              <Clock size={12} style={{ verticalAlign: "middle", marginRight: 4 }} />{nairaExact(processing)} being paid out (includes transfer fee)
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12, color: COLORS.textSecondary }}>
+            <span>Dues in: <strong style={{ color: COLORS.textPrimary }}>{currency(overview?.dues_total)}</strong></span>
+            <span>Pool in: <strong style={{ color: COLORS.textPrimary }}>{currency(overview?.pool_total)}</strong></span>
+            <span>Paystack fees: <strong style={{ color: COLORS.red }}>−{currency(overview?.fees_total)}</strong></span>
+            <span>Withdrawn: <strong style={{ color: COLORS.textPrimary }}>−{currency(overview?.withdrawn_total)}</strong></span>
           </div>
+          {paystackBalance != null && (
+            <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 8 }}>
+              Paystack is holding {nairaExact(paystackBalance)}
+              {unsettled > 1 ? ` · ${nairaExact(unsettled)} still settling` : unsettled < -1 ? ` · ${nairaExact(-unsettled)} more than the app has recorded` : " · matches"}
+            </div>
+          )}
+          {canWithdraw && (
+            <div style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              {payout
+                ? <span>Payouts go to <strong style={{ color: COLORS.textPrimary }}>{payout.bank_name} ••{payout.last4}</strong> ({payout.account_name})</span>
+                : <span style={{ color: COLORS.amber }}>No payout account yet — add one to withdraw.</span>}
+              <span style={{ textDecoration: "underline", cursor: "pointer" }} onClick={() => (hasPin ? setShowPayout(true) : notify?.("Set the withdrawal PIN first", "error"))}>{payout ? "Change" : "Add account"}</span>
+            </div>
+          )}
         </div>
-        <Metric label={month === "all" ? "Expected (all time)" : "Expected balance"} value={current.expected} isCurrency tone="amber" />
-        <Metric label={month === "all" ? "Collected (all time)" : "Total collected"} value={current.collected} isCurrency tone="green" />
+        <Metric label={month === "all" ? "Expected after fees (all time)" : "Expected after fees"} value={current.expected} isCurrency tone="amber" />
+        <Metric label={month === "all" ? "Collected after fees (all time)" : "Collected after fees"} value={current.collected} isCurrency tone="green" />
       </div>
       <div style={{ height: 200 }}>
         <ResponsiveContainer width="100%" height="100%">
@@ -3251,10 +3470,32 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
           </BarChart>
         </ResponsiveContainer>
       </div>
-      {month !== "all" && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 8 }}>Chart always shows the last 6 months, regardless of the filter above.</div>}
-      {showWithdraw && <WithdrawModal onClose={() => setShowWithdraw(false)} notify={notify} reloadBalance={loadBalance} onResetPin={() => { setShowWithdraw(false); setShowSetPin(true); }} />}
+      <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 8 }}>
+        Expected and collected are after Paystack's fee (1.5% + ₦100, ₦100 waived under ₦2,500, capped at ₦2,000). Cash payments recorded by hand have no fee.
+        {month !== "all" ? " Chart always shows the last 6 months." : ""}
+      </div>
+      {activity.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>Recent activity</div>
+          {activity.map((e) => (
+            <RowLine key={e.id}>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                {LEDGER_LABELS[e.entry_type] || e.entry_type}
+                {e.note && e.note !== LEDGER_LABELS[e.entry_type] ? <span style={{ color: COLORS.textMuted }}> · {e.note}</span> : null}
+                {e.fee_kobo > 0 && (e.entry_type === "dues_credit" || e.entry_type === "pool_credit")
+                  ? <span style={{ color: COLORS.textMuted }}> · {nairaExact(e.gross_kobo / 100)} less {nairaExact(e.fee_kobo / 100)} fee</span> : null}
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: e.amount_kobo >= 0 ? COLORS.green : COLORS.textPrimary, marginLeft: 8 }}>
+                {e.amount_kobo >= 0 ? "+" : "−"}{nairaExact(Math.abs(e.amount_kobo) / 100)}
+              </span>
+            </RowLine>
+          ))}
+        </div>
+      )}
+      {showWithdraw && payout && <WithdrawModal onClose={() => setShowWithdraw(false)} notify={notify} reloadBalance={loadBalance} available={available} payout={payout} onResetPin={() => { setShowWithdraw(false); setShowSetPin(true); }} />}
       {showSetPin && <SetPinModal onClose={() => setShowSetPin(false)} notify={notify} onSaved={loadPinStatus} hasPin={hasPin} />}
       {showFundPool && <FundPoolModal onClose={() => setShowFundPool(false)} notify={notify} />}
+      {showPayout && <PayoutAccountModal onClose={() => setShowPayout(false)} notify={notify} onSaved={loadBalance} current={payout} />}
     </Panel>
   );
 }

@@ -101,6 +101,25 @@ serve(async (req) => {
     const payload = JSON.parse(rawBody);
     console.log("Verified webhook event:", payload.event);
 
+    // Withdrawals: the transfer reference is the withdrawal request id.
+    if (payload.event === "transfer.success" || payload.event === "transfer.failed" || payload.event === "transfer.reversed") {
+      const ref = payload.data?.reference;
+      if (!ref || !/^[0-9a-f-]{36}$/.test(ref)) return new Response("ok", { status: 200 });
+      // Re-confirm with Paystack rather than trusting the event body alone.
+      const verifyRes = await fetch(`https://api.paystack.co/transfer/verify/${encodeURIComponent(ref)}`, {
+        headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` },
+      });
+      const verifyJson = await verifyRes.json();
+      const s = verifyJson?.data?.status;
+      const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+      if (s === "success") {
+        await admin.rpc("finalize_withdrawal", { p_request_id: ref, p_outcome: "completed", p_transfer_code: verifyJson.data.transfer_code, p_reason: null });
+      } else if (s === "failed" || s === "reversed") {
+        await admin.rpc("finalize_withdrawal", { p_request_id: ref, p_outcome: s, p_transfer_code: verifyJson.data.transfer_code, p_reason: verifyJson.data.reason || `Transfer ${s}.` });
+      }
+      return new Response("ok", { status: 200 });
+    }
+
     if (payload.event !== "charge.success" && payload.event !== "charge.failed") {
       return new Response("ok", { status: 200 });
     }

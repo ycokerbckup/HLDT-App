@@ -454,7 +454,7 @@ function Field({ label, children }) {
 function Btn({ children, onClick, tone = "default", small, type = "button", disabled, style }) {
   const toneStyles = {
     default: { background: COLORS.glass2, color: COLORS.textPrimary, border: `1px solid ${COLORS.glassBorder}` },
-    amber: { background: hexToRgba(COLORS.amber, 0.88), color: "#14171C", border: `1px solid ${hexToRgba(COLORS.amber, 0.95)}` },
+    amber: { background: hexToRgba(COLORS.amber, 0.88), color: readableTextOn(COLORS.amber), border: `1px solid ${hexToRgba(COLORS.amber, 0.95)}` },
     ghost: { background: hexToRgba(COLORS.textPrimary, 0.04), color: COLORS.textSecondary, border: `1px solid ${COLORS.glassBorder}` },
     danger: { background: hexToRgba(COLORS.red, 0.12), color: COLORS.red, border: `1px solid ${hexToRgba(COLORS.red, 0.3)}` },
   };
@@ -516,7 +516,7 @@ function useToasts() {
 
 function RowLine({ children, onClick, style, title }) {
   return (
-    <div className="hldt-row" data-clickable={!!onClick} onClick={onClick} title={title} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 4px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 14, minHeight: 24, cursor: onClick ? "pointer" : "default", ...style }}>
+    <div className="hldt-row" data-clickable={!!onClick} onClick={onClick} title={title} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 4px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 14, color: COLORS.textPrimary, minHeight: 24, cursor: onClick ? "pointer" : "default", ...style }}>
       {children}
     </div>
   );
@@ -597,7 +597,8 @@ function Modal({ title, onClose, children, width = 480, footer, dismissable = tr
         aria-label={typeof title === "string" ? title : undefined}
         style={{
           width: isMobile ? "100%" : width, maxWidth: "100%", maxHeight: isMobile ? "92dvh" : "85vh",
-          display: "flex", flexDirection: "column", background: COLORS.surface1,
+          display: "flex", flexDirection: "column", background: COLORS.surface1, color: COLORS.textPrimary,
+          fontFamily: "'Inter', system-ui, sans-serif",
           border: `1px solid ${COLORS.glassBorder}`, borderRadius: isMobile ? "24px 24px 0 0" : 22, overflow: "hidden",
           boxShadow: "0 30px 80px rgba(0,0,0,0.45)",
         }}
@@ -1280,7 +1281,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
     fontFamily: "'Inter', sans-serif", color: COLORS.textPrimary,
     "--nav-bg": COLORS.glass1, "--nav-border": COLORS.glassBorder, "--nav-text": COLORS.textPrimary,
     "--nav-active": COLORS.amber, "--nav-active-bg": hexToRgba(COLORS.amber, 0.14), "--nav-hover": hexToRgba(COLORS.textPrimary, 0.05),
-    "--nav-dot": COLORS.red, "--nav-muted": COLORS.textMuted, "--nav-surface": COLORS.surface2, "--nav-solid": hexToRgba(COLORS.surface1, 0.97),
+    "--nav-dot": COLORS.red, "--nav-dot-text": readableTextOn(COLORS.red), "--nav-muted": COLORS.textMuted, "--nav-surface": COLORS.surface2, "--nav-solid": hexToRgba(COLORS.surface1, 0.97),
   };
 
   return (
@@ -1882,7 +1883,7 @@ function NotificationBell({ notifications, readIds, onRead, onNavigate }) {
       >
         <span className={unread.length > 0 ? "hldt-wiggle-on-hover" : undefined} style={{ display: "flex" }}><Bell size={14} /></span>
         {unread.length > 0 && (
-          <span className="hldt-reaction-pop" style={{ position: "absolute", top: -2, right: -2, minWidth: 15, height: 15, borderRadius: 999, background: COLORS.red, color: "#fff", fontSize: 9, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>
+          <span className="hldt-reaction-pop" style={{ position: "absolute", top: -2, right: -2, minWidth: 15, height: 15, borderRadius: 999, background: COLORS.red, color: readableTextOn(COLORS.red), fontSize: 9, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>
             {unread.length > 9 ? "9+" : unread.length}
           </span>
         )}
@@ -3737,7 +3738,7 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef, ful
       }
     >
       {confirmingPoolRef && <div style={{ fontSize: 12, color: COLORS.amber, marginBottom: 10 }}>Confirming pool payment…</div>}
-      <div className="hldt-wallet" style={{ "--w-surface": COLORS.surface2, "--w-border": COLORS.border, "--w-text": COLORS.textPrimary, "--w-muted": COLORS.textSecondary, "--w-amber": COLORS.amber }}>
+      <div className="hldt-wallet" style={{ "--w-surface": COLORS.surface2, "--w-border": COLORS.border, "--w-text": COLORS.textPrimary, "--w-muted": COLORS.textSecondary, "--w-amber": COLORS.amber, "--w-on-amber": readableTextOn(COLORS.amber) }}>
         <div className="hldt-wallet-main">
           <div className="hldt-wcard" role="group" aria-label="Team wallet" data-tour="wallet">
             <div className="hldt-wcard-beam" aria-hidden="true" />

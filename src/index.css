@@ -542,7 +542,7 @@ body {
   color: var(--w-text);
   transition: transform 120ms ease, background-color 120ms ease;
 }
-.hldt-waction-icon.is-primary { background: var(--w-amber); border-color: transparent; color: #14171C; }
+.hldt-waction-icon.is-primary { background: var(--w-amber); border-color: transparent; color: var(--w-on-amber, #14171C); }
 .hldt-waction:hover:not(:disabled) .hldt-waction-icon { transform: translateY(-1px); }
 .hldt-waction:active:not(:disabled) .hldt-waction-icon { transform: scale(0.96); }
 .hldt-waction:focus-visible { outline: 2px solid var(--w-amber); outline-offset: 2px; }
@@ -613,7 +613,7 @@ body {
 .hldt-nav-count {
   min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
   display: inline-grid; place-items: center; font-size: 11px; font-weight: 700;
-  background: var(--nav-dot); color: #fff;
+  background: var(--nav-dot); color: var(--nav-dot-text, #fff);
 }
 /* top padding leaves room for the search / notifications / theme buttons pinned top-right */
 .hldt-main-desktop { flex: 1; min-width: 0; padding: 76px 32px 40px; position: relative; z-index: 1; }

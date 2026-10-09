@@ -30,10 +30,9 @@ grant execute on function public.paystack_transfer_fee_kobo(numeric) to authenti
 -- ============================================================
 -- Running total of money sent out.
 -- ============================================================
+-- Counts only payouts sent through Paystack. Withdrawals recorded before this
+-- (which only subtracted a number, no money moved) are not included.
 alter table public.wallet_balance add column if not exists withdrawn_total numeric not null default 0;
-update public.wallet_balance
-  set withdrawn_total = coalesce((select sum(amount) from public.withdrawal_requests where status = 'completed'), 0)
-  where id = 1 and withdrawn_total = 0;
 
 -- ============================================================
 -- Labelled audit entries. A function that moves money can set a label for

@@ -582,6 +582,7 @@ body {
 /* ---------------- App shell (v2) ----------------
    Colours come from CSS variables set on .hldt-app from the active theme. */
 .hldt-brand { display: flex; align-items: center; gap: 10px; }
+.hldt-brand-logo { width: 30px; height: 30px; flex: none; object-fit: contain; display: block; }
 .hldt-brand-mark {
   width: 30px; height: 30px; border-radius: 10px; flex: none;
   display: grid; place-items: center;

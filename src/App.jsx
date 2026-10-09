@@ -135,10 +135,35 @@ function getDue(m, month, duesPayments) {
     }
     return { status: "paid", amount: (onlinePayment.paidKobo ?? onlinePayment.amountKobo) / 100, viaOnline: true };
   }
+  // From DUES_START_MONTH on, dues come only from payment records: nothing is entered by hand.
+  if (month >= DUES_START_MONTH) {
+    if (duesExempt(m) || month > currentMonthStringWAT()) return { status: "unset", amount: 0 };
+    return { status: "owing", amount: 0, unpaid: true };
+  }
+  // Older months are an archive of what was recorded by hand before payments went online.
   const raw = (m.dues || {})[month];
   if (!raw) return { status: "unset", amount: 0 };
   if (typeof raw === "string") return { status: raw, amount: raw === "paid" ? null : 0 };
   return { status: raw.status || "unset", amount: typeof raw.amount === "number" ? raw.amount : 0 };
+}
+
+// Every tracked dues month from DUES_START_MONTH up to the current month.
+function duesMonthsSoFar() {
+  const out = [];
+  const now = currentMonthStringWAT();
+  let [y, m] = DUES_START_MONTH.split("-").map(Number);
+  for (let mo = DUES_START_MONTH; mo <= now; ) {
+    out.push(mo);
+    m += 1; if (m > 12) { m = 1; y += 1; }
+    mo = `${y}-${String(m).padStart(2, "0")}`;
+  }
+  return out;
+}
+
+// What a member still owes for a month (full rate if nothing paid, the balance if part-paid).
+function owedFor(m, due) {
+  if (due.status !== "owing") return 0;
+  return due.partial ? due.owedAmount : Math.max(0, rate(m) - (due.amount || 0));
 }
 
 function hexToRgba(hex, alpha) {
@@ -668,6 +693,7 @@ function AuthScreen() {
 
       <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 64, flexWrap: "wrap", width: "100%", maxWidth: 920 }}>
         <div style={{ flex: "1 1 320px", minWidth: 260, maxWidth: 420, textAlign: "left" }}>
+          <img src="/favicon-192.png" alt="" aria-hidden="true" width="56" height="56" style={{ display: "block", marginBottom: 18, objectFit: "contain" }} />
           <div style={{ fontVariantNumeric: "tabular-nums", fontSize: 13, fontWeight: 600, color: COLORS.amber, marginBottom: 14 }}>Welcome back</div>
           <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: "clamp(36px, 6vw, 56px)", lineHeight: 1.02, color: COLORS.textPrimary, letterSpacing: "-0.02em" }}>
             Display<br />Team
@@ -1241,9 +1267,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
 
   const brand = (
     <div className="hldt-brand">
-      <span className="hldt-brand-mark" aria-hidden="true" style={{ background: COLORS.amber }}>
-        <span />
-      </span>
+      <img className="hldt-brand-logo" src="/favicon-192.png" alt="" aria-hidden="true" width="30" height="30" />
       <span>
         <span className="hldt-brand-name" style={{ color: COLORS.textPrimary }}>Display Team</span>
       </span>
@@ -3112,8 +3136,8 @@ function OwingDuesModal({ data, onClose }) {
     ? data.members
         .filter((m) => !duesExempt(m))
         .map((m) => {
-          const owingMonths = Object.keys(m.dues || {}).filter((mo) => getDue(m, mo, data.duesPayments).status === "owing");
-          const totalOwed = owingMonths.reduce((sum, mo) => sum + Math.max(0, rate(m) - (getDue(m, mo, data.duesPayments).amount || 0)), 0);
+          const owingMonths = duesMonthsSoFar().filter((mo) => getDue(m, mo, data.duesPayments).status === "owing");
+          const totalOwed = owingMonths.reduce((sum, mo) => sum + owedFor(m, getDue(m, mo, data.duesPayments)), 0);
           return { m, owingMonths, totalOwed };
         })
         .filter((x) => x.owingMonths.length > 0)
@@ -3121,14 +3145,14 @@ function OwingDuesModal({ data, onClose }) {
         .filter((m) => !duesExempt(m))
         .map((m) => ({ m, due: getDue(m, month, data.duesPayments) }))
         .filter((x) => x.due.status === "owing")
-        .map((x) => ({ m: x.m, owingMonths: [month], totalOwed: Math.max(0, rate(x.m) - (x.due.amount || 0)) }));
+        .map((x) => ({ m: x.m, owingMonths: [month], totalOwed: owedFor(x.m, x.due) }));
 
   return (
     <Modal title="Members owing dues" onClose={onClose} width={520}>
       <Field label="Month">
         <select style={inputStyle} value={month} onChange={(e) => setMonth(e.target.value)}>
           <option value="all">All months</option>
-          {monthsRange(12).map((mo) => <option key={mo} value={mo}>{mo}</option>)}
+          {duesMonthsSoFar().slice().reverse().map((mo) => <option key={mo} value={mo}>{monthLabel(mo)}</option>)}
         </select>
       </Field>
       {owing.length === 0 ? (
@@ -3458,6 +3482,13 @@ function monthLabel(mo) {
   return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(undefined, { month: "long", year: "numeric", timeZone: "UTC" });
 }
 
+// "2026-10" → "Oct ’26"
+function monthShort(mo) {
+  const [y, m] = String(mo || "").split("-").map(Number);
+  if (!y || !m) return mo || "";
+  return `${new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(undefined, { month: "short", timeZone: "UTC" })} ’${String(y).slice(2)}`;
+}
+
 function fullDateTime(value) {
   if (!value) return "";
   const d = new Date(value);
@@ -3669,7 +3700,7 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef, ful
       collected += due.viaOnline ? gross - onlineFeeFor(m, recordedMonth, data.duesPayments) : gross;
     };
     if (mo === "all") {
-      data.members.forEach((m) => Object.keys(m.dues || {}).forEach((recordedMonth) => tally(m, recordedMonth, data.duesPayments)));
+      data.members.forEach((m) => duesMonthsSoFar().forEach((mo) => tally(m, mo, data.duesPayments)));
       return { expected, collected };
     }
     data.members.forEach((m) => tally(m, mo, data.duesPayments));
@@ -3823,7 +3854,7 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef, ful
         </ResponsiveContainer>
       </div>
       <div style={{ fontSize: 12.5, color: COLORS.textMuted, marginTop: 8 }}>
-        Expected and collected are after Paystack's fee (1.5% + ₦100, ₦100 waived under ₦2,500, capped at ₦2,000). Cash payments recorded by hand have no fee.
+        Expected and collected are after Paystack's fee (1.5% + ₦100, ₦100 waived under ₦2,500, capped at ₦2,000).
         {month !== "all" ? " Chart always shows the last 6 months." : ""}
       </div>
       {activity.length > 0 && (
@@ -3866,7 +3897,7 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWel
   const openTickets = data.tickets.filter((t) => t.status !== "Resolved");
   const inTraining = data.onboarding.filter((o) => o.status !== "Graduated");
   const readyToGraduate = data.onboarding.filter((o) => o.status === "Independently ready" || o.status === "Ready");
-  const owingCount = data.members.filter((m) => !duesExempt(m) && Object.keys(m.dues || {}).some((mo) => getDue(m, mo, data.duesPayments).status === "owing")).length;
+  const owingCount = data.members.filter((m) => !duesExempt(m) && duesMonthsSoFar().some((mo) => getDue(m, mo, data.duesPayments).status === "owing")).length;
 
   const todayKey = (() => {
     const d = new Date();
@@ -6289,50 +6320,14 @@ function RosterTab({ data, isAdmin, canManageRosters, myMember, reload, notify, 
 
 /* ---------------- dues ---------------- */
 
-function DueEditModal({ member, month, onClose, onSaved, notify }) {
-  const existing = getDue(member, month);
-  const [status, setStatus] = useState(existing.status === "unset" ? "paid" : existing.status);
-  const [amount, setAmount] = useState(existing.amount ?? (existing.status === "paid" ? rate(member) : 0));
-
-  async function save() {
-    const dues = { ...(member.dues || {}), [month]: { status, amount: Number(amount) || 0 } };
-    const { error } = await supabase.rpc("update_member_dues", { p_member_id: member.id, p_dues: dues });
-    if (error) { notify?.(error.message, "error"); return; }
-    notify?.(`${member.name}'s ${month} dues updated`);
-    onSaved();
-    onClose();
-  }
-
-  return (
-    <Modal
-      title={`${member.name} — ${month}`}
-      onClose={onClose}
-      width={360}
-      footer={<><Btn tone="ghost" onClick={onClose}>Cancel</Btn><Btn tone="amber" onClick={save}><Save size={13} /> Save</Btn></>}
-    >
-      <Field label="Status">
-        <select style={inputStyle} value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="unset">Not set</option>
-          <option value="paid">Paid</option>
-          <option value="owing">Owing</option>
-          <option value="free">Free</option>
-        </select>
-      </Field>
-      <Field label={`Amount paid (expected ${currency(rate(member))})`}>
-        <input type="number" min={0} step={100} style={inputStyle} value={amount} onChange={(e) => setAmount(e.target.value)} />
-      </Field>
-      <div style={{ fontSize: 12.5, color: COLORS.textMuted }}>
-        Paying above the expected amount is fine — the extra just shows in the collected total.
-      </div>
-    </Modal>
-  );
+function dueBadgeText(due, exempt) {
+  if (due.status === "paid") return "Paid ✓";
+  if (due.partial) return `Owing ${currency(due.owedAmount)}`;
+  if (due.status === "owing") return due.unpaid ? "Not paid" : "Owing";
+  if (due.status === "free") return "Waived";
+  return exempt ? "Not expected" : "Upcoming";
 }
 
-// Shared between the personal dues view and an admin's own-dues panel.
-// Lets someone select any combination of unpaid months (past-owed or
-// future) and pay for all of them in one transaction — the total is
-// always computed from the actual selection, never a typed-in amount,
-// so there's nothing to guess or split.
 function MultiMonthDuesPay({ member, months, duesPayments, onPay, paying }) {
   const [selected, setSelected] = useState([]);
 
@@ -6352,8 +6347,8 @@ function MultiMonthDuesPay({ member, months, duesPayments, onPay, paying }) {
         return (
           <label key={mo} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", cursor: "pointer" }}>
             <input type="checkbox" checked={selected.includes(mo)} onChange={() => toggle(mo)} />
-            <span style={{ flex: 1, fontSize: 13 }}>{mo}</span>
-            <Badge tone={due.status === "owing" ? "red" : "gray"}>{due.status === "unset" ? "Not set" : due.partial ? `Owing ${currency(due.owedAmount)}` : due.status}</Badge>
+            <span style={{ flex: 1, fontSize: 13 }}>{monthLabel(mo)}</span>
+            <Badge tone={due.status === "owing" ? "red" : "gray"}>{dueBadgeText(due)}</Badge>
           </label>
         );
       })}
@@ -6416,7 +6411,6 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef,
     return out;
   }, [monthPage]);
   const atStart = months.length > 0 && months[0] <= DUES_START_MONTH;
-  const [editing, setEditing] = useState(null);
 
   const pageNav = (
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
@@ -6445,9 +6439,9 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef,
                 const tone = due.status === "paid" ? "green" : due.status === "owing" ? "red" : due.status === "free" ? "amber" : "gray";
                 return (
                   <RowLine key={mo}>
-                    <span style={{ flex: 1 }}>{mo}</span>
+                    <span style={{ flex: 1 }}>{monthLabel(mo)}</span>
                     {due.amount ? <span style={{ fontSize: 12.5, color: COLORS.textMuted, marginRight: 8 }}>{currency(due.amount)}</span> : null}
-                    <Badge tone={tone}>{due.status === "unset" ? "Not set" : due.partial ? `Owing ${currency(due.owedAmount)}` : due.status}{due.viaOnline ? " ✓" : ""}</Badge>
+                    <Badge tone={tone}>{dueBadgeText(due, duesExempt(mine))}</Badge>
                   </RowLine>
                 );
               })}
@@ -6526,7 +6520,7 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef,
       )}
       <SectionHeader
         title="Dues"
-        subtitle="Members ₦3,500 · Leaders ₦5,500 expected. Click a cell to record what was actually paid."
+        subtitle="Members ₦3,500 · Leaders ₦5,500. Filled in automatically from Paystack payments."
         right={<Btn small tone="ghost" onClick={() => setShowLedger(!showLedger)}>{showLedger ? "Hide" : "Show"} payment ledger</Btn>}
       />
       {showLedger && (
@@ -6553,7 +6547,7 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef,
         <div className="hldt-dues-scroll" style={{ overflowX: "auto", "--sticky-bg": COLORS.surface1 }}>
           <div style={{ minWidth: 220 + months.length * 96 }}>
           <div className="hldt-dues-row" style={{ display: "grid", gridTemplateColumns: `minmax(200px, 1.4fr) repeat(${months.length}, minmax(88px, 0.9fr))`, fontSize: 13, fontWeight: 600, color: COLORS.textMuted, padding: "0 4px 8px" }}>
-            <div>Member</div>{months.map((mo) => <div key={mo} style={{ textAlign: "center" }}>{mo}</div>)}
+            <div>Member</div>{months.map((mo) => <div key={mo} style={{ textAlign: "center" }}>{monthShort(mo)}</div>)}
           </div>
           {data.members.length === 0 ? <EmptyRow text="No members yet." /> : data.members.map((m) => (
             <div key={m.id} className="hldt-dues-row" style={{ display: "grid", gridTemplateColumns: `minmax(200px, 1.4fr) repeat(${months.length}, minmax(88px, 0.9fr))`, alignItems: "center", padding: "8px 4px", borderTop: `1px solid ${COLORS.border}`, fontSize: 12 }}>
@@ -6562,8 +6556,8 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef,
                 const due = getDue(m, mo, data.duesPayments);
                 const tone = due.status === "paid" ? "green" : due.status === "owing" ? "red" : due.status === "free" ? "amber" : "gray";
                 return (
-                  <div key={mo} style={{ textAlign: "center", cursor: due.viaOnline ? "default" : "pointer" }} onClick={() => !due.viaOnline && setEditing({ member: m, month: mo })}>
-                    <Badge tone={tone}>{due.status === "unset" ? (duesExempt(m) ? (m.unavailable ? "Unavailable" : "Trainee") : "—") : due.partial ? `Owing ${currency(due.owedAmount)}` : due.amount ? currency(due.amount) : due.status}{due.viaOnline ? " ✓" : ""}</Badge>
+                  <div key={mo} style={{ textAlign: "center" }}>
+                    <Badge tone={tone}>{due.status === "unset" ? (duesExempt(m) ? (m.unavailable ? "Unavailable" : "Trainee") : "—") : due.status === "paid" && due.amount ? `${currency(due.amount)} ✓` : dueBadgeText(due)}</Badge>
                   </div>
                 );
               })}
@@ -6572,15 +6566,6 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef,
           </div>
         </div>
       </Panel>
-      {editing && (
-        <DueEditModal
-          member={editing.member}
-          month={editing.month}
-          notify={notify}
-          onClose={() => setEditing(null)}
-          onSaved={reload}
-        />
-      )}
     </div>
   );
 }

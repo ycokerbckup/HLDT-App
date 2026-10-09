@@ -53,6 +53,10 @@ const COLORS = { ...DARK_COLORS };
 
 function applyTheme(mode) {
   Object.assign(COLORS, mode === "light" ? LIGHT_COLORS : DARK_COLORS);
+  // inputStyle is built once at load; keep its colours in step with the theme.
+  if (typeof inputStyle !== "undefined") {
+    Object.assign(inputStyle, { background: COLORS.surface2, border: `1px solid ${COLORS.border}`, color: COLORS.textPrimary, outlineColor: COLORS.amber });
+  }
   if (typeof document !== "undefined") {
     document.documentElement.dataset.theme = mode;
     document.body.style.background = COLORS.bg;
@@ -64,6 +68,8 @@ const TIERS = ["Trainee", "Member", "Leader", "HOD"];
 const RATING_WORDS = ["Poor", "Average", "Good", "Very good"];
 const TICKET_STATUSES = ["Open", "Assigned", "In progress", "Resolved"];
 const SYSTEMS = ["proPresenter", "vmix", "resolume", "monitors", "screens", "network"];
+const SYSTEM_LABELS = { proPresenter: "ProPresenter", vmix: "vMix", resolume: "Resolume", monitors: "Monitors", screens: "Screens", network: "Network" };
+const SCORE_LABELS = { proPres: "ProPresenter", vmix: "vMix", resolume: "Resolume", hardware: "Hardware", attention: "Attention to detail", responsiveness: "Responsiveness", reliability: "Reliability" };
 const DUES_START_MONTH = "2026-09"; // reset point — dues before this are archived, not tracked in-app
 
 // The team operates on West Africa Time (UTC+1, no daylight saving).
@@ -141,6 +147,21 @@ function hexToRgba(hex, alpha) {
   const g = parseInt(h.substring(2, 4), 16);
   const b = parseInt(h.substring(4, 6), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// "Today, 10:53 PM" / "Yesterday, 9:00 AM" / "Tue 6 Oct, 11:00 AM" / "6 Oct 2025"
+function friendlyDateTime(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (isNaN(d)) return "";
+  const now = new Date();
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const sameDay = (a, b) => a.toDateString() === b.toDateString();
+  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+  if (sameDay(d, now)) return `Today, ${time}`;
+  if (sameDay(d, yesterday)) return `Yesterday, ${time}`;
+  if (d.getFullYear() === now.getFullYear()) return `${d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}, ${time}`;
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 
 function currency(n) {
@@ -385,9 +406,9 @@ function Panel({ title, right, children, style }) {
   return (
     <div className="hldt-panel hldt-glass" style={{ background: COLORS.glass1, border: `1px solid ${COLORS.glassBorder}`, borderRadius: 20, overflow: "hidden", ...style }}>
       {title && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", padding: "16px 18px 0" }}>
-          <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 16, color: COLORS.textPrimary }}>{title}</h3>
-          {right}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "16px 18px 0" }}>
+          <h3 style={{ margin: 0, flex: "1 1 auto", minWidth: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 16, lineHeight: 1.3, color: COLORS.textPrimary }}>{title}</h3>
+          {right && <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>{right}</div>}
         </div>
       )}
       <div style={{ padding: title ? "12px 18px 18px" : 18 }}>{children}</div>
@@ -2005,8 +2026,8 @@ function AnnouncementsTab({ data, isAdmin, canPost, canSeeReadReceipts, reload, 
               )}
             </div>
             <div style={{ fontSize: 13, color: COLORS.textSecondary, whiteSpace: "pre-wrap", marginBottom: 8 }}>{a.body}</div>
-            <div style={{ fontSize: 12.5, color: COLORS.textMuted, display: "flex", gap: 10, alignItems: "center" }}>
-              <span>{a.createdByName || "Admin"} · {new Date(a.createdAt).toLocaleString()}</span>
+            <div style={{ fontSize: 13, color: COLORS.textMuted, display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "center" }}>
+              <span>{a.createdByName || "Admin"} · {friendlyDateTime(a.createdAt)}</span>
               {canPost && withinEditWindow(a) && <span style={{ color: COLORS.amber }}>{timeLeft(a)}</span>}
               {canSeeReadReceipts && (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 3, cursor: "pointer", marginLeft: "auto" }} onClick={() => setShowReadersFor(a.id)}>
@@ -2028,7 +2049,7 @@ function AnnouncementsTab({ data, isAdmin, canPost, canSeeReadReceipts, reload, 
               .map((r, i) => (
                 <RowLine key={i}>
                   <span style={{ flex: 1 }}>{r.name}</span>
-                  <span style={{ fontSize: 12.5, color: COLORS.textMuted }}>{new Date(r.readAt).toLocaleString()}</span>
+                  <span style={{ fontSize: 12.5, color: COLORS.textMuted }}>{friendlyDateTime(r.readAt)}</span>
                 </RowLine>
               ))
           )}
@@ -2409,8 +2430,8 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
 
   return (
     <div>
-      <SectionHeader title="Chat" subtitle="Messages are removed 24 hours after being seen. Editable for 5 minutes after sending, deletable for 5 minutes after being seen." />
-      <div style={{ display: "flex", gap: 16, height: isMobile ? "calc(100dvh - 250px)" : "65vh" }}>
+      <SectionHeader title="Chat" subtitle={isMobile ? "Messages disappear 24 hours after they're seen." : "Messages disappear 24 hours after they're seen. You can edit a message for 5 minutes after sending, and delete it for 5 minutes after it's seen."} />
+      <div style={{ display: "flex", gap: 16, height: isMobile ? "max(360px, calc(100dvh - 290px - env(safe-area-inset-bottom)))" : "65vh" }}>
         {(!isMobile || !mobileShowThread) && (
           <div style={{ width: isMobile ? "100%" : 210, flexShrink: 0, display: "flex", flexDirection: "column", gap: 4, overflowY: "auto" }}>
             <div
@@ -2654,7 +2675,7 @@ function ChatTab({ session, profile, members, onboarding, notify, pendingDmProfi
                 ref={composerRef}
                 className="hldt-composer-input"
                 style={{ ...inputStyle, flex: 1, borderRadius: 20, padding: "10px 16px", resize: "none", maxHeight: 120, overflowY: "auto", lineHeight: 1.4, fontFamily: "inherit" }}
-                placeholder="Type a message... (@ to tag someone)"
+                placeholder={isMobile ? "Message" : "Message (type @ to tag someone)"}
                 value={text}
                 onChange={(e) => { handleTextChange(e.target.value); autoGrowComposer(); }}
                 rows={1}
@@ -3926,8 +3947,10 @@ function MembersTab({ data, isAdmin, canManage, myUnit, reload, currentUserId, n
           </div>
           {profiles.map((p) => (
             <RowLine key={p.id}>
-              <span style={{ flex: 1 }}>{p.full_name || p.email || p.id.slice(0, 8)}</span>
-              <span style={{ fontSize: 12.5, color: COLORS.textMuted, marginRight: 10 }}>{p.email}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.full_name || p.email || p.id.slice(0, 8)}</span>
+                {p.full_name && p.email && <span style={{ display: "block", fontSize: 12.5, color: COLORS.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.email}</span>}
+              </span>
               <Btn small tone={p.role === "admin" ? "amber" : "ghost"} onClick={() => setRole(p.id, p.role === "admin" ? "member" : "admin")}>
                 {p.role === "admin" ? "Admin" : "Member"}
               </Btn>
@@ -4178,7 +4201,7 @@ function OnboardingTab({ data, isAdmin, canManage, reload, adminName, notify }) 
             <>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 10, marginBottom: 10, marginTop: 14 }}>
                 {Object.keys(o.scores).map((k) => (
-                  <Field key={k} label={k}>
+                  <Field key={k} label={SCORE_LABELS[k] || k}>
                     <select style={inputStyle} value={o.scores[k]} onChange={(e) => updateScore(o, k, e.target.value)}>
                       {RATING_WORDS.map((r) => <option key={r} value={r}>{r}</option>)}
                     </select>
@@ -4197,7 +4220,7 @@ function OnboardingTab({ data, isAdmin, canManage, reload, adminName, notify }) 
                   <div style={{ marginTop: 6 }}>
                     {o.history.slice().reverse().slice(0, 10).map((h, i) => (
                       <div key={i} style={{ padding: "3px 0", fontVariantNumeric: "tabular-nums" }}>
-                        {new Date(h.timestamp).toLocaleString()} — {h.admin} set {h.field} to "{h.newValue}"
+                        {friendlyDateTime(h.timestamp)}: {h.admin} set {h.field} to "{h.newValue}"
                       </div>
                     ))}
                   </div>
@@ -4679,7 +4702,7 @@ function EquipmentTab({ data, isAdmin, myMember, canAccessInventory, canDeleteTi
             <div id={`ticket-${t.id}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8, gap: 10 }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 500 }}>{t.reporter} <span style={{ color: COLORS.textMuted, fontWeight: 400 }}>· {t.date}</span></div>
-                {issues.length > 0 ? <div style={{ fontSize: 12, color: COLORS.red, marginTop: 2 }}>Issues: {issues.join(", ")}</div> : <div style={{ fontSize: 12, color: COLORS.green, marginTop: 2 }}>All systems OK</div>}
+                {issues.length > 0 ? <div style={{ fontSize: 13, color: COLORS.red, marginTop: 2 }}>Problem with: {issues.map((x) => SYSTEM_LABELS[x] || x).join(", ")}</div> : <div style={{ fontSize: 12, color: COLORS.green, marginTop: 2 }}>All systems OK</div>}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                 <Badge tone={t.status === "Resolved" ? "green" : t.status === "Open" ? "red" : "amber"}>{t.status}</Badge>
@@ -5325,10 +5348,10 @@ function EventCalendar({ events, roles, members, session, notify }) {
         </div>
         <Btn small tone="ghost" onClick={() => setMonthCursor(new Date(Date.UTC(year, month + 1, 1)))}><ChevronRight size={14} /></Btn>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, fontSize: 11.5, color: COLORS.textMuted, textAlign: "center", marginBottom: 4 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 4, fontSize: 11.5, color: COLORS.textMuted, textAlign: "center", marginBottom: 4 }}>
         {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <div key={i}>{d}</div>)}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 4 }}>
         {cells.map((dateStr, i) => {
           if (!dateStr) return <div key={i} />;
           const dow = new Date(dateStr + "T00:00:00Z").getUTCDay();
@@ -5666,12 +5689,12 @@ function SpecialEventsTab({ data, canManageEvents, myUnit, session, notify }) {
           eventRoles.map((r) => {
             const assignee = data.members.find((m) => m.id === r.assigned_member_id);
             return (
-              <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: `1px solid ${COLORS.border}` }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13 }}>{r.role_name}</div>
+              <div key={r.id} className="hldt-role-row" style={{ borderTop: `1px solid ${COLORS.border}` }}>
+                <div style={{ flex: "1 1 160px", minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>{r.role_name}</div>
                   {ev.event_dates.length > 1 && (
                     canManageRolesThis && (!r.event_date || r.event_date >= today) ? (
-                      <select style={{ ...inputStyle, width: "auto", fontSize: 11.5, padding: "2px 6px", marginTop: 2 }} value={r.event_date || ""} onChange={(e) => changeRoleDate(r.id, e.target.value)}>
+                      <select aria-label={`Date for ${r.role_name}`} style={{ ...inputStyle, width: "auto", maxWidth: "100%", fontSize: 13, padding: "6px 10px", marginTop: 6 }} value={r.event_date || ""} onChange={(e) => changeRoleDate(r.id, e.target.value)}>
                         <option value="">All dates</option>
                         {[...ev.event_dates].sort((a, b) => a.date.localeCompare(b.date)).map((d) => <option key={d.date} value={d.date}>{formatDateShort(d.date)}</option>)}
                       </select>
@@ -5681,14 +5704,18 @@ function SpecialEventsTab({ data, canManageEvents, myUnit, session, notify }) {
                   )}
                 </div>
                 {canManageRolesThis ? (
-                  <select style={{ ...inputStyle, width: "auto", fontSize: 12, padding: "4px 8px" }} value={r.assigned_member_id || ""} onChange={(e) => assignRole(r.id, e.target.value)}>
+                  <select aria-label={`Who is doing ${r.role_name}`} className="hldt-role-select" style={{ ...inputStyle, fontSize: 14, padding: "8px 10px" }} value={r.assigned_member_id || ""} onChange={(e) => assignRole(r.id, e.target.value)}>
                     <option value="">Unassigned</option>
                     {data.members.filter((m) => !m.unavailable && !m.suspended).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                   </select>
                 ) : (
                   <span style={{ fontSize: 12, color: assignee ? COLORS.textPrimary : COLORS.textMuted }}>{assignee?.name || "Unassigned"}</span>
                 )}
-                {canManageRolesThis && <X size={13} style={{ cursor: "pointer", color: COLORS.textMuted }} onClick={() => removeRole(r.id)} />}
+                {canManageRolesThis && (
+                  <button type="button" aria-label={`Remove ${r.role_name}`} onClick={() => removeRole(r.id)} style={{ width: 34, height: 34, flexShrink: 0, borderRadius: 999, display: "grid", placeItems: "center", background: "none", border: "none", color: COLORS.textMuted, cursor: "pointer" }}>
+                    <X size={15} />
+                  </button>
+                )}
               </div>
             );
           })
@@ -5758,13 +5785,13 @@ function SpecialEventsTab({ data, canManageEvents, myUnit, session, notify }) {
             </div>
           )}
 
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr auto", gap: 8, alignItems: "end", marginBottom: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "minmax(0, 1fr) minmax(0, 1fr) auto", gap: 8, alignItems: "end", marginBottom: 8 }}>
             <Field label="Single date"><input type="date" style={inputStyle} value={singleDate} onChange={(e) => setSingleDate(e.target.value)} /></Field>
             <Field label="Time (optional)"><input type="time" style={inputStyle} value={singleTime} onChange={(e) => setSingleTime(e.target.value)} /></Field>
             <Btn small tone="ghost" onClick={addSingleDate}><Plus size={12} /> Add date</Btn>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr auto", gap: 8, alignItems: "end" }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto", gap: 8, alignItems: "end" }}>
             <Field label="Range start"><input type="date" style={inputStyle} value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} /></Field>
             <Field label="Range end"><input type="date" style={inputStyle} value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} /></Field>
             <Field label="Time (optional)"><input type="time" style={inputStyle} value={rangeTime} onChange={(e) => setRangeTime(e.target.value)} /></Field>
@@ -5964,18 +5991,18 @@ function RosterTab({ data, isAdmin, canManageRosters, myMember, reload, notify, 
         </Panel>
       )}
 
-      <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
-        <Panel title="Team A" style={{ flex: 1 }}>
+      <div className="hldt-two-col" style={{ marginBottom: 20 }}>
+        <Panel title={`Team A · ${teamA.length}`}>
           {teamA.length === 0 ? <EmptyRow text="No members assigned." /> : teamA.map((m) => (
             <RowLine key={m.id} style={{ opacity: m.unavailable ? 0.45 : 1 }} title={m.unavailable ? "Temporarily unavailable" : undefined}>
-              <span style={{ flex: 1 }}>{m.name}</span><span style={{ fontSize: 12.5, color: COLORS.textMuted }}>{m.unit}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>{m.name}{m.unavailable ? <span style={{ color: COLORS.textMuted }}> (away)</span> : null}</span><span style={{ fontSize: 13, color: COLORS.textMuted, flexShrink: 0 }}>{m.unit}</span>
             </RowLine>
           ))}
         </Panel>
-        <Panel title="Team B" style={{ flex: 1 }}>
+        <Panel title={`Team B · ${teamB.length}`}>
           {teamB.length === 0 ? <EmptyRow text="No members assigned." /> : teamB.map((m) => (
             <RowLine key={m.id} style={{ opacity: m.unavailable ? 0.45 : 1 }} title={m.unavailable ? "Temporarily unavailable" : undefined}>
-              <span style={{ flex: 1 }}>{m.name}</span><span style={{ fontSize: 12.5, color: COLORS.textMuted }}>{m.unit}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>{m.name}{m.unavailable ? <span style={{ color: COLORS.textMuted }}> (away)</span> : null}</span><span style={{ fontSize: 13, color: COLORS.textMuted, flexShrink: 0 }}>{m.unit}</span>
             </RowLine>
           ))}
         </Panel>
@@ -6002,10 +6029,14 @@ function RosterTab({ data, isAdmin, canManageRosters, myMember, reload, notify, 
             }
           >
             {r.items.map((it, i) => (
-              <RowLine key={i}>
-                <span style={{ flex: 1 }}>{it.title}</span>
-                <span style={{ fontSize: 12.5, color: COLORS.textMuted, marginRight: 10 }}>{it.duration_minutes} min</span>
-                <span style={{ fontSize: 12, color: COLORS.textSecondary }}>{it.assigned_name || "—"}</span>
+              <RowLine key={i} style={{ alignItems: "flex-start" }}>
+                <span style={{ width: 26, height: 26, flexShrink: 0, borderRadius: 999, display: "grid", placeItems: "center", fontSize: 12.5, fontWeight: 700, background: COLORS.surface2, color: COLORS.textSecondary }}>{i + 1}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: "block", fontWeight: 600 }}>{it.title}</span>
+                  <span style={{ display: "block", fontSize: 13, color: COLORS.textMuted, marginTop: 2 }}>
+                    {it.duration_minutes} min · {it.assigned_name ? <span style={{ color: COLORS.textSecondary }}>{it.assigned_name}</span> : "Nobody assigned yet"}
+                  </span>
+                </span>
               </RowLine>
             ))}
           </Panel>

@@ -311,6 +311,10 @@ body {
   padding: 2px;
   border-radius: 999px;
   display: inline-flex;
+  /* never stretch to the height of a flex row (it turned into a tall pill in chat) */
+  align-self: flex-start;
+  flex-shrink: 0;
+  height: max-content;
   transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .hldt-avatar-gradient-ring:hover {
@@ -764,3 +768,18 @@ body {
 .hldt-section-actions { display: flex; flex-wrap: wrap; gap: 8px; max-width: 100%; }
 .hldt-section-actions > div { flex-wrap: wrap !important; }
 @media (max-width: 640px) { .hldt-section-actions { width: 100%; } }
+
+/* Two panels side by side on wide screens, stacked on phones */
+.hldt-two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 720px) { .hldt-two-col { grid-template-columns: minmax(0, 1fr); } }
+
+/* Event role rows: role (and date) beside the person picker on wide screens, stacked on phones */
+.hldt-role-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 12px 0; }
+.hldt-role-select { width: auto; min-width: 180px; max-width: 100%; flex: 0 1 240px; }
+@media (max-width: 520px) {
+  .hldt-role-select { flex: 1 1 auto; min-width: 0; width: calc(100% - 44px) !important; }
+}
+
+/* Form controls never push past their container (date/time inputs have a wide built-in minimum) */
+.hldt-app input, .hldt-app select, .hldt-app textarea,
+.hldt-modal input, .hldt-modal select, .hldt-modal textarea { max-width: 100%; min-width: 0; }

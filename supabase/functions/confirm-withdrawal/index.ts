@@ -80,7 +80,8 @@ serve(async (req) => {
 
     if (!transferJson?.status) {
       // Rejected before any money moved (e.g. not enough in the Paystack balance).
-      const reason = transferJson?.message || "Paystack rejected the transfer.";
+      const raw = String(transferJson?.message || "Paystack rejected the transfer").trim();
+      const reason = /[.!?]$/.test(raw) ? raw : raw + ".";
       await admin.rpc("finalize_withdrawal", { p_request_id: request_id, p_outcome: "failed", p_transfer_code: null, p_reason: reason });
       return json({ ok: false, error: `Paystack didn't send it: ${reason} Nothing was taken from the wallet.` });
     }

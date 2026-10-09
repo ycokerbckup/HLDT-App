@@ -67,12 +67,12 @@ A GitHub Action (`.github/workflows/backup.yml`) runs daily at 03:00 UTC, pulls 
 
 The wallet holds the team's real money in the Paystack balance until an Operations admin withdraws it to the saved payout bank account.
 
-- Every movement is a row in `wallet_ledger` (append-only). The balance shown is net of the fee Paystack actually kept on each payment.
+- Every movement is a row in `wallet_movements` (append-only). The balance shown is net of the fee Paystack actually kept on each payment.
 - A withdrawal needs the PIN and the emailed OTP, then sends a real Paystack Transfer. The amount plus Paystack's transfer fee is held while it's processing, and returned automatically if the transfer fails or is reversed.
 
 **One-time setup:**
 
-1. Run `supabase_migrations/85_real_wallet_ledger_and_payouts.sql`.
+1. Run `supabase_migrations/85_real_wallet_movements_and_payouts.sql`.
 2. Deploy the new and changed functions: `supabase functions deploy confirm-withdrawal wallet-admin paystack-webhook`.
 3. In Paystack: **Settings → Preferences**, turn off "Confirm transfers before sending" (OTP for transfers), or every payout waits for approval in the Paystack dashboard. Make sure transfers are enabled on the account.
 4. In Paystack: set settlements to stay in the **Paystack balance** rather than being paid out to a bank automatically, so the money stays in the wallet until withdrawn.

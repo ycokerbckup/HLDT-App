@@ -6,7 +6,7 @@
 --   (b) a "withdrawal" only subtracted a number. No money moved anywhere.
 --
 -- After this:
---   * Every movement is an immutable row in wallet_ledger. wallet_balance is a
+--   * Every movement is an immutable row in wallet_movements. wallet_balance is a
 --     cached running total kept in step by a trigger on that ledger (so the
 --     app's existing realtime subscription on wallet_balance keeps working).
 --   * Payments are credited NET of the fee Paystack actually charged (the
@@ -55,7 +55,7 @@ alter table wallet_balance add column if not exists withdrawn_total numeric not 
 -- The ledger.
 -- amount_kobo is the signed effect on the balance.
 -- ============================================================
-create table if not exists wallet_ledger (
+create table if not exists wallet_movements (
   id bigserial primary key,
   entry_type text not null check (entry_type in (
     'opening_balance', 'fee_correction',
@@ -73,30 +73,30 @@ create table if not exists wallet_ledger (
   unique (entry_type, source_ref)
 );
 
-alter table wallet_ledger enable row level security;
-drop policy if exists "admins read wallet ledger" on wallet_ledger;
-create policy "admins read wallet ledger" on wallet_ledger for select using (public.is_admin());
-revoke all on public.wallet_ledger from anon;
-revoke insert, update, delete, truncate, references, trigger on public.wallet_ledger from authenticated;
-grant select on public.wallet_ledger to authenticated;
+alter table wallet_movements enable row level security;
+drop policy if exists "admins read wallet ledger" on wallet_movements;
+create policy "admins read wallet ledger" on wallet_movements for select using (public.is_admin());
+revoke all on public.wallet_movements from anon;
+revoke insert, update, delete, truncate, references, trigger on public.wallet_movements from authenticated;
+grant select on public.wallet_movements to authenticated;
 do $$ begin
-  alter publication supabase_realtime add table wallet_ledger;
+  alter publication supabase_realtime add table wallet_movements;
 exception when duplicate_object then null;
 end $$;
 
 -- The ledger is append-only.
-create or replace function public.wallet_ledger_immutable()
+create or replace function public.wallet_movements_immutable()
 returns trigger language plpgsql set search_path = public as $$
 begin
-  raise exception 'wallet_ledger rows cannot be changed or deleted.';
+  raise exception 'wallet_movements rows cannot be changed or deleted.';
 end;
 $$;
-drop trigger if exists wallet_ledger_no_update on wallet_ledger;
-create trigger wallet_ledger_no_update before update or delete on wallet_ledger
-  for each row execute procedure public.wallet_ledger_immutable();
+drop trigger if exists wallet_movements_no_update on wallet_movements;
+create trigger wallet_movements_no_update before update or delete on wallet_movements
+  for each row execute procedure public.wallet_movements_immutable();
 
 -- Every new ledger row moves the cached balance and totals.
-create or replace function public.apply_wallet_ledger_entry()
+create or replace function public.apply_wallet_movements_entry()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
   if new.entry_type = 'opening_balance' then
@@ -118,10 +118,10 @@ begin
   return new;
 end;
 $$;
-revoke execute on function public.apply_wallet_ledger_entry() from public, anon, authenticated;
-drop trigger if exists on_wallet_ledger_insert on wallet_ledger;
-create trigger on_wallet_ledger_insert after insert on wallet_ledger
-  for each row execute procedure public.apply_wallet_ledger_entry();
+revoke execute on function public.apply_wallet_movements_entry() from public, anon, authenticated;
+drop trigger if exists on_wallet_movements_insert on wallet_movements;
+create trigger on_wallet_movements_insert after insert on wallet_movements
+  for each row execute procedure public.apply_wallet_movements_entry();
 
 -- ============================================================
 -- Credits: net of the Paystack fee.
@@ -148,7 +148,7 @@ begin
     n := greatest(n, 1);
     row_fee := txn_fee / n + case when new.month = last_month then txn_fee % n else 0 end;
     row_fee := least(row_fee, paid);
-    insert into wallet_ledger (entry_type, amount_kobo, gross_kobo, fee_kobo, source_ref, note)
+    insert into wallet_movements (entry_type, amount_kobo, gross_kobo, fee_kobo, source_ref, note)
     values ('dues_credit', paid - row_fee, paid, row_fee, new.reference || ':' || new.month, 'Dues ' || new.month)
     on conflict (entry_type, source_ref) do nothing;
   end if;
@@ -174,7 +174,7 @@ begin
     end if;
     credit_kobo := least(confirmed_kobo, new.amount_kobo);
     fee := least(coalesce(nullif(new.raw_event->>'fees', '')::bigint, public.paystack_charge_fee_kobo(confirmed_kobo)), credit_kobo);
-    insert into wallet_ledger (entry_type, amount_kobo, gross_kobo, fee_kobo, source_ref, note)
+    insert into wallet_movements (entry_type, amount_kobo, gross_kobo, fee_kobo, source_ref, note)
     values ('pool_credit', credit_kobo - fee, credit_kobo, fee, new.reference, 'Pool: ' || new.contributor_name)
     on conflict (entry_type, source_ref) do nothing;
   end if;
@@ -192,12 +192,12 @@ declare
   historic_fees bigint;
   correction bigint;
 begin
-  if exists (select 1 from wallet_ledger where entry_type = 'opening_balance' and source_ref = 'migration-85') then
+  if exists (select 1 from wallet_movements where entry_type = 'opening_balance' and source_ref = 'migration-85') then
     return; -- already run
   end if;
 
   select round(balance * 100)::bigint into current_kobo from wallet_balance where id = 1 for update;
-  insert into wallet_ledger (entry_type, amount_kobo, source_ref, note)
+  insert into wallet_movements (entry_type, amount_kobo, source_ref, note)
   values ('opening_balance', current_kobo, 'migration-85', 'Balance before the ledger existed (fees not yet deducted)');
 
   -- Fees Paystack kept on payments that were credited gross, one per transaction.
@@ -216,7 +216,7 @@ begin
   -- against the Paystack balance.
   correction := least(historic_fees, greatest(current_kobo, 0));
   if correction > 0 then
-    insert into wallet_ledger (entry_type, amount_kobo, fee_kobo, source_ref, note)
+    insert into wallet_movements (entry_type, amount_kobo, fee_kobo, source_ref, note)
     values ('fee_correction', -correction, correction, 'migration-85', 'Paystack fees on payments credited before fees were tracked');
   end if;
 
@@ -409,10 +409,10 @@ begin
   end if;
 
   update withdrawal_requests set status = 'processing', processing_at = now(), otp_code = null where id = p_request_id;
-  insert into wallet_ledger (entry_type, amount_kobo, source_ref, withdrawal_id, note)
+  insert into wallet_movements (entry_type, amount_kobo, source_ref, withdrawal_id, note)
   values ('withdrawal', -amt_kobo, p_request_id::text, p_request_id, coalesce(req.reason, 'Withdrawal'));
   if coalesce(req.transfer_fee_kobo, 0) > 0 then
-    insert into wallet_ledger (entry_type, amount_kobo, fee_kobo, source_ref, withdrawal_id, note)
+    insert into wallet_movements (entry_type, amount_kobo, fee_kobo, source_ref, withdrawal_id, note)
     values ('transfer_fee', -req.transfer_fee_kobo, req.transfer_fee_kobo, p_request_id::text, p_request_id, 'Paystack transfer fee');
   end if;
 
@@ -436,7 +436,7 @@ begin
   if req is null then
     return jsonb_build_object('ok', false, 'error', 'Unknown withdrawal.');
   end if;
-  if not exists (select 1 from wallet_ledger where entry_type = 'withdrawal' and source_ref = p_request_id::text) then
+  if not exists (select 1 from wallet_movements where entry_type = 'withdrawal' and source_ref = p_request_id::text) then
     return jsonb_build_object('ok', false, 'error', 'This withdrawal never held any money.');
   end if;
 
@@ -452,11 +452,11 @@ begin
   elsif p_outcome in ('failed', 'reversed') then
     if req.status in ('processing', 'completed') then
       amt_kobo := round(req.amount * 100)::bigint;
-      insert into wallet_ledger (entry_type, amount_kobo, source_ref, withdrawal_id, note)
+      insert into wallet_movements (entry_type, amount_kobo, source_ref, withdrawal_id, note)
       values ('withdrawal_reversal', amt_kobo, p_request_id::text, p_request_id, 'Withdrawal ' || p_outcome)
       on conflict (entry_type, source_ref) do nothing;
       if coalesce(req.transfer_fee_kobo, 0) > 0 then
-        insert into wallet_ledger (entry_type, amount_kobo, fee_kobo, source_ref, withdrawal_id, note)
+        insert into wallet_movements (entry_type, amount_kobo, fee_kobo, source_ref, withdrawal_id, note)
         values ('transfer_fee_reversal', req.transfer_fee_kobo, -req.transfer_fee_kobo, p_request_id::text, p_request_id, 'Transfer fee returned')
         on conflict (entry_type, source_ref) do nothing;
       end if;

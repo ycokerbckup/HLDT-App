@@ -3320,7 +3320,7 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
   async function loadBalance() {
     const [{ data: ov }, { data: rows }] = await Promise.all([
       supabase.rpc("get_wallet_overview"),
-      supabase.from("wallet_ledger").select("*").neq("entry_type", "opening_balance").order("created_at", { ascending: false }).limit(8),
+      supabase.from("wallet_movements").select("*").neq("entry_type", "opening_balance").order("created_at", { ascending: false }).limit(8),
     ]);
     if (ov) setOverview(ov);
     setActivity(rows || []);
@@ -3340,7 +3340,7 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
     const channel = supabase
       .channel("wallet-live")
       .on("postgres_changes", { event: "*", schema: "public", table: "wallet_balance" }, () => { loadBalance(); loadPaystackBalance(); })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "wallet_ledger" }, loadBalance)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "wallet_movements" }, loadBalance)
       .subscribe();
     return () => supabase.removeChannel(channel);
     // eslint-disable-next-line react-hooks/exhaustive-deps

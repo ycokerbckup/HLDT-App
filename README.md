@@ -67,7 +67,7 @@ A GitHub Action (`.github/workflows/backup.yml`) runs daily at 03:00 UTC, pulls 
 
 The wallet holds the team's real money in the Paystack balance until an Operations admin withdraws it to the saved payout bank account.
 
-- Every movement is a row in `wallet_ledger` (append-only). The balance shown is net of the fee Paystack actually kept on each payment.
+- Every balance change is logged in the append-only `wallet_ledger` audit table with a label saying what it was. The balance is net of the fee Paystack actually kept on each payment.
 - A withdrawal needs the PIN and the emailed OTP, then sends a real Paystack Transfer. The amount plus Paystack's transfer fee is held while it's processing, and returned automatically if the transfer fails or is reversed.
 
 **One-time setup:**

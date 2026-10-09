@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, GraduationCap, Wrench, CalendarDays,
   Wallet, MessageSquare, Plus, X, ChevronRight, ChevronLeft, Shield, User,
   CheckCircle2, Clock, Trash2, Save, LogOut, RefreshCw, Download,
-  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil, GripVertical, Eye, EyeOff, Camera, Menu, CornerUpLeft, Check, CheckCheck, Boxes, DollarSign, Sparkles, ClipboardCheck, Search as SearchIcon, PartyPopper
+  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil, GripVertical, Eye, EyeOff, Camera, Menu, CornerUpLeft, Check, CheckCheck, Boxes, DollarSign, Sparkles, ClipboardCheck, Search as SearchIcon, PartyPopper, ArrowUpRight, KeyRound, Landmark
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "./supabaseClient";
@@ -3300,7 +3300,16 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
   const [showPayout, setShowPayout] = useState(false);
   const [hasPin, setHasPin] = useState(null);
   const [confirmingPoolRef, setConfirmingPoolRef] = useState(null);
+  const [live, setLive] = useState(false);
+  const [hideBalance, setHideBalance] = useState(() => { try { return localStorage.getItem("hldt-hide-balance") === "1"; } catch (_) { return false; } });
   const canWithdraw = isAdmin && myUnit === "Operations";
+
+  function toggleHide() {
+    setHideBalance((h) => {
+      try { localStorage.setItem("hldt-hide-balance", h ? "0" : "1"); } catch (_) { /* private mode */ }
+      return !h;
+    });
+  }
 
   async function loadPinStatus() {
     const { data } = await supabase.rpc("get_withdrawal_pin_status");
@@ -3335,7 +3344,7 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
     const channel = supabase
       .channel("wallet-live")
       .on("postgres_changes", { event: "*", schema: "public", table: "wallet_balance" }, () => { loadBalance(); loadPaystackBalance(); })
-      .subscribe();
+      .subscribe((status) => setLive(status === "SUBSCRIBED"));
     return () => supabase.removeChannel(channel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -3395,6 +3404,9 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
   const payout = overview?.payout || null;
   // Paystack makes card payments available after settlement, so its balance can trail ours for a day or so.
   const unsettled = paystackBalance == null ? 0 : Math.round((available - paystackBalance) * 100) / 100;
+  const withdrawHint = hasPin === false ? "Set a withdrawal PIN to start withdrawing."
+    : hasPin && !payout ? "Add the payout account to start withdrawing."
+    : null;
 
   return (
     <Panel
@@ -3407,46 +3419,96 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef }) {
       }
     >
       {confirmingPoolRef && <div style={{ fontSize: 12, color: COLORS.amber, marginBottom: 10 }}>Confirming pool payment…</div>}
-      <div style={{ display: "flex", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
-        <div style={{ background: COLORS.surface2, borderRadius: 8, padding: "14px 16px", flex: 2, minWidth: 240 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: COLORS.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-            Available balance
-            <RefreshCw size={11} className={refreshing ? "hldt-spin" : undefined} style={{ cursor: "pointer" }} onClick={refreshAll} />
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
-            <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 22, color: COLORS.textPrimary }}>{overview ? nairaExact(available) : "…"}</div>
-            {canWithdraw && <Btn small tone="ghost" disabled={!payout || !hasPin || available <= 0} onClick={() => setShowWithdraw(true)}>Withdraw</Btn>}
-            <Btn small tone="ghost" onClick={() => setShowFundPool(true)}>Fund pool</Btn>
-            {canWithdraw && <Btn small tone="ghost" onClick={() => setShowSetPin(true)}>{hasPin === true ? "Change PIN" : "Set PIN"}</Btn>}
-          </div>
-          {processing > 0 && (
-            <div style={{ fontSize: 12, color: COLORS.amber, marginBottom: 6 }}>
-              <Clock size={12} style={{ verticalAlign: "middle", marginRight: 4 }} />{nairaExact(processing)} being paid out (includes transfer fee)
+      <div className="hldt-wallet" style={{ "--w-surface": COLORS.surface2, "--w-border": COLORS.border, "--w-text": COLORS.textPrimary, "--w-muted": COLORS.textSecondary, "--w-amber": COLORS.amber }}>
+        <div className="hldt-wallet-main">
+          <div className="hldt-wcard" role="group" aria-label="Team wallet">
+            <div className="hldt-wcard-beam" aria-hidden="true" />
+            <div className="hldt-wcard-top">
+              <span className="hldt-wcard-name">Display Team wallet</span>
+              <button type="button" className="hldt-wcard-live" onClick={refreshAll} title="Refresh balance" aria-label="Refresh balance">
+                <span className={`hldt-wcard-dot${live ? " is-live" : ""}`} aria-hidden="true" />
+                {refreshing ? "Updating" : live ? "Live" : "Offline"}
+                <RefreshCw size={12} className={refreshing ? "hldt-spin" : undefined} aria-hidden="true" />
+              </button>
             </div>
-          )}
-          <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12, color: COLORS.textSecondary }}>
-            <span>Dues in: <strong style={{ color: COLORS.textPrimary }}>{currency(overview?.dues_total)}</strong></span>
-            <span>Pool in: <strong style={{ color: COLORS.textPrimary }}>{currency(overview?.pool_total)}</strong></span>
-            <span>Paystack fees: <strong style={{ color: COLORS.red }}>−{currency(overview?.fees_total)}</strong></span>
-            <span>Withdrawn: <strong style={{ color: COLORS.textPrimary }}>−{currency(overview?.withdrawn_total)}</strong></span>
+            <div className="hldt-wcard-mid">
+              <div className="hldt-wcard-label">Available balance</div>
+              <div className="hldt-wcard-amount-row">
+                <div className="hldt-wcard-amount" aria-live="polite">
+                  {!overview ? <span className="hldt-wcard-placeholder">₦ — —</span>
+                    : hideBalance ? <span aria-label="Balance hidden">₦ ••••••</span>
+                    : <><span className="hldt-wcard-naira">₦{Math.floor(available).toLocaleString()}</span><span className="hldt-wcard-kobo">.{String(Math.round((available % 1) * 100)).padStart(2, "0")}</span></>}
+                </div>
+                <button type="button" className="hldt-wcard-eye" onClick={toggleHide} aria-label={hideBalance ? "Show balance" : "Hide balance"} title={hideBalance ? "Show balance" : "Hide balance"}>
+                  {hideBalance ? <Eye size={16} /> : <EyeOff size={16} />}
+                </button>
+              </div>
+              {processing > 0 && (
+                <div className="hldt-wcard-pending"><Clock size={12} aria-hidden="true" /> {hideBalance ? "A payout" : nairaExact(processing)} on its way to the bank</div>
+              )}
+            </div>
+            <div className="hldt-wcard-bottom">
+              <div className="hldt-wcard-acct">
+                {payout ? (
+                  <>
+                    <span className="hldt-wcard-digits">•••• {payout.last4}</span>
+                    <span className="hldt-wcard-bank">{payout.bank_name}</span>
+                  </>
+                ) : (
+                  <span className="hldt-wcard-bank">No payout account yet</span>
+                )}
+              </div>
+              <svg className="hldt-wcard-chip" viewBox="0 0 40 30" aria-hidden="true">
+                <rect x="0.5" y="0.5" width="39" height="29" rx="6" />
+                <path d="M0.5 10h11M0.5 20h11M28.5 10h11M28.5 20h11M11.5 0.5v29M28.5 0.5v29M11.5 15h17" />
+              </svg>
+            </div>
           </div>
-          {paystackBalance != null && (
-            <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 8 }}>
-              Paystack is holding {nairaExact(paystackBalance)}
-              {unsettled > 1 ? ` · ${nairaExact(unsettled)} still settling` : unsettled < -1 ? ` · ${nairaExact(-unsettled)} more than the app has recorded` : " · matches"}
-            </div>
-          )}
-          {canWithdraw && (
-            <div style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              {payout
-                ? <span>Payouts go to <strong style={{ color: COLORS.textPrimary }}>{payout.bank_name} ••{payout.last4}</strong> ({payout.account_name})</span>
-                : <span style={{ color: COLORS.amber }}>No payout account yet — add one to withdraw.</span>}
-              <span style={{ textDecoration: "underline", cursor: "pointer" }} onClick={() => (hasPin ? setShowPayout(true) : notify?.("Set the withdrawal PIN first", "error"))}>{payout ? "Change" : "Add account"}</span>
-            </div>
-          )}
+
+          <div className="hldt-wactions">
+            {canWithdraw && (
+              <button type="button" className="hldt-waction" disabled={!payout || !hasPin || available <= 0} onClick={() => setShowWithdraw(true)}>
+                <span className="hldt-waction-icon is-primary"><ArrowUpRight size={18} /></span>Withdraw
+              </button>
+            )}
+            <button type="button" className="hldt-waction" onClick={() => setShowFundPool(true)}>
+              <span className="hldt-waction-icon"><Plus size={18} /></span>Fund pool
+            </button>
+            {canWithdraw && (
+              <button type="button" className="hldt-waction" onClick={() => (hasPin ? setShowPayout(true) : notify?.("Set the withdrawal PIN first", "error"))}>
+                <span className="hldt-waction-icon"><Landmark size={18} /></span>{payout ? "Payout account" : "Add account"}
+              </button>
+            )}
+            {canWithdraw && (
+              <button type="button" className="hldt-waction" onClick={() => setShowSetPin(true)}>
+                <span className="hldt-waction-icon"><KeyRound size={18} /></span>{hasPin === true ? "Change PIN" : "Set PIN"}
+              </button>
+            )}
+          </div>
+          {canWithdraw && withdrawHint && <div className="hldt-whint" style={{ color: COLORS.textMuted }}>{withdrawHint}</div>}
         </div>
-        <Metric label={month === "all" ? "Expected after fees (all time)" : "Expected after fees"} value={current.expected} isCurrency tone="amber" />
-        <Metric label={month === "all" ? "Collected after fees (all time)" : "Collected after fees"} value={current.collected} isCurrency tone="green" />
+
+        <div className="hldt-wallet-side">
+          <div className="hldt-wbreak" style={{ background: COLORS.surface2 }}>
+            <div className="hldt-wbreak-row" style={{ color: COLORS.textSecondary }}><span>Dues received</span><strong style={{ color: COLORS.textPrimary }}>{currency(overview?.dues_total)}</strong></div>
+            <div className="hldt-wbreak-row" style={{ color: COLORS.textSecondary }}><span>Pool funding</span><strong style={{ color: COLORS.textPrimary }}>{currency(overview?.pool_total)}</strong></div>
+            <div className="hldt-wbreak-row" style={{ color: COLORS.textSecondary }}><span>Paystack fees</span><strong style={{ color: COLORS.red }}>−{currency(overview?.fees_total)}</strong></div>
+            <div className="hldt-wbreak-row" style={{ color: COLORS.textSecondary }}><span>Paid out</span><strong style={{ color: COLORS.textPrimary }}>−{currency(overview?.withdrawn_total)}</strong></div>
+            {paystackBalance != null && (
+              <div className="hldt-wbreak-note" style={{ color: COLORS.textMuted, borderTop: `1px solid ${COLORS.border}` }}>
+                {Math.abs(unsettled) <= 1
+                  ? <><Check size={12} aria-hidden="true" /> Matches the {nairaExact(paystackBalance)} Paystack is holding</>
+                  : unsettled > 1
+                    ? <>Paystack is holding {nairaExact(paystackBalance)}. {nairaExact(unsettled)} is still settling.</>
+                    : <>Paystack is holding {nairaExact(paystackBalance)}, {nairaExact(-unsettled)} more than the app has recorded.</>}
+              </div>
+            )}
+          </div>
+          <div className="hldt-wmetrics">
+            <Metric label={month === "all" ? "Expected after fees (all time)" : "Expected after fees"} value={current.expected} isCurrency tone="amber" />
+            <Metric label={month === "all" ? "Collected after fees (all time)" : "Collected after fees"} value={current.collected} isCurrency tone="green" />
+          </div>
+        </div>
       </div>
       <div style={{ height: 200 }}>
         <ResponsiveContainer width="100%" height="100%">

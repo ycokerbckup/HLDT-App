@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, GraduationCap, Wrench, CalendarDays,
   Wallet, MessageSquare, Plus, X, ChevronRight, ChevronLeft, Shield, User,
   CheckCircle2, Clock, Trash2, Save, LogOut, RefreshCw, Download,
-  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil, GripVertical, Eye, EyeOff, Camera, Menu, CornerUpLeft, Check, CheckCheck, Boxes, DollarSign, Sparkles, ClipboardCheck, Search as SearchIcon, PartyPopper, ArrowUpRight, ArrowDownLeft, KeyRound, Landmark
+  Sun, Moon, Bell, Megaphone, MessageCircle, Rss, Link2, Settings, Pencil, GripVertical, Eye, EyeOff, Camera, Menu, CornerUpLeft, Check, CheckCheck, Boxes, DollarSign, Sparkles, ClipboardCheck, Search as SearchIcon, PartyPopper, ArrowUpRight, ArrowDownLeft, KeyRound, Landmark, Minus
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "./supabaseClient";
@@ -6347,45 +6347,55 @@ function dueBadgeText(due, exempt) {
   return exempt ? "Not expected" : "Upcoming";
 }
 
-function MultiMonthDuesPay({ member, months, duesPayments, onPay, paying }) {
-  const [selected, setSelected] = useState([]);
+const MAX_DUES_MONTHS = 12;
 
-  const payableMonths = months.filter((mo) => getDue(member, mo, duesPayments).status !== "paid");
-  const total = selected.length * rate(member);
-
-  function toggle(mo) {
-    setSelected((prev) => prev.includes(mo) ? prev.filter((m) => m !== mo) : [...prev, mo]);
+// The months a member can pay for, in the order they're paid: every unpaid month so far
+// (oldest first), then upcoming months not already paid ahead, up to MAX_DUES_MONTHS.
+function payableDuesMonths(member, duesPayments) {
+  const out = duesMonthsSoFar().filter((mo) => getDue(member, mo, duesPayments).status === "owing");
+  for (let i = 1; out.length < MAX_DUES_MONTHS && i <= 36; i++) {
+    const mo = monthStringWAT(i);
+    if (mo < DUES_START_MONTH) continue;
+    if (getDue(member, mo, duesPayments).status !== "paid") out.push(mo);
   }
+  return out.slice(0, MAX_DUES_MONTHS);
+}
 
-  if (payableMonths.length === 0) return null;
+// Compact "how many months" picker: pays the oldest unpaid months first, then pays ahead.
+function DuesPayPicker({ member, duesPayments, onPay, paying }) {
+  const options = payableDuesMonths(member, duesPayments);
+  const owedCount = duesMonthsSoFar().filter((mo) => getDue(member, mo, duesPayments).status === "owing").length;
+  const [count, setCount] = useState(Math.min(Math.max(owedCount, 1), options.length || 1));
+  if (options.length === 0) return null;
 
-  const allSelected = payableMonths.every((mo) => selected.includes(mo));
+  const n = Math.min(Math.max(count, 1), options.length);
+  const chosen = options.slice(0, n);
+  const total = n * rate(member);
+  const ahead = chosen.filter((mo) => mo > currentMonthStringWAT()).length;
+  const range = n === 1 ? monthLabel(chosen[0]) : `${monthShort(chosen[0])} – ${monthShort(chosen[n - 1])}`;
+  const stepBtn = { width: 30, height: 30, borderRadius: 8, border: `1px solid ${COLORS.border}`, background: COLORS.surface2, color: COLORS.textPrimary, display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 };
 
   return (
     <div>
-      {payableMonths.length > 1 && (
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 2 }}>
-          <Btn small tone="ghost" onClick={() => setSelected(allSelected ? [] : payableMonths)}>{allSelected ? "Clear" : "Select all"}</Btn>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ fontSize: 13, color: COLORS.textSecondary }}>Months</span>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <button type="button" style={{ ...stepBtn, opacity: n <= 1 ? 0.4 : 1 }} disabled={n <= 1} onClick={() => setCount(n - 1)} aria-label="Fewer months"><Minus size={14} /></button>
+          <span style={{ minWidth: 22, textAlign: "center", fontWeight: 700, fontSize: 15 }} aria-live="polite">{n}</span>
+          <button type="button" style={{ ...stepBtn, opacity: n >= options.length ? 0.4 : 1 }} disabled={n >= options.length} onClick={() => setCount(n + 1)} aria-label="More months"><Plus size={14} /></button>
         </div>
-      )}
-      {payableMonths.map((mo) => {
-        const due = getDue(member, mo, duesPayments);
-        return (
-          <label key={mo} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", cursor: "pointer" }}>
-            <input type="checkbox" checked={selected.includes(mo)} onChange={() => toggle(mo)} />
-            <span style={{ flex: 1, fontSize: 13 }}>{monthLabel(mo)}</span>
-            <Badge tone={due.status === "owing" ? "red" : "gray"}>{dueBadgeText(due)}</Badge>
-          </label>
-        );
-      })}
-      {selected.length > 0 && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${COLORS.border}` }}>
-          <span style={{ flex: 1, fontSize: 13, color: COLORS.textSecondary }}>{selected.length} month{selected.length > 1 ? "s" : ""} selected · {currency(total)}</span>
-          <Btn tone="amber" disabled={paying} onClick={() => onPay(selected)}>
-            {paying ? "Redirecting..." : `Pay ${currency(total)}`}
-          </Btn>
-        </div>
-      )}
+        {n < options.length && (
+          <button type="button" onClick={() => setCount(options.length)} style={{ background: "none", border: "none", color: COLORS.amber, fontSize: 12.5, cursor: "pointer", padding: 0 }}>Max {options.length}</button>
+        )}
+        <span style={{ flex: 1 }} />
+        <span style={{ fontSize: 15, fontWeight: 700 }}>{currency(total)}</span>
+      </div>
+      <div style={{ fontSize: 12, color: COLORS.textMuted, margin: "6px 0 10px" }}>
+        {range}{ahead > 0 ? ` · ${ahead} month${ahead > 1 ? "s" : ""} ahead` : ""}
+      </div>
+      <Btn tone="amber" disabled={paying} onClick={() => onPay(chosen)} style={{ width: "100%", justifyContent: "center" }}>
+        {paying ? "Redirecting..." : `Pay ${currency(total)}`}
+      </Btn>
     </div>
   );
 }
@@ -6395,6 +6405,7 @@ function MultiMonthDuesPay({ member, months, duesPayments, onPay, paying }) {
 function MyDuesCard({ member, duesPayments, notify, reload, pendingPaymentRef, style }) {
   const [paying, setPaying] = useState(false);
   const [confirmingRef, setConfirmingRef] = useState(null);
+  const [showAhead, setShowAhead] = useState(false);
 
   useEffect(() => {
     const ref = pendingPaymentRef;
@@ -6444,6 +6455,9 @@ function MyDuesCard({ member, duesPayments, notify, reload, pendingPaymentRef, s
 
   const unpaid = duesMonthsSoFar().filter((mo) => getDue(member, mo, duesPayments).status === "owing");
   const totalOwed = unpaid.reduce((sum, mo) => sum + owedFor(member, getDue(member, mo, duesPayments)), 0);
+  // Latest month covered by an unbroken run of paid months from now (counts months paid ahead).
+  let paidThrough = currentMonthStringWAT();
+  for (let i = 1; i <= 36 && getDue(member, monthStringWAT(i), duesPayments).status === "paid"; i++) paidThrough = monthStringWAT(i);
 
   return (
     <Panel
@@ -6459,20 +6473,18 @@ function MyDuesCard({ member, duesPayments, notify, reload, pendingPaymentRef, s
         </div>
       )}
       {unpaid.length === 0 ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: COLORS.textSecondary }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: COLORS.textSecondary, marginBottom: showAhead ? 12 : 0 }}>
           <Check size={15} color={COLORS.green} aria-hidden="true" />
-          You're paid up through {monthLabel(currentMonthStringWAT())}. {currency(rate(member))}/month.
+          <span style={{ flex: 1 }}>Paid up through {monthLabel(paidThrough)} · {currency(rate(member))}/month</span>
+          {!showAhead && <Btn small tone="ghost" onClick={() => setShowAhead(true)}>Pay ahead</Btn>}
         </div>
       ) : (
-        <>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
-            <span style={{ fontSize: 22, fontWeight: 700, color: COLORS.red }}>{currency(totalOwed)}</span>
-            <span style={{ fontSize: 12.5, color: COLORS.textMuted }}>owed · {currency(rate(member))}/month</span>
-          </div>
-          <div style={{ fontSize: 12.5, color: COLORS.textMuted, marginBottom: 4 }}>Pick the months you want to pay now.</div>
-          <MultiMonthDuesPay member={member} months={unpaid} duesPayments={duesPayments} onPay={payNow} paying={paying} />
-        </>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
+          <span style={{ fontSize: 22, fontWeight: 700, color: COLORS.red }}>{currency(totalOwed)}</span>
+          <span style={{ fontSize: 12.5, color: COLORS.textMuted }}>owed · {currency(rate(member))}/month</span>
+        </div>
       )}
+      {(unpaid.length > 0 || showAhead) && <DuesPayPicker member={member} duesPayments={duesPayments} onPay={payNow} paying={paying} />}
     </Panel>
   );
 }
@@ -6599,7 +6611,7 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef,
               })}
               {!duesExempt(mine) && (
                 <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${COLORS.border}` }}>
-                  <MultiMonthDuesPay member={mine} months={months} duesPayments={data.duesPayments} onPay={payNow} paying={payingMonth} />
+                  <DuesPayPicker member={mine} duesPayments={data.duesPayments} onPay={payNow} paying={payingMonth} />
                 </div>
               )}
             </>
@@ -6662,7 +6674,7 @@ function DuesTab({ data, isAdmin, reload, myMemberId, notify, pendingPaymentRef,
     <div>
       {myOwnMember && !duesExempt(myOwnMember) && (
         <Panel title="Your own dues" style={{ marginBottom: 16 }}>
-          <MultiMonthDuesPay member={myOwnMember} months={months} duesPayments={data.duesPayments} onPay={payNow} paying={payingMonth} />
+          <DuesPayPicker member={myOwnMember} duesPayments={data.duesPayments} onPay={payNow} paying={payingMonth} />
         </Panel>
       )}
       {isAdmin && (

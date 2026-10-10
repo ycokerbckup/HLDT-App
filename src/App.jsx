@@ -1059,6 +1059,12 @@ function Dashboard_Shell({ session, profile, setProfile }) {
   const canManageEvents = isAdmin && (myUnit === "Operations" || myUnit === "Welfare" || myUnit === "Admin");
   const canSeeDues = myUnit === "Welfare" || myUnit === "Operations";
 
+  // Paystack sends dues payers back to ?tab=dues. Members who can't open Dues land on Home instead,
+  // where their own dues card confirms the payment.
+  useEffect(() => {
+    if (loaded && tab === "dues" && !canSeeDues) setTab("dashboard");
+  }, [loaded, tab, canSeeDues]);
+
   const unreadByTab = {};
   data.notifications.forEach((n) => {
     if (n.linkTab && !data.readIds.includes(n.id)) unreadByTab[n.linkTab] = (unreadByTab[n.linkTab] || 0) + 1;
@@ -1229,7 +1235,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
     <SkeletonLoader />
   ) : (
     <div key={tab} className="hldt-tab-content">
-      {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} notify={notify} pendingPoolPaymentRef={pendingPoolPaymentRef} firstName={firstName} />}
+      {tab === "dashboard" && <DashboardTab data={data} setTab={goToTab} isAdmin={isAdmin} myMember={myMember} myOnboarding={myOnboarding} canSeeWelfareInfo={canSeeDues} notify={notify} pendingPoolPaymentRef={pendingPoolPaymentRef} pendingPaymentRef={canSeeDues ? null : pendingPaymentRef} reload={load} firstName={firstName} />}
       {tab === "members" && <MembersTab data={data} isAdmin={isAdmin} canManage={canManageMembers} myUnit={myMember?.unit} reload={load} currentUserId={session.user.id} notify={notify} pendingMemberDetailId={pendingMemberDetailId} onPendingMemberDetailConsumed={() => setPendingMemberDetailId(null)} />}
       {tab === "onboarding" && <OnboardingTab data={data} isAdmin={isAdmin} canManage={canManageOnboarding} reload={load} adminName={profile.full_name || session.user.email} notify={notify} />}
       {tab === "equipment" && <EquipmentTab data={data} isAdmin={isAdmin} myMember={myMember} canAccessInventory={canAccessInventory} canDeleteTickets={canDeleteTickets} reload={load} notify={notify} pendingHighlight={pendingHighlight} onPendingHighlightConsumed={() => setPendingHighlight(null)} />}
@@ -1315,6 +1321,7 @@ function Dashboard_Shell({ session, profile, setProfile }) {
           profile={profile}
           setProfile={setProfile}
           myMember={myMember}
+          duesPayments={data.duesPayments}
           onClose={() => setShowProfile(false)}
           reload={load}
           notify={notify}
@@ -1702,7 +1709,7 @@ function WithdrawalPhoneSection({ session, notify }) {
   );
 }
 
-function ProfileModal({ session, profile, setProfile, myMember, onClose, reload, notify }) {
+function ProfileModal({ session, profile, setProfile, myMember, duesPayments, onClose, reload, notify }) {
   const [fullName, setFullName] = useState(profile.full_name || "");
   const [phone, setPhone] = useState(myMember?.phone || "");
   const [skills, setSkills] = useState(myMember?.skills || { proPresenter: 3, vmix: 3, resolume: 3, technical: 3 });
@@ -1773,6 +1780,8 @@ function ProfileModal({ session, profile, setProfile, myMember, onClose, reload,
           </div>
         </>
       )}
+
+      <MyDuesCard member={myMember} duesPayments={duesPayments} notify={notify} reload={reload} style={{ marginTop: 14 }} />
 
       {profile.can_manage_withdrawal_otp && <WithdrawalPhoneSection session={session} notify={notify} />}
 
@@ -3431,7 +3440,7 @@ function FundPoolModal({ onClose, notify }) {
   }
 
   return (
-    <Modal title="Fund pool" onClose={onClose} width={380}>
+    <Modal title="Fund wallet" onClose={onClose} width={380}>
       <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12 }}>For funding the wallet directly — sponsor or donor contributions, or catching up on funds outside the dues channel. Goes through the same Paystack checkout as dues.</div>
       <Field label="Contributor name"><input style={inputStyle} placeholder="Who this is from" value={contributorName} onChange={(e) => setContributorName(e.target.value)} /></Field>
       <Field label="Note (optional)"><textarea style={{ ...inputStyle, minHeight: 60 }} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
@@ -3796,7 +3805,7 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef, ful
               </button>
             )}
             <button type="button" className="hldt-waction" onClick={() => setShowFundPool(true)}>
-              <span className="hldt-waction-icon"><Plus size={18} /></span>Fund pool
+              <span className="hldt-waction-icon"><Plus size={18} /></span>Fund wallet
             </button>
             {canWithdraw && !recordMode && (
               <button type="button" className="hldt-waction" onClick={() => (hasPin ? setShowPayout(true) : notify?.("Set the withdrawal PIN first", "error"))}>
@@ -3892,7 +3901,7 @@ function WalletPanel({ data, isAdmin, myUnit, notify, pendingPoolPaymentRef, ful
   );
 }
 
-function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWelfareInfo, notify, pendingPoolPaymentRef, firstName }) {
+function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWelfareInfo, notify, pendingPoolPaymentRef, pendingPaymentRef, reload, firstName }) {
   const [showOwingModal, setShowOwingModal] = useState(false);
   const currentMonth = currentMonthStringWAT();
   const openTickets = data.tickets.filter((t) => t.status !== "Resolved");
@@ -3969,6 +3978,15 @@ function DashboardTab({ data, setTab, isAdmin, myMember, myOnboarding, canSeeWel
           );
         })}
       </div>
+
+      {isAdmin ? (
+        <MyDuesCard member={myMember} duesPayments={data.duesPayments} notify={notify} reload={reload} pendingPaymentRef={pendingPaymentRef} style={{ marginBottom: 16 }} />
+      ) : (
+        <div className="hldt-home-cols">
+          <MyDuesCard member={myMember} duesPayments={data.duesPayments} notify={notify} reload={reload} pendingPaymentRef={pendingPaymentRef} />
+          <FundWalletCard notify={notify} pendingPoolPaymentRef={pendingPoolPaymentRef} />
+        </div>
+      )}
 
       <div className="hldt-home-cols">
         <Panel title="Equipment that needs attention" right={openTickets.length > 0 ? <Btn small tone="ghost" onClick={() => setTab("equipment")}>See all</Btn> : null}>
@@ -6341,8 +6359,15 @@ function MultiMonthDuesPay({ member, months, duesPayments, onPay, paying }) {
 
   if (payableMonths.length === 0) return null;
 
+  const allSelected = payableMonths.every((mo) => selected.includes(mo));
+
   return (
     <div>
+      {payableMonths.length > 1 && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 2 }}>
+          <Btn small tone="ghost" onClick={() => setSelected(allSelected ? [] : payableMonths)}>{allSelected ? "Clear" : "Select all"}</Btn>
+        </div>
+      )}
       {payableMonths.map((mo) => {
         const due = getDue(member, mo, duesPayments);
         return (
@@ -6362,6 +6387,132 @@ function MultiMonthDuesPay({ member, months, duesPayments, onPay, paying }) {
         </div>
       )}
     </div>
+  );
+}
+
+// The signed-in member's own unpaid months, with a pay button. Shown on Home and in My Profile
+// for everyone, so paying dues never depends on being able to open the Dues tab.
+function MyDuesCard({ member, duesPayments, notify, reload, pendingPaymentRef, style }) {
+  const [paying, setPaying] = useState(false);
+  const [confirmingRef, setConfirmingRef] = useState(null);
+
+  useEffect(() => {
+    const ref = pendingPaymentRef;
+    if (!ref) return;
+    setConfirmingRef(ref);
+    let attempts = 0;
+    let cancelled = false;
+    async function poll() {
+      if (cancelled) return;
+      attempts += 1;
+      const { data: result, error } = await supabase.functions.invoke("verify-dues-payment", { body: { reference: ref } });
+      if (cancelled) return;
+      if (error) { setConfirmingRef(null); notify?.("Couldn't confirm payment status — it'll update once the bank confirms.", "error"); return; }
+      if (result.status === "success") { setConfirmingRef(null); notify?.("Payment confirmed!"); reload?.(); }
+      else if (result.status === "failed" || result.status === "abandoned") { setConfirmingRef(null); notify?.("Payment wasn't completed.", "error"); }
+      else if (attempts < 6) { setTimeout(poll, 2000); }
+      else { setConfirmingRef(null); notify?.("Still processing — check back shortly, it'll update automatically once confirmed."); }
+    }
+    poll();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPaymentRef]);
+
+  async function payNow(months) {
+    setPaying(true);
+    const { data: result, error } = await supabase.functions.invoke("initialize-dues-payment", { body: { months } });
+    setPaying(false);
+    if (error || result?.error || !result?.authorization_url) { notify?.(result?.error || error?.message || "Could not start payment", "error"); return; }
+    window.location.href = result.authorization_url;
+  }
+
+  if (!member) {
+    return (
+      <Panel title="Your dues" style={style}>
+        <EmptyRow text="Your account isn't linked to a team member yet. Ask an admin to link it." />
+      </Panel>
+    );
+  }
+
+  if (duesExempt(member)) {
+    return (
+      <Panel title="Your dues" style={style}>
+        <EmptyRow text={member.unavailable ? "No dues are expected from you while you're marked unavailable." : "No dues are expected from you yet. They start once you're promoted from trainee."} />
+      </Panel>
+    );
+  }
+
+  const unpaid = duesMonthsSoFar().filter((mo) => getDue(member, mo, duesPayments).status === "owing");
+  const totalOwed = unpaid.reduce((sum, mo) => sum + owedFor(member, getDue(member, mo, duesPayments)), 0);
+
+  return (
+    <Panel
+      title="Your dues"
+      style={style}
+      right={unpaid.length > 0
+        ? <Badge tone="red">{unpaid.length} month{unpaid.length > 1 ? "s" : ""} unpaid</Badge>
+        : <Badge tone="green">Paid up</Badge>}
+    >
+      {confirmingRef && (
+        <div style={{ fontSize: 13, color: COLORS.textSecondary, marginBottom: 10 }}>
+          <RefreshCw size={13} className="hldt-spin" style={{ marginRight: 6, verticalAlign: "middle" }} />Confirming your payment...
+        </div>
+      )}
+      {unpaid.length === 0 ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: COLORS.textSecondary }}>
+          <Check size={15} color={COLORS.green} aria-hidden="true" />
+          You're paid up through {monthLabel(currentMonthStringWAT())}. {currency(rate(member))}/month.
+        </div>
+      ) : (
+        <>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 22, fontWeight: 700, color: COLORS.red }}>{currency(totalOwed)}</span>
+            <span style={{ fontSize: 12.5, color: COLORS.textMuted }}>owed · {currency(rate(member))}/month</span>
+          </div>
+          <div style={{ fontSize: 12.5, color: COLORS.textMuted, marginBottom: 4 }}>Pick the months you want to pay now.</div>
+          <MultiMonthDuesPay member={member} months={unpaid} duesPayments={duesPayments} onPay={payNow} paying={paying} />
+        </>
+      )}
+    </Panel>
+  );
+}
+
+// Lets any signed-in member top up the team wallet. Admins get the same button on the full wallet panel.
+function FundWalletCard({ notify, pendingPoolPaymentRef, style }) {
+  const [open, setOpen] = useState(false);
+  const [confirmingRef, setConfirmingRef] = useState(null);
+
+  useEffect(() => {
+    const ref = pendingPoolPaymentRef;
+    if (!ref) return;
+    setConfirmingRef(ref);
+    let attempts = 0;
+    let cancelled = false;
+    async function poll() {
+      if (cancelled) return;
+      attempts += 1;
+      const { data: result, error } = await supabase.functions.invoke("verify-pool-payment", { body: { reference: ref } });
+      if (cancelled) return;
+      if (error) { setConfirmingRef(null); notify?.("Couldn't confirm payment status — it'll update once the bank confirms.", "error"); return; }
+      if (result.status === "success") { setConfirmingRef(null); notify?.("Thanks! Your wallet contribution is confirmed."); return; }
+      if (result.status === "failed" || result.status === "abandoned") { setConfirmingRef(null); notify?.("Payment was not completed", "error"); return; }
+      if (attempts < 8) setTimeout(poll, 2500);
+      else setConfirmingRef(null);
+    }
+    poll();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPoolPaymentRef]);
+
+  return (
+    <Panel title="Team wallet" style={style}>
+      {confirmingRef && <div style={{ fontSize: 12, color: COLORS.amber, marginBottom: 10 }}>Confirming your contribution…</div>}
+      <div style={{ fontSize: 13, color: COLORS.textSecondary, lineHeight: 1.5, marginBottom: 12 }}>
+        Want to support the team beyond dues? Add money to the team wallet through Paystack.
+      </div>
+      <Btn tone="amber" onClick={() => setOpen(true)}><Plus size={14} /> Fund wallet</Btn>
+      {open && <FundPoolModal onClose={() => setOpen(false)} notify={notify} />}
+    </Panel>
   );
 }
 
